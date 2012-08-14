@@ -4,7 +4,7 @@
 %token EOF
 
 %start program
-%type <Ast.sexpr list> program
+%type <Sexpr.sexpr list> program
 %%
 
 program:
@@ -12,9 +12,9 @@ program:
 ;;
 
 sexpr:
-    NUM { Ast.Number $1 }
-  | SYMBOL { Ast.Symbol $1 }
-  | LPAREN sexpr_list RPAREN { Ast.SExpr $2 }
+    NUM { Sexpr.Number $1 }
+  | SYMBOL { Sexpr.Symbol $1 }
+  | LPAREN sexpr_list RPAREN { Sexpr.SExpr $2 }
 ;;
 
 sexpr_list:
