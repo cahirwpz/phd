@@ -14,10 +14,10 @@ program:
 sexpr:
     NUM { Sexpr.Number $1 }
   | SYMBOL { Sexpr.Symbol $1 }
-  | LPAREN sexpr_list RPAREN { Sexpr.SExpr $2 }
+  | LPAREN sexpr_list RPAREN { Sexpr.Group $2 }
 ;;
 
 sexpr_list:
-  sexpr sexpr_list { $1 :: $2 }
-| { [] }
+    sexpr sexpr_list { $1 :: $2 }
+  | {[]}
 ;;

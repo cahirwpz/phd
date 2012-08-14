@@ -3,13 +3,13 @@ open Printf
 type sexpr =
   | Number of float
   | Symbol of string 
-  | SExpr of sexpr list 
+  | Group of sexpr list 
 
 let rec stringify expr =
   match expr with
     | Number n -> string_of_float n
     | Symbol s -> sprintf "|%s|" s
-    | SExpr el ->
+    | Group el ->
         let sl = List.map stringify el in
         sprintf "(%s)" (String.concat " " sl)
 
