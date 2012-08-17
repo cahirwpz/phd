@@ -24,7 +24,4 @@ let rec stringify expr =
     | TreeDecl (n, e) -> sprintf "#%d=%s" n (stringify e)
     | TreeRef n -> sprintf "#%d#" n
 
-let print expr_list =
-  let sl = List.map stringify expr_list in
-  let s = String.concat "\n" sl in
-  print_string (s ^ "\n")
+let as_string = stringify
