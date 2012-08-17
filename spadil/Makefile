@@ -6,11 +6,11 @@ spadil.native:
 	ocamlbuild $@
 
 test: spadil.native
-	@for test in $(tests); do echo $${test}; ./$^ $${test}; done
+	@for test in $(tests); do echo "*** $${test}"; ./$^ $${test}; done
 
 clean:
-	rm -rf _build
-	rm -f spadil.native *~
+	ocamlbuild -clean spadil.native
+	rm -f *~
 
 .PHONY: spadil.native test clean
 
