@@ -1,46 +1,56 @@
-open Printf
+open Format;;
 
 exception SexprListError of Sexpr.sexpr list;;
 exception SexprError of Sexpr.sexpr;;
 
-let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "or"; "equal"]
+let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "or"; "and"; "equal"]
 let specForms = [
-  "defun"; "prog"; "progn"; "cond"; "setq"; "return"; "char"; "elt"]
+  "defun"; "prog"; "progn"; "cond"; "setq"; "return"; "char"; "elt"; "lambda"]
 
 let graph = [
-  '-'; '.'; '&'; ':'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@'; '~'; '(';
+  '-'; '.'; ','; '&'; ':'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@'; '~'; '(';
   ')']
 
-let isSimpleSymbol s =
+let is_simple_symbol s =
   let contains = String.contains s in
   not (List.exists contains graph)
+
+let string_of_symbol name = 
+  if is_simple_symbol name
+  then name
+  else sprintf "|%s|" name
+
+let string_of_symbol_list symbols =
+  String.concat ", " (List.map string_of_symbol symbols)
 
 let translate_op op =
   match op with
   | "or" -> "||"
+  | "and" -> "&&"
   | "equal" -> "=="
   | _ as x -> x
 
 type tree =
+  | Apply of tree * tree list
+  | ArrayRef of string * tree
   | Assignment of string * tree
   | BinOp of string * tree * tree
   | Block of tree
   | Case of tree * tree
-  | DefVar of string * tree
-  | FunCall of string * tree list
-  | Function of string * tree list * tree
+  | Char of char
+  | DefVar of string list * tree
+  | Function of string * string list * tree
+  | Lambda of string list * tree
+  | Cons of tree list
   | Number of float
   | Seq of tree * tree
-  | Char of char
   | String of string
   | Symbol of string
-  | List of tree list
-  | ArrayRef of string * tree
 
 (* conversion from S-Expressions *)
 
 let rec convert_symbol_list = function
-  | (Sexpr.Symbol s)::symbols -> (Symbol s)::(convert_symbol_list symbols)
+  | (Sexpr.Symbol symbol)::symbols -> symbol::(convert_symbol_list symbols)
   | [] -> []
   | _ as e -> raise (SexprListError e)
 
@@ -49,7 +59,7 @@ let rec convert = function
   | Sexpr.Symbol s -> Symbol s
   | Sexpr.Group g -> convert_group g
   | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
-  | Sexpr.Quote (Sexpr.Group g) -> List (List.map convert g)
+  | Sexpr.Quote (Sexpr.Group g) -> Cons (List.map convert g)
   | Sexpr.Number n -> Number n
   | _ as e -> raise (SexprError e)
 
@@ -64,9 +74,11 @@ and convert_group = function
       convert_bin_op (translate_op op) body
   | (Sexpr.Symbol form)::body when List.mem form specForms ->
       convert_spec_form form body
-  | (Sexpr.Symbol funName)::body ->
-      FunCall (funName, List.map convert body)
-  | _ as e -> failwith ("Group: " ^ (Sexpr.stringify (Sexpr.Group e)))
+  | (Sexpr.Symbol funcName)::body ->
+      Apply (Symbol funcName, List.map convert body)
+  | (Sexpr.Group func)::body ->
+      Apply (convert_group func, List.map convert body)
+  | _ as e -> Sexpr.print (Sexpr.Group e); failwith "Malformed group."
 
 and convert_bin_op op lst =
   match lst with head::tail ->
@@ -83,6 +95,7 @@ and convert_spec_form = function
   | "return" -> convert_return
   | "char" -> convert_char
   | "elt" -> convert_elt
+  | "lambda" -> convert_lambda
   | _ as e -> failwith ("Unknown special form: " ^ e)
 
 and convert_return tree = convert_list tree
@@ -95,16 +108,19 @@ and convert_elt = function
   | (Sexpr.Symbol name)::index::[] -> ArrayRef (name, convert index)
   | _ as e -> raise (SexprListError e)
 
+and convert_lambda = function
+  | (Sexpr.Group args)::body ->
+      Lambda (convert_symbol_list args, convert_list body)
+  | _ as e -> raise (SexprListError e)
+
 and convert_fun_decl = function
   | (Sexpr.Symbol name)::(Sexpr.Group args)::body::[] ->
       Function (name, convert_symbol_list args, convert body)
   | _ as e -> raise (SexprListError e)
 
 and convert_prog = function
-  | (Sexpr.Group (Sexpr.Symbol name::symbols))::body ->
-      DefVar (name, convert_prog (Sexpr.Group symbols::body))
-  | (Sexpr.Group [])::body ->
-      convert_list body
+  | (Sexpr.Group symbols)::body ->
+      DefVar (convert_symbol_list symbols, convert_list body)
   | _ as e -> raise (SexprListError e)
 
 and convert_setq = function
@@ -115,68 +131,74 @@ and convert_setq = function
 and convert_progn body = convert_list body
 
 and convert_cond clauses =
-  let reduce = fun a b -> Seq (a, convert_clause b)
-  and head = List.hd clauses
-  and tail = List.tl clauses
-  in Block (List.fold_left reduce (convert_clause head) tail)
+  match clauses with head::tail ->
+    let reduce = fun a b -> Seq (a, convert_clause b)
+    in Block (List.fold_left reduce (convert_clause head) tail)
+  | _ -> failwith ""
 
 and convert_clause = function
-  | Sexpr.Group g ->
-      let head = List.hd g
-      and tail = List.tl g
-      in Case (convert head, convert_list tail)
+  | Sexpr.Group (head::tail) ->
+      Case (convert head, convert_list tail)
   | _ as e -> raise (SexprError e)
 
 (* stringification *)
-let rec stringify tree =
-  match tree with
-  | Function (name, args, body) ->
-      let s_args = stringify_list ", " args
-      and s_body = stringify body in
-      sprintf "def %s(%s) {%s}" name s_args s_body;
-  | FunCall (name, args) ->
-      let s_args = stringify_list ", " args in
-      sprintf "%s(%s)" name s_args
-  | Symbol name ->
-      stringify_symbol name
-  | String str ->
-      sprintf "\"%s\"" (String.escaped str)
-  | Seq (left, right) ->
-      sprintf "%s; %s" (stringify left) (stringify right)
-  | Case (Symbol "t", body) ->
-      sprintf "_ => %s" (stringify body)
-  | Case (cond, body) ->
-      sprintf "%s => %s" (stringify cond) (stringify body)
+let rec print = function
+  | Apply (func, args) ->
+      print func; print_char '('; print_list ", " args; print_char ')'
   | Block tree ->
-      sprintf "{%s}" (stringify tree)
-  | DefVar (name, tree) ->
-      sprintf "var %s;%s" (stringify_symbol name) (stringify tree)
+      printf "@[<v 2>{@,"; print tree; printf "@]@,}"
+  | Case (Symbol "t", body) ->
+      print_string "_ => "; print body
+  | Case (cond, body) ->
+      print cond; print_string " => "; print body
+  | DefVar (names, tree) ->
+      printf "var %s;@," (string_of_symbol_list names);
+      print tree
+  | Function (name, args, body) ->
+      let name = (string_of_symbol name)
+      and args = (string_of_symbol_list args)
+      in printf "@[<v 1>def %s(%s) {@," name args;
+      print body;
+      printf "@]@.}@."
+  | Symbol name ->
+      print_string (string_of_symbol name)
+  | String str ->
+      printf "\"%s\"" (String.escaped str)
+  | Seq (left, right) ->
+      print left; print_cut (); print right
   | Number n ->
-      string_of_float n
+      print_float n
   | Assignment (name, value) ->
-      sprintf "%s := %s" (stringify_symbol name) (stringify value)
+      printf "%s := " (string_of_symbol name); print value; print_char ';'
   | BinOp (op, lhs, rhs) ->
-      sprintf "(%s %s %s)" (stringify lhs) op (stringify rhs)
+      print_char '('; print lhs; printf " %s " op; print rhs; print_char ')'
   | Char c -> 
-      sprintf "'%c'" c
-  | List l ->
-      sprintf "[%s]" (stringify_list ", " l)
+      printf "'%c'" c
+  | Cons l ->
+      print_char '['; print_list ", " l; print_char ']'
   | ArrayRef (name, index) ->
-      sprintf "%s.[%s]" (stringify_symbol name) (stringify index)
+      printf "%s." (string_of_symbol name);
+      print_char '['; print index; print_char ']'
+  | Lambda (args, body) ->
+      let s_args = String.concat ", " (List.map string_of_symbol args) in
+      printf "(%s) +-> " s_args;
+      print body
 
-and stringify_list sep trees = 
-  let s_trees = List.map stringify trees in
-  String.concat sep s_trees
+and print_list sep trees =
+  match trees with
+  | tree::[] -> print tree
+  | tree::rest ->
+      print tree; print_string sep; print_list sep rest
+  | [] -> ()
 
-and stringify_symbol name = 
-  if isSimpleSymbol name then name else sprintf "|%s|" name
-
-let as_string expr =
+let print_safe expr =
   try
     let tree = convert expr in
-    stringify tree
+    print tree; print_char '\n'
   with
   | SexprListError exprs ->
-      sprintf "Conversion error: %s\n" (Sexpr.stringify (Sexpr.Group exprs))
+      print_string "Conversion error:\n";
+      Sexpr.print (Sexpr.Group exprs)
   | SexprError expr ->
-      sprintf "Conversion error: %s\n" (Sexpr.stringify expr)
+      print_string "Conversion error:\n";
+      Sexpr.print expr
