@@ -71,21 +71,6 @@ let rec reduce = function
   | Quote q -> Quote (reduce q)
   | _ as expr -> expr
 
-(* s-expr rewrite engine *)
-let rec rewrite func = function
-  | Group (_ as lst) ->
-      rewrite_rec func (func lst)
-  | e -> e
-and rewrite_rec func = function
-  | Group lst ->
-      Group (List.map (rewrite func) lst)
-  | e -> e
-
-let rec rewrite_n fs exp =
-  match fs with
-  | f::fs -> rewrite_n fs (rewrite f exp)
-  | [] -> exp
-
 (* generate new symbols on demand *)
 let symbol = ref 0;;
 
@@ -129,7 +114,37 @@ let remove_single_progn = function
   | Symbol "progn"::Group lst::[] -> Group lst
   | lst -> Group lst
 
-let transform expr =
-  let reduced = reduce expr
-  and transforms = [cond_to_if; prog1_to_let; prog_to_let; remove_single_progn]
-  in rewrite_n transforms reduced
+(* Rewrite dots as cons *)
+let rec dot_to_cons lst =
+  Group (dot_to_cons_rec lst)
+and dot_to_cons_rec = function
+  | x::Symbol "."::y::rest ->
+      let cons = Group [Symbol "cons"; x; y]
+      in cons::rest
+  | x::xs -> x::(dot_to_cons_rec xs)
+  | [] -> []
+
+(* s-expr rewrite engine *)
+let rec rewrite func = function
+  | Group (_ as lst) ->
+      rewrite_rec func (func lst)
+  | e -> e
+and rewrite_rec func = function
+  | Group lst ->
+      Group (List.map (rewrite func) lst)
+  | e -> e
+
+let rec rewrite_n fs exp =
+  match fs with
+  | f::fs -> rewrite_n fs (rewrite f exp)
+  | [] -> exp
+
+(* set of rules to be applied when simplifying an s-expression *)
+let rules = [
+  dot_to_cons;
+  cond_to_if;
+  prog1_to_let;
+  prog_to_let;
+  remove_single_progn]
+
+let simplify expr = rewrite_n rules (reduce expr)

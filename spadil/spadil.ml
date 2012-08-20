@@ -7,10 +7,10 @@ let open_lexbuf input fname =
   lexbuf
 
 let print e =
-  let reduced = (Sexpr.transform e) in
+  let simplified = (Sexpr.simplify e) in
   print_string "Original:\n"; Sexpr.print e; print_newline ();
-  print_string "Reduced:\n"; Sexpr.print reduced; print_newline ();
-  print_string "IL:\n"; Ast.print_safe reduced; print_newline ()
+  print_string "Reduced:\n"; Sexpr.print simplified; print_newline ();
+  print_string "IL:\n"; Ast.print_safe simplified; print_newline ()
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
