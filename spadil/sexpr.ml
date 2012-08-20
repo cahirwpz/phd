@@ -1,8 +1,9 @@
 open Format;;
 
 type sexpr =
+  | Float of float
   | Group of sexpr list 
-  | Number of float
+  | Int of int
   | Quote of sexpr
   | String of string
   | Symbol of string 
@@ -52,8 +53,9 @@ and print_group = function
   | Symbol "cond"::_ as g -> print_form_sep 1 "@," g
   | _ as e -> print_list e
 and print_rec = function
+  | Float n -> print_float n
   | Group l -> printf "@[<v 1>("; print_group l; printf ")@]"
-  | Number n -> print_float n
+  | Int n -> print_int n
   | Quote e -> print_char '\''; print_rec e
   | String s -> printf "\"%s\"" s
   | Symbol s -> printf "|%s|" s
@@ -63,12 +65,12 @@ and print_rec = function
 let slots = Array.create 20 (Group [])
 
 let rec reduce = function
+  | Group g -> Group (List.map reduce g)
+  | Quote q -> Quote (reduce q)
   | TreeDecl (n, expr) ->
       let reduced = reduce expr
       in slots.(n) <- reduced; reduced
   | TreeRef n -> slots.(n)
-  | Group g -> Group (List.map reduce g)
-  | Quote q -> Quote (reduce q)
   | _ as expr -> expr
 
 (* generate new symbols on demand *)

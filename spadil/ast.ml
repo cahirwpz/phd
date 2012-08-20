@@ -36,14 +36,15 @@ type tree =
   | Assignment of string * tree
   | BinOp of string * tree * tree
   | Block of tree
+  | Char of char
+  | Cons of tree list
+  | DefVar of string list * tree
+  | Float of float
+  | Function of string * string list * tree
   | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
-  | Char of char
-  | DefVar of string list * tree
-  | Function of string * string list * tree
+  | Int of int
   | Lambda of string list * tree
-  | Cons of tree list
-  | Number of float
   | Seq of tree * tree
   | String of string
   | Symbol of string
@@ -56,12 +57,13 @@ let rec convert_symbol_list = function
   | _ as e -> raise (SexprListError e)
 
 let rec convert = function
+  | Sexpr.Float n -> Float n
+  | Sexpr.Group g -> convert_group g
+  | Sexpr.Int n -> Int n
+  | Sexpr.Quote (Sexpr.Group g) -> Cons (List.map convert g)
+  | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
   | Sexpr.String s -> String s
   | Sexpr.Symbol s -> Symbol s
-  | Sexpr.Group g -> convert_group g
-  | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
-  | Sexpr.Quote (Sexpr.Group g) -> Cons (List.map convert g)
-  | Sexpr.Number n -> Number n
   | _ as e -> raise (SexprError e)
 
 and convert_list = function
@@ -142,8 +144,30 @@ and convert_if = function
 let rec print = function
   | Apply (func, args) ->
       print func; print_char '('; print_list ", " args; print_char ')'
+  | ArrayRef (name, index) ->
+      printf "%s." (string_of_symbol name);
+      print_char '['; print index; print_char ']'
+  | Assignment (name, value) ->
+      printf "%s := " (string_of_symbol name); print value; print_char ';'
+  | BinOp (op, lhs, rhs) ->
+      print_char '('; print lhs; printf " %s " op; print rhs; print_char ')'
   | Block tree ->
       printf "@[<v>{@,"; print tree; printf "@]@,}";
+  | Char c -> 
+      printf "'%c'" c
+  | Cons l ->
+      print_char '['; print_list "; " l; print_char ']'
+  | DefVar (names, tree) ->
+      printf "var %s;@," (string_of_symbol_list names);
+      print tree
+  | Float n ->
+      print_float n
+  | Function (name, args, body) ->
+      let name = (string_of_symbol name)
+      and args = (string_of_symbol_list args)
+      in printf "@[<v 1>def %s(%s) {@," name args;
+      print body;
+      printf "@]@.}@."
   | IfThen (pred, if_true) ->
       printf "@[<v>";
       printf "@[<v 2>if@,"; print pred; printf "@]@,";
@@ -153,38 +177,18 @@ let rec print = function
       printf "@[<v 2>if@,"; print pred; printf "@]@,";
       printf "@[<v 2>then@,"; print if_true; printf "@]@,";
       printf "@[<v 2>else@,"; print if_false; printf "@]@]"
-  | DefVar (names, tree) ->
-      printf "var %s;@," (string_of_symbol_list names);
-      print tree
-  | Function (name, args, body) ->
-      let name = (string_of_symbol name)
-      and args = (string_of_symbol_list args)
-      in printf "@[<v 1>def %s(%s) {@," name args;
-      print body;
-      printf "@]@.}@."
-  | Symbol name ->
-      print_string (string_of_symbol name)
-  | String str ->
-      printf "\"%s\"" (String.escaped str)
-  | Seq (left, right) ->
-      print left; print_cut (); print right
-  | Number n ->
-      print_float n
-  | Assignment (name, value) ->
-      printf "%s := " (string_of_symbol name); print value; print_char ';'
-  | BinOp (op, lhs, rhs) ->
-      print_char '('; print lhs; printf " %s " op; print rhs; print_char ')'
-  | Char c -> 
-      printf "'%c'" c
-  | Cons l ->
-      print_char '['; print_list "; " l; print_char ']'
-  | ArrayRef (name, index) ->
-      printf "%s." (string_of_symbol name);
-      print_char '['; print index; print_char ']'
+  | Int n ->
+      print_int n
   | Lambda (args, body) ->
       let s_args = String.concat ", " (List.map string_of_symbol args) in
       printf "(%s) +-> " s_args;
       print body
+  | Seq (left, right) ->
+      print left; print_cut (); print right
+  | String str ->
+      printf "\"%s\"" (String.escaped str)
+  | Symbol name ->
+      print_string (string_of_symbol name)
 
 and print_list sep trees =
   match trees with

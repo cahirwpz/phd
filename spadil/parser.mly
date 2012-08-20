@@ -1,4 +1,5 @@
-%token <float> NUM
+%token <float> FNUM
+%token <int> INUM
 %token <string> SYMBOL
 %token <string> STRING
 %token <string> FUNCTION
@@ -19,7 +20,8 @@ program:
 ;;
 
 sexpr:
-    NUM { Sexpr.Number $1 }
+    FNUM { Sexpr.Float $1 }
+  | INUM { Sexpr.Int $1 }
   | STRING { Sexpr.String $1 }
   | QUOTE sexpr { Sexpr.Quote $2 }
   | SYMBOL { Sexpr.Symbol $1 }

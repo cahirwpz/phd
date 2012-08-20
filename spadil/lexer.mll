@@ -71,8 +71,8 @@ rule token = parse
   | ';' [^'\n']* { token lexbuf }
   | '(' { LPAREN }
   | ')' { RPAREN }
-  | real as num { NUM (float_of_string num) }
-  | integer as num { NUM (float_of_string num) }
+  | real as num { FNUM (float_of_string num) }
+  | integer as num { INUM (int_of_string num) }
   | (cmp | arith | id) as name { SYMBOL (String.lowercase name) }
   | eof	{ EOF }
   | _ as c { unknown_char lexbuf c; token lexbuf }
