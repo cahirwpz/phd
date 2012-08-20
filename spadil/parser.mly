@@ -23,7 +23,7 @@ sexpr:
   | STRING { Sexpr.String $1 }
   | QUOTE sexpr { Sexpr.Quote $2 }
   | SYMBOL { Sexpr.Symbol $1 }
-  | LABEL { Sexpr.Label $1 }
+  | LABEL { Sexpr.Symbol ("#:" ^ $1) }
   | FUNCTION { Sexpr.Group [Sexpr.Symbol "function"; Sexpr.Symbol $1] }
   | TREE_REF { Sexpr.TreeRef $1 }
   | TREE_DECL sexpr { Sexpr.TreeDecl ($1, $2) }

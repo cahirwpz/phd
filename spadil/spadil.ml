@@ -7,7 +7,7 @@ let open_lexbuf input fname =
   lexbuf
 
 let print e =
-  let reduced = (Sexpr.reduce e) in
+  let reduced = (Sexpr.transform e) in
   print_string "Original:\n"; Sexpr.print e; print_newline ();
   print_string "Reduced:\n"; Sexpr.print reduced; print_newline ();
   print_string "IL:\n"; Ast.print_safe reduced; print_newline ()
