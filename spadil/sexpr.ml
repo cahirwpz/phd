@@ -93,7 +93,7 @@ let rec cond_to_if = function
   | lst -> Group lst
 
 (* Rewrite prog to let *)
-let rec prog_to_let = function
+let prog_to_let = function
   | Symbol "prog"::Group []::prog ->
       Group (Symbol "progn"::prog)
   | Symbol "prog"::vars::prog ->
@@ -101,7 +101,7 @@ let rec prog_to_let = function
   | lst -> Group lst
 
 (* Rewrite prog1 to let *)
-let rec prog1_to_let = function
+let prog1_to_let = function
   | Symbol "prog1"::value::rest ->
       let temp = make_symbol () in
       let assign = Group [Symbol "setq"; temp; value] in
@@ -119,10 +119,21 @@ let rec dot_to_cons lst =
   Group (dot_to_cons_rec lst)
 and dot_to_cons_rec = function
   | x::Symbol "."::y::rest ->
-      let cons = Group [Symbol "cons"; x; y]
-      in cons::rest
+      (Group [Symbol "cons"; x; y])::(dot_to_cons_rec rest)
   | x::xs -> x::(dot_to_cons_rec xs)
   | [] -> []
+
+(* Rewrite lett as let *)
+let lett_to_setq = function
+  | Symbol "lett"::symbol::rest ->
+      Group [Symbol "setq"; symbol; Group rest]
+  | lst -> Group lst
+
+(* Rewrite seq as progn *)
+let seq_to_progn = function
+  | Symbol "seq"::rest ->
+      Group (Symbol "progn"::rest)
+  | lst -> Group lst
 
 (* s-expr rewrite engine *)
 let rec rewrite func = function
@@ -141,10 +152,13 @@ let rec rewrite_n fs exp =
 
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
+  lett_to_setq;
+  seq_to_progn;
   dot_to_cons;
   cond_to_if;
   prog1_to_let;
   prog_to_let;
-  remove_single_progn]
+  remove_single_progn;
+  ]
 
 let simplify expr = rewrite_n rules (reduce expr)
