@@ -47,6 +47,7 @@ and print_group = function
   | Symbol "or"::_
   | Symbol "and"::_
   | Symbol "if"::_
+  | Symbol "seq"::_
   | Symbol "unwind-protect"::_
   | Symbol "cond"::_ as g -> print_form_sep 1 "@," g
   | _ as e -> print_list e
@@ -70,6 +71,7 @@ let rec reduce = function
   | Quote q -> Quote (reduce q)
   | _ as expr -> expr
 
+(* s-expr rewrite engine *)
 let rec rewrite func = function
   | Group (_ as lst) ->
       rewrite_rec func (func lst)
@@ -83,6 +85,14 @@ let rec rewrite_n fs exp =
   match fs with
   | f::fs -> rewrite_n fs (rewrite f exp)
   | [] -> exp
+
+(* generate new symbols on demand *)
+let symbol = ref 0;;
+
+let make_symbol () =
+  let n = !symbol in
+  symbol := !symbol + 1;
+  Symbol (sprintf "#:SPAD-%d" n)
  
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
@@ -97,12 +107,21 @@ let rec cond_to_if = function
       in Group [Symbol "if"; pred; true_clause; false_clause]
   | lst -> Group lst
 
-(* Rewrite prog to let or progn *)
-let rec prog_to_let_progn = function
+(* Rewrite prog to let *)
+let rec prog_to_let = function
   | Symbol "prog"::Group []::prog ->
       Group (Symbol "progn"::prog)
   | Symbol "prog"::vars::prog ->
       Group (Symbol "let"::vars::prog)
+  | lst -> Group lst
+
+(* Rewrite prog1 to let *)
+let rec prog1_to_let = function
+  | Symbol "prog1"::value::rest ->
+      let temp = make_symbol () in
+      let assign = Group [Symbol "setq"; temp; value] in
+      let body = Group (Symbol "progn"::assign::rest @ [temp])
+      in Group [Symbol "let"; Group [temp]; body]
   | lst -> Group lst
 
 (* Remove progn if encloses one s-expr *)
@@ -112,5 +131,5 @@ let remove_single_progn = function
 
 let transform expr =
   let reduced = reduce expr
-  and transforms = [cond_to_if; prog_to_let_progn; remove_single_progn]
+  and transforms = [cond_to_if; prog1_to_let; prog_to_let; remove_single_progn]
   in rewrite_n transforms reduced
