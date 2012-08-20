@@ -5,7 +5,7 @@ exception SexprError of Sexpr.sexpr;;
 
 let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "or"; "and"; "equal"]
 let specForms = [
-  "defun"; "prog"; "progn"; "cond"; "setq"; "return"; "char"; "elt"; "lambda"]
+  "defun"; "let"; "progn"; "if"; "setq"; "return"; "char"; "elt"; "lambda"]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@'; '~'; '(';
@@ -36,7 +36,8 @@ type tree =
   | Assignment of string * tree
   | BinOp of string * tree * tree
   | Block of tree
-  | Case of tree * tree
+  | IfThen of tree * tree
+  | IfThenElse of tree * tree * tree
   | Char of char
   | DefVar of string list * tree
   | Function of string * string list * tree
@@ -63,10 +64,10 @@ let rec convert = function
   | Sexpr.Number n -> Number n
   | _ as e -> raise (SexprError e)
 
-and convert_list lst =
-  match lst with head::tail ->
-    let reduce = fun a b -> Seq (a, convert b)
-    in List.fold_left reduce (convert head) tail
+and convert_list = function
+  | head::tail ->
+      let reduce = fun a b -> Seq (a, convert b)
+      in List.fold_left reduce (convert head) tail
   | _ -> failwith ""
 
 and convert_group = function
@@ -80,22 +81,22 @@ and convert_group = function
       Apply (convert_group func, List.map convert body)
   | _ as e -> Sexpr.print (Sexpr.Group e); failwith "Malformed group."
 
-and convert_bin_op op lst =
-  match lst with head::tail ->
-    let reduce = fun a b -> BinOp (op, a, convert b)
-    in List.fold_left reduce (convert head) tail
+and convert_bin_op op = function
+  | head::tail ->
+      let reduce = fun a b -> BinOp (op, a, convert b)
+      in List.fold_left reduce (convert head) tail
   | _ -> failwith ""
 
 and convert_spec_form = function
-  | "defun" -> convert_fun_decl
-  | "prog" -> convert_prog
-  | "progn" -> convert_progn
-  | "cond" -> convert_cond
-  | "setq" -> convert_setq
-  | "return" -> convert_return
   | "char" -> convert_char
+  | "defun" -> convert_fun_decl
   | "elt" -> convert_elt
+  | "if" -> convert_if
   | "lambda" -> convert_lambda
+  | "let" -> convert_let
+  | "progn" -> convert_progn
+  | "return" -> convert_return
+  | "setq" -> convert_setq
   | _ as e -> failwith ("Unknown special form: " ^ e)
 
 and convert_return tree = convert_list tree
@@ -118,7 +119,7 @@ and convert_fun_decl = function
       Function (name, convert_symbol_list args, convert body)
   | _ as e -> raise (SexprListError e)
 
-and convert_prog = function
+and convert_let = function
   | (Sexpr.Group symbols)::body ->
       DefVar (convert_symbol_list symbols, convert_list body)
   | _ as e -> raise (SexprListError e)
@@ -130,27 +131,28 @@ and convert_setq = function
 
 and convert_progn body = convert_list body
 
-and convert_cond clauses =
-  match clauses with head::tail ->
-    let reduce = fun a b -> Seq (a, convert_clause b)
-    in Block (List.fold_left reduce (convert_clause head) tail)
-  | _ -> failwith ""
-
-and convert_clause = function
-  | Sexpr.Group (head::tail) ->
-      Case (convert head, convert_list tail)
-  | _ as e -> raise (SexprError e)
+and convert_if = function
+  | pred::if_true::if_false::[] ->
+      IfThenElse (convert pred, convert if_true, convert if_false)
+  | pred::if_true::[] ->
+      IfThen (convert pred, convert if_true)
+  | _ as e -> raise (SexprListError e)
 
 (* stringification *)
 let rec print = function
   | Apply (func, args) ->
       print func; print_char '('; print_list ", " args; print_char ')'
   | Block tree ->
-      printf "@[<v 2>{@,"; print tree; printf "@]@,}"
-  | Case (Symbol "t", body) ->
-      print_string "_ => "; print body
-  | Case (cond, body) ->
-      print cond; print_string " => "; print body
+      printf "@[<v>{@,"; print tree; printf "@]@,}";
+  | IfThen (pred, if_true) ->
+      printf "@[<v>";
+      printf "@[<v 2>if@,"; print pred; printf "@]@,";
+      printf "@[<v 2>then@,"; print if_true; printf "@]@]"
+  | IfThenElse (pred, if_true, if_false) ->
+      printf "@[<v>";
+      printf "@[<v 2>if@,"; print pred; printf "@]@,";
+      printf "@[<v 2>then@,"; print if_true; printf "@]@,";
+      printf "@[<v 2>else@,"; print if_false; printf "@]@]"
   | DefVar (names, tree) ->
       printf "var %s;@," (string_of_symbol_list names);
       print tree
@@ -175,7 +177,7 @@ let rec print = function
   | Char c -> 
       printf "'%c'" c
   | Cons l ->
-      print_char '['; print_list ", " l; print_char ']'
+      print_char '['; print_list "; " l; print_char ']'
   | ArrayRef (name, index) ->
       printf "%s." (string_of_symbol name);
       print_char '['; print index; print_char ']'
