@@ -70,12 +70,9 @@ let rec reduce = function
   | Quote q -> Quote (reduce q)
   | _ as expr -> expr
 
-exception Transform_failed;;
-
 let rec rewrite func = function
   | Group (_ as lst) ->
-      let group = (try func lst with Transform_failed -> Group lst)
-      in rewrite_rec func group
+      rewrite_rec func (func lst)
   | e -> e
 and rewrite_rec func = function
   | Group lst ->
@@ -84,8 +81,7 @@ and rewrite_rec func = function
 
 let rec rewrite_n fs exp =
   match fs with
-  | f::fs ->
-      rewrite_n fs (rewrite f exp)
+  | f::fs -> rewrite_n fs (rewrite f exp)
   | [] -> exp
  
 (* Rewrite cond to series of if forms *)
@@ -99,7 +95,7 @@ let rec cond_to_if = function
       let true_clause = Group (Symbol "progn"::action)
       and false_clause = cond_to_if (Symbol "cond"::rest)
       in Group [Symbol "if"; pred; true_clause; false_clause]
-  | _ -> raise Transform_failed
+  | lst -> Group lst
 
 (* Rewrite prog to let or progn *)
 let rec prog_to_let_progn = function
@@ -107,13 +103,12 @@ let rec prog_to_let_progn = function
       Group (Symbol "progn"::prog)
   | Symbol "prog"::vars::prog ->
       Group (Symbol "let"::vars::prog)
-  | _ -> raise Transform_failed
+  | lst -> Group lst
 
 (* Remove progn if encloses one s-expr *)
 let remove_single_progn = function 
-  | Symbol "progn"::Group lst::[] ->
-      Group lst
-  | _ -> raise Transform_failed
+  | Symbol "progn"::Group lst::[] -> Group lst
+  | lst -> Group lst
 
 let transform expr =
   let reduced = reduce expr
