@@ -1,12 +1,11 @@
 open Format;;
 
-exception SexprListError of Sexpr.sexpr list;;
-exception SexprError of Sexpr.sexpr;;
+exception SyntaxError of string * Sexpr.sexpr;;
+exception UnknownForm of string;;
+
+let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 
 let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "or"; "and"; "equal"]
-let specForms = [
-  "defun"; "let"; "progn"; "if"; "setq"; "return"; "char"; "elt"; "lambda";
-  "block"; "loop"]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
@@ -56,7 +55,7 @@ type tree =
 let rec convert_symbol_list = function
   | (Sexpr.Symbol symbol)::symbols -> symbol::(convert_symbol_list symbols)
   | [] -> []
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Expected a list of symbols" e
 
 let rec convert = function
   | Sexpr.Float n -> Float n
@@ -68,24 +67,25 @@ let rec convert = function
   | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
   | Sexpr.String s -> String s
   | Sexpr.Symbol s -> Symbol s
-  | _ as e -> raise (SexprError e)
+  | e -> raise (SyntaxError ("Unknown s-expression", e))
 
 and convert_group = function
   | (Sexpr.Symbol op)::body when List.mem op binOps && List.length body > 1 ->
       convert_bin_op (translate_op op) body
-  | (Sexpr.Symbol form)::body when List.mem form specForms ->
-      convert_spec_form form body
-  | (Sexpr.Symbol funcName)::body ->
-      Apply (Symbol funcName, List.map convert body)
+  | (Sexpr.Symbol name)::body -> (
+      try
+        convert_spec_form name body
+      with UnknownForm _ ->
+        Apply (Symbol name , List.map convert body))
   | (Sexpr.Group func)::body ->
       Apply (convert_group func, List.map convert body)
-  | _ as e -> Sexpr.print (Sexpr.Group e); failwith "Malformed group."
+  | e -> error "Malformed group" e
 
 and convert_bin_op op = function
   | head::tail ->
       let reduce = fun a b -> BinOp (op, a, convert b)
       in List.fold_left reduce (convert head) tail
-  | _ -> failwith ""
+  | e -> error "BinOp requires at least 2 args" e
 
 and convert_spec_form = function
   | "block" -> convert_block
@@ -98,45 +98,45 @@ and convert_spec_form = function
   | "loop" -> convert_loop
   | "return" | "progn" -> convert_progn
   | "setq" -> convert_setq
-  | _ as e -> failwith ("Unknown special form: " ^ e)
+  | e -> raise (UnknownForm e)
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
       Label (label, convert_progn rest)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed block s-form" e
 
 and convert_char = function
   | (Sexpr.Quote (Sexpr.Symbol c))::[] -> Char c.[0]
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed char s-form" e
 
 and convert_elt = function
   | (Sexpr.Symbol name)::index::[] -> ArrayRef (name, convert index)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed elt s-form" e
 
 and convert_lambda = function
   | (Sexpr.Group args)::body ->
       Lambda (convert_symbol_list args, convert_progn body)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed lambda s-form" e
 
 and convert_loop = function
   | (Sexpr.Symbol name)::body ->
       Loop (name, convert_progn body)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed loop s-form" e
 
 and convert_fun_decl = function
   | (Sexpr.Symbol name)::(Sexpr.Group args)::body::[] ->
       Function (name, convert_symbol_list args, convert body)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed defun s-form" e
 
 and convert_let = function
   | (Sexpr.Group symbols)::body ->
       DefVar (convert_symbol_list symbols, convert_progn body)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed let s-form" e
 
 and convert_setq = function
   | (Sexpr.Symbol name)::value::[] ->
       Assignment (name, convert value)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed setq s-form" e
 
 and convert_progn body = Block (List.map convert body)
 
@@ -145,7 +145,7 @@ and convert_if = function
       IfThenElse (convert pred, convert if_true, convert if_false)
   | pred::if_true::[] ->
       IfThen (convert pred, convert if_true)
-  | _ as e -> raise (SexprListError e)
+  | e -> error "Malformed if s-form" e
 
 (* stringification *)
 let rec print = function
@@ -223,19 +223,14 @@ and print_cons = function
 
 and print_block trees =
   match trees with
-  | tree::[] -> print tree
-  | tree::rest ->
-      print tree; printf "@,"; print_block rest
   | [] -> ()
+  | tree::[] -> print tree
+  | tree::rest -> print tree; printf "@,"; print_block rest
 
 let print_safe expr =
-  try
-    let tree = convert expr in
-    print tree; print_char '\n'
+  (try
+    print (convert expr)
   with
-  | SexprListError exprs ->
-      print_string "Conversion error:\n";
-      Sexpr.print (Sexpr.Group exprs)
-  | SexprError expr ->
-      print_string "Conversion error:\n";
-      Sexpr.print expr
+  | SyntaxError (s, exp) ->
+      printf "@[<v 2>*SYNTAX ERROR* %s:@," s; Sexpr.print exp; printf "@]");
+  printf "@."
