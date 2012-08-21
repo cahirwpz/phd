@@ -199,13 +199,13 @@ and seq_to_progn' = function
 (* Find loops block g190 begin ... end goto g190 *)
 let rec detect_loops = function
   | Symbol "progn"::body ->
-      make_progn (detect_loops_rec body)
+      make_progn (detect_loops' body)
   | _ -> raise NoMatch
-and detect_loops_rec = function
+and detect_loops' = function
   | Group (Symbol "block"::Symbol l1::xs)::Group [Symbol "go"; Symbol l2]::rest when l1 = l2 ->
-      Group (Symbol "loop"::Symbol l1::xs)::(detect_loops_rec rest)
+      Group (Symbol "loop"::Symbol l1::xs)::(detect_loops' rest)
   | x::xs ->
-      x::(detect_loops_rec xs)
+      x::(detect_loops' xs)
   | [] -> []
 
 (* Remove return if is the only constituent of a block *)
@@ -238,13 +238,20 @@ and flatten_progn' = function
 let rec simplify_exit body =
   Group (simplify_exit' body)
 and simplify_exit' = function
-  | (Group [Symbol "exit"; Group value])::rest ->
-      let temp = make_var () in
-      let body = [make_setq temp (Group value); make_exit temp] in
-      (make_let (Group [Symbol temp]) body)::(simplify_exit' rest)
+  | ((Group [Symbol "exit"; arg]) as exit)::rest ->
+      let exit = (try simplify_arg arg with NoMatch -> exit)
+      in exit::(simplify_exit' rest)
   | x::xs ->
       x::(simplify_exit' xs)
   | [] -> []
+and simplify_arg = function
+  | Group [Symbol "setq"; Symbol name; value] ->
+      make_progn [make_setq name value; make_exit name]
+  | (Group _) as value ->
+      let temp = make_var () in
+      let body = [make_setq temp value; make_exit temp] in
+      make_let (Group [Symbol temp]) body
+  | _ -> raise NoMatch
 
 (* s-expr rewrite engine *)
 let rec rewrite func = function

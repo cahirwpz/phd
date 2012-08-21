@@ -228,9 +228,6 @@ and print_block trees =
   | tree::rest -> print tree; printf "@,"; print_block rest
 
 let print_safe expr =
-  (try
-    print (convert expr)
-  with
-  | SyntaxError (s, exp) ->
-      printf "@[<v 2>*SYNTAX ERROR* %s:@," s; Sexpr.print exp; printf "@]");
+  try print (convert expr) with SyntaxError (s, exp) ->
+    printf "@[<v 2>*SYNTAX ERROR* %s:@," s; Sexpr.print exp; printf "@]";
   printf "@."
