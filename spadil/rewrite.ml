@@ -69,11 +69,13 @@ and extract_compound_args' = function
       BinOp (op, recurse_if_compound e1, recurse_if_compound e1)
   | Apply (fn, args) ->
       Apply (fn, List.map recurse_if_compound args)
+  | Leave (l, e) ->
+      Leave (l, recurse_if_compound e)
   | e -> e
 
 and recurse_if_compound exp =
   match exp with
-  | BinOp (_, _, _) | Apply (_, _) | IfThenElse (_, _, _) ->
+  | BinOp (_, _, _) | Apply (_, _) | IfThenElse (_, _, _) | Label (_, _) ->
       let n_exp = extract_compound_args' exp
       and t = make_var () in
       variables := t::!variables;
@@ -109,7 +111,7 @@ and collect_exps = function
   | [] -> []
 
 (* If return-from(seq, x) is last in seq block then remove it *)
-(* todo *)
+(* TODO *)
 
 let rules = [
   extract_compound_args;

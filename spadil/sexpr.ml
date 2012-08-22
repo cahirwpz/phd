@@ -188,7 +188,10 @@ let rec detect_loops = function
       | _ -> raise NoMatch)
   | _ -> raise NoMatch
 
-let rec exit_to_return = function
+(* convert exit / return to return-from *)
+let rec unify_returns = function
+  | [Symbol "return"; value] ->
+      make_return "nil" value
   | [Symbol "exit"; value] ->
       make_return "seq" value
   | _ -> raise NoMatch
@@ -215,7 +218,7 @@ let rules = [
   detect_loops;
   lett_to_setq;
   cond_to_if;
-  exit_to_return;
+  unify_returns;
   prog_to_let;
   dot_to_cons;
   ]

@@ -45,6 +45,7 @@ type tree =
   | Int of int
   | Label of string * tree
   | Lambda of string list * tree
+  | Leave of string * tree
   | Loop of string * tree
   | String of string
   | Symbol of string
@@ -95,7 +96,8 @@ and convert_spec_form = function
   | "lambda" -> convert_lambda
   | "let" -> convert_let
   | "loop" -> convert_loop
-  | "return" | "progn" -> convert_progn
+  | "progn" -> convert_progn
+  | "return-from" -> convert_return_from
   | "setq" -> convert_setq
   | e -> raise (UnknownForm e)
 
@@ -105,11 +107,11 @@ and convert_block = function
   | e -> error "Malformed block s-form" e
 
 and convert_char = function
-  | (Sexpr.Quote (Sexpr.Symbol c))::[] -> Char c.[0]
+  | [Sexpr.Quote (Sexpr.Symbol c)] -> Char c.[0]
   | e -> error "Malformed char s-form" e
 
 and convert_elt = function
-  | (Sexpr.Symbol name)::index::[] -> ArrayRef (name, convert index)
+  | [Sexpr.Symbol name; index] -> ArrayRef (name, convert index)
   | e -> error "Malformed elt s-form" e
 
 and convert_lambda = function
@@ -123,7 +125,7 @@ and convert_loop = function
   | e -> error "Malformed loop s-form" e
 
 and convert_fun_decl = function
-  | (Sexpr.Symbol name)::(Sexpr.Group args)::body::[] ->
+  | [Sexpr.Symbol name; Sexpr.Group args; body] ->
       Function (name, convert_symbol_list args, convert body)
   | e -> error "Malformed defun s-form" e
 
@@ -132,8 +134,13 @@ and convert_let = function
       Block (convert_symbol_list symbols, List.map convert body)
   | e -> error "Malformed let s-form" e
 
+and convert_return_from = function
+  | [Sexpr.Symbol name; value] ->
+      Leave (name, convert value)
+  | e -> error "Malformed return-from s-form" e
+
 and convert_setq = function
-  | (Sexpr.Symbol name)::value::[] ->
+  | [Sexpr.Symbol name; value] ->
       Assign (name, convert value)
   | e -> error "Malformed setq s-form" e
 
@@ -202,6 +209,8 @@ let rec print = function
       printf "@[<v>@[<v 2>loop %s@," name; print tree; printf "@]@,endloop@]"
   | Label (name, tree) ->
       printf "@[<v>@[<v 2>label %s@," name; print tree; printf "@]@,endlabel@]"
+  | Leave (name, value) ->
+      printf "leave %s with " name; print value
   | String str ->
       printf "\"%s\"" (String.escaped str)
   | Symbol name ->
