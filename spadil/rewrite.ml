@@ -31,7 +31,7 @@ let rec rewrite rule e =
   | Label (name, exp) -> Label (name, r exp)
   | Leave (name, exp) -> Leave (name, r exp)
   | Lambda (args, exp) -> Lambda (args, r exp)
-  | Loop (name, exp) -> Loop (name, r exp)
+  | Loop exp -> Loop (r exp)
   | e -> e
 and apply rule exp =
   let exp = (try (rule exp) with NoMatch -> exp)

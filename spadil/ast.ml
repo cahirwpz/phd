@@ -46,7 +46,7 @@ type tree =
   | Label of string * tree
   | Lambda of string list * tree
   | Leave of string * tree
-  | Loop of string * tree
+  | Loop of tree
   | String of string
   | Symbol of string
 
@@ -93,6 +93,7 @@ and convert_spec_form = function
   | "defun" -> convert_fun_decl
   | "elt" -> convert_elt
   | "if" -> convert_if
+  | "label" -> convert_label
   | "lambda" -> convert_lambda
   | "let" -> convert_let
   | "loop" -> convert_loop
@@ -105,6 +106,11 @@ and convert_block = function
   | (Sexpr.Symbol label)::rest ->
       Label (label, convert_progn rest)
   | e -> error "Malformed block s-form" e
+
+and convert_label = function
+  | [Sexpr.Symbol label; rest] ->
+      Label (label, convert rest)
+  | e -> error "Malformed label s-form" e
 
 and convert_char = function
   | [Sexpr.Quote (Sexpr.Symbol c)] -> Char c.[0]
@@ -119,10 +125,7 @@ and convert_lambda = function
       Lambda (convert_symbol_list args, convert_progn body)
   | e -> error "Malformed lambda s-form" e
 
-and convert_loop = function
-  | (Sexpr.Symbol name)::body ->
-      Loop (name, convert_progn body)
-  | e -> error "Malformed loop s-form" e
+and convert_loop body = Loop (convert_progn body)
 
 and convert_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
@@ -165,11 +168,7 @@ let rec print = function
   | BinOp (op, lhs, rhs) ->
       print_char '('; print lhs; printf " %s " op; print rhs; print_char ')'
   | Block (vars, tree) ->
-      printf "@[<v>@[<v 2>begin@,";
-      if List.length vars > 0 then
-        printf "var %s@," (string_of_symbol_list vars);
-      print_block tree;
-      printf "@]@,end@]"
+      printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
   | Char c -> 
       printf "'%c'" c
   | Cons (a, Cons _) as lst ->
@@ -205,10 +204,18 @@ let rec print = function
       let s_args = String.concat ", " (List.map string_of_symbol args) in
       printf "(%s) +-> " s_args;
       print body
-  | Loop (name, tree) ->
-      printf "@[<v>@[<v 2>loop %s@," name; print tree; printf "@]@,endloop@]"
-  | Label (name, tree) ->
-      printf "@[<v>@[<v 2>label %s@," name; print tree; printf "@]@,endlabel@]"
+  | Loop tree ->
+      printf "@[<v>@[<v 2>loop@,"; print tree; printf "@]@,endloop@]"
+  | Label (name, body) ->
+      printf "@[<v>@[<v 2>label %s@," name;
+      begin
+        match body with
+        | Block (vars, body) ->
+            print_block vars body
+        | _ ->
+            print body
+      end;
+      printf "@]@,endlabel@]"
   | Leave (name, value) ->
       printf "leave %s with " name; print value
   | String str ->
@@ -230,11 +237,16 @@ and print_cons = function
       print a
   | _ -> failwith "Not a list."
 
-and print_block trees =
-  match trees with
+and print_block vars exps =
+  if List.length vars > 0 then
+    printf "var %s@," (string_of_symbol_list vars);
+  print_block' exps
+
+and print_block' exps =
+  match exps with
   | [] -> ()
   | tree::[] -> print tree
-  | tree::rest -> print tree; printf "@,"; print_block rest
+  | tree::rest -> print tree; printf "@,"; print_block' rest
 
 let print_safe expr =
   try print (convert expr) with SyntaxError (s, exp) ->

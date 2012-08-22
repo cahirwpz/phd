@@ -91,8 +91,6 @@ let make_let vars body =
   Group (Symbol "let"::vars::body)
 let make_setq name value =
   Group [Symbol "setq"; Symbol name; value]
-let make_let1 name body =
-  Group ((Symbol "let1")::(Symbol name)::body)
 let make_block label body =
   Group ((Symbol "block")::(Symbol label)::body)
 let make_cons left right =
@@ -101,8 +99,8 @@ let make_seq body =
   Group (Symbol "seq"::body)
 let make_exit name = 
   Group [Symbol "exit"; Symbol name]
-let make_loop name body =
-  Group ((Symbol "loop")::(Symbol name)::body)
+let make_loop body =
+  Group ((Symbol "loop")::body)
 let make_return name value =
   Group [Symbol "return-from"; Symbol name; value]
 
@@ -146,10 +144,10 @@ let prog_to_let = function
       make_let vars prog
   | Symbol "prog1"::value::rest ->
       let temp = make_var ()
-      in make_let1 temp ((make_setq temp value)::rest)
+      in make_let (Group [Symbol temp]) ((make_setq temp value)::rest)
   | Symbol "prog2"::value1::value2::rest ->
       let temp = make_var ()
-      in make_let1 temp (value1::(make_setq temp value2)::rest)
+      in make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
   | _ -> raise NoMatch
 
 (* Rewrite dots as cons *)
@@ -181,11 +179,13 @@ and seq_to_block' = function
 
 (* Find loops block g190 begin ... end goto g190 *)
 let rec detect_loops = function
-  | Symbol "block"::(Symbol label)::body -> (
-      match (Utils.last body) with
-      | Group [Symbol "go"; Symbol dst] when dst = label ->
-          (make_loop label (Utils.but_last body))
-      | _ -> raise NoMatch)
+  | Symbol "block"::(Symbol label)::body ->
+      begin
+        match (Utils.last body) with
+        | Group [Symbol "go"; Symbol dst] when dst = label ->
+            make_block label [make_loop (Utils.but_last body)]
+        | _ -> raise NoMatch
+      end
   | _ -> raise NoMatch
 
 (* convert exit / return to return-from *)
