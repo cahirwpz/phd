@@ -29,6 +29,7 @@ let rec rewrite rule e =
   | IfThen (pred, t) -> IfThen (r pred, r t)
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
   | Label (name, exp) -> Label (name, r exp)
+  | Leave (name, exp) -> Leave (name, r exp)
   | Lambda (args, exp) -> Lambda (args, r exp)
   | Loop (name, exp) -> Loop (name, r exp)
   | e -> e
@@ -69,13 +70,11 @@ and extract_compound_args' = function
       BinOp (op, recurse_if_compound e1, recurse_if_compound e1)
   | Apply (fn, args) ->
       Apply (fn, List.map recurse_if_compound args)
-  | Leave (l, e) ->
-      Leave (l, recurse_if_compound e)
   | e -> e
 
 and recurse_if_compound exp =
   match exp with
-  | BinOp (_, _, _) | Apply (_, _) | IfThenElse (_, _, _) | Label (_, _) ->
+  | BinOp (_, _, _) | Apply (_, _) | IfThenElse (_, _, _) ->
       let n_exp = extract_compound_args' exp
       and t = make_var () in
       variables := t::!variables;
@@ -110,10 +109,24 @@ and collect_exps = function
   | x::xs -> x::(collect_exps xs)
   | [] -> []
 
-(* If return-from(seq, x) is last in seq block then remove it *)
+(* If "leave $L with x" is last in $L block then remove it. *)
+let rec reduce_last_leave = function
+  | (Label (l1, Block (vars, exps))) ->
+      Label (l1, Block (vars, reduce_last_leave' l1 exps))
+  | _ -> raise NoMatch
+
+and reduce_last_leave' l1 = function
+  | [Leave (l2, exp)] when l1 = l2 ->
+      [exp]
+  | x::xs ->
+      x::(reduce_last_leave' l1 xs)
+  | [] -> []
+
+(* Remove label if not used *)
 (* TODO *)
 
 let rules = [
+  reduce_last_leave;
   extract_compound_args;
   reduce_block;
   flatten_block;

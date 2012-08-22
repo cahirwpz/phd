@@ -126,7 +126,7 @@ and convert_loop = function
 
 and convert_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
-      Function (name, convert_symbol_list args, convert body)
+      Function (name, convert_symbol_list args, Label ("nil", convert body))
   | e -> error "Malformed defun s-form" e
 
 and convert_let = function
