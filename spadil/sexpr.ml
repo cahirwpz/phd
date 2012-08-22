@@ -152,13 +152,6 @@ let prog_to_let = function
       in make_let1 temp (value1::(make_setq temp value2)::rest)
   | _ -> raise NoMatch
 
-(* Remove progn if encloses one s-expr *)
-let remove_single_progn = function
-  | [Symbol "progn"; body] -> body
-  | [Symbol "block"; Symbol label; Group (Symbol "progn"::body)] ->
-      make_block label body
-  | _ -> raise NoMatch
-
 (* Rewrite dots as cons *)
 let rec dot_to_cons lst =
   Group (dot_to_cons_rec lst)
@@ -173,17 +166,6 @@ let lett_to_setq = function
   | Symbol "lett"::Symbol var::value::_ ->
       make_setq var value
   | _ -> raise NoMatch
-
-(* Remove last exit in seq block. The value of exit in such case is the value of
- * block itself. *)
-let rec remove_last_exit = function
-  | Symbol "seq"::body ->
-      make_seq (remove_last_exit' body)
-  | _ -> raise NoMatch
-and remove_last_exit' = function
-  | [Group [Symbol "exit"; value]] -> [value]
-  | x::xs -> x::(remove_last_exit' xs)
-  | x -> x
 
 (* Rewrite seq as block seq *)
 let rec seq_to_block = function
@@ -204,51 +186,6 @@ let rec detect_loops = function
       | Group [Symbol "go"; Symbol dst] when dst = label ->
           (make_loop label (Utils.but_last body))
       | _ -> raise NoMatch)
-  | _ -> raise NoMatch
-
-(* Remove return if is the only constituent of a block *)
-let remove_single_return = function 
-  | [Symbol "let"; symbols; Group (Symbol "return"::prog)] ->
-      make_let symbols prog
-  | [Symbol "progn"; Group (Symbol "return"::prog)] ->
-      make_progn prog
-  | _ -> raise NoMatch
-
-(* If setq value is defined through let1 it means that computations can be moved
- * before setq *)
-let rec setq_reduce = function
-  | [Symbol "setq"; newVar; Group (Symbol "let1"::oldVar::group)] ->
-      make_progn (substitute oldVar newVar group)
-  | _ -> raise NoMatch
-
-(* If an internal block is contained within an external block, move all
- * expressions to the outer block *)
-let rec flatten_progn = function
-  | Symbol "progn"::body ->
-      make_progn (flatten_progn' body)
-  | _ -> raise NoMatch
-and flatten_progn' = function
-  | (Group (Symbol "progn"::body))::rest ->
-      body @ (flatten_progn' rest)
-  | x::xs -> x::(flatten_progn' xs)
-  | [] -> []
-
-let rec simplify_exit body =
-  Group (simplify_exit' body)
-and simplify_exit' = function
-  | ((Group [Symbol "exit"; arg]) as exit)::rest ->
-      let exit = (try simplify_arg arg with NoMatch -> exit)
-      in exit::(simplify_exit' rest)
-  | x::xs ->
-      x::(simplify_exit' xs)
-  | [] -> []
-and simplify_arg = function
-  | Group [Symbol "setq"; Symbol name; value] ->
-      make_progn [make_setq name value; make_exit name]
-  | (Group _) as value ->
-      let temp = make_var () in
-      let body = [make_setq temp value; make_exit temp] in
-      make_let (Group [Symbol temp]) body
   | _ -> raise NoMatch
 
 let rec exit_to_return = function
@@ -280,11 +217,6 @@ let rules = [
   cond_to_if;
   exit_to_return;
   prog_to_let;
-  setq_reduce;
-  simplify_exit;
-  remove_single_progn;
-  remove_single_return;
-  flatten_progn;
   dot_to_cons;
   ]
 
