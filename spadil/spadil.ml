@@ -1,16 +1,19 @@
 open Lexing
-open Printf
+open Format
 
 let open_lexbuf input fname =
   let lexbuf = Lexing.from_channel input in
   lexbuf.lex_curr_p <- {lexbuf.lex_curr_p with pos_fname = fname};
   lexbuf
 
-let print e =
-  let simplified = (Sexpr.simplify e) in
-  print_string "Original:\n"; Sexpr.print e; print_newline ();
-  print_string "Reduced:\n"; Sexpr.print simplified; print_newline ();
-  print_string "IL:\n"; Ast.print_safe simplified; print_newline ()
+let print lisp =
+  let lisp_opt = Sexpr.simplify lisp in
+  let il = Ast.convert lisp_opt in
+  let il_opt = Rewrite.simplify il in
+  printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.";
+  printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.";
+  printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.";
+  printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@."
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
@@ -22,7 +25,7 @@ let main () =
    for i = 1 to Array.length Sys.argv - 1 do
      let filename = Sys.argv.(i) in
      let file = open_in filename in
-     print_string ("**** " ^ filename ^ " ****\n");
+     printf "**** %s ****@." filename;
      parse (open_lexbuf file filename);
      close_in file
    done

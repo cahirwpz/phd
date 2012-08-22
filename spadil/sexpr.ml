@@ -41,6 +41,7 @@ and print_group = function
   | Symbol "defun"::_ as g -> print_form 3 g
   | Symbol "lambda"::_
   | Symbol "let"::_
+  | Symbol "block"::_
   | Symbol "prog"::_ as g -> print_form 2 g
   | Symbol "loop"::_
   | Symbol "progn"::_
@@ -73,12 +74,6 @@ let rec reduce = function
   | TreeRef n -> slots.(n)
   | _ as expr -> expr
 
-(* Some helpful predicates and functions *)
-let rec last = function
-  | x::[] -> x
-  | x::xs -> last xs
-  | _ -> failwith "Empty list cannot have a last element."
-
 let rec split_by elem lst =
   split_by' elem [] lst
 and split_by' elem left = function
@@ -106,6 +101,10 @@ let make_seq body =
   Group (Symbol "seq"::body)
 let make_exit name = 
   Group [Symbol "exit"; Symbol name]
+let make_loop name body =
+  Group ((Symbol "loop")::(Symbol name)::body)
+let make_return name value =
+  Group [Symbol "return-from"; Symbol name; value]
 
 (* Find recursively all occurences of old term and replace them with new term *)
 let rec substitute oldTerm newTerm lst =
@@ -131,9 +130,9 @@ let make_var () =
  
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
-  | Symbol "cond"::(Group (Quote (Symbol "t")::body))::[] ->
+  | [Symbol "cond"; Group (Quote (Symbol "t")::body)] ->
       make_progn body 
-  | Symbol "cond"::(Group (pred::body))::[] ->
+  | [Symbol "cond"; Group (pred::body)] ->
       make_if pred (make_progn body)
   | Symbol "cond"::(Group (pred::body))::rest ->
       make_if_else pred (make_progn body) (cond_to_if (Symbol "cond"::rest))
@@ -155,7 +154,9 @@ let prog_to_let = function
 
 (* Remove progn if encloses one s-expr *)
 let remove_single_progn = function
-  | Symbol "progn"::body::[] -> body
+  | [Symbol "progn"; body] -> body
+  | [Symbol "block"; Symbol label; Group (Symbol "progn"::body)] ->
+      make_block label body
   | _ -> raise NoMatch
 
 (* Rewrite dots as cons *)
@@ -180,46 +181,43 @@ let rec remove_last_exit = function
       make_seq (remove_last_exit' body)
   | _ -> raise NoMatch
 and remove_last_exit' = function
-  | (Group [Symbol "exit"; value])::[] -> [value]
+  | [Group [Symbol "exit"; value]] -> [value]
   | x::xs -> x::(remove_last_exit' xs)
   | x -> x
 
-(* Rewrite seq as progn *)
-let rec seq_to_progn = function
+(* Rewrite seq as block seq *)
+let rec seq_to_block = function
   | Symbol "seq"::body ->
-      make_progn (seq_to_progn' body)
+      make_block "seq" (seq_to_block' body)
   | _ -> raise NoMatch
-and seq_to_progn' = function
+and seq_to_block' = function
   | Symbol label::rest ->
-      let (exps, rest) = split_by (Symbol "nil") rest in
-      (make_block label exps)::(seq_to_progn' rest)
-  | x::xs -> x::(seq_to_progn' xs)
+      let (exps, rest) = split_by (Symbol "g191") rest in
+      [make_block label exps; make_block "g191" rest]
+  | x::xs -> x::(seq_to_block' xs)
   | [] -> []
 
 (* Find loops block g190 begin ... end goto g190 *)
 let rec detect_loops = function
-  | Symbol "progn"::body ->
-      make_progn (detect_loops' body)
+  | Symbol "block"::(Symbol label)::body -> (
+      match (Utils.last body) with
+      | Group [Symbol "go"; Symbol dst] when dst = label ->
+          (make_loop label (Utils.but_last body))
+      | _ -> raise NoMatch)
   | _ -> raise NoMatch
-and detect_loops' = function
-  | Group (Symbol "block"::Symbol l1::xs)::Group [Symbol "go"; Symbol l2]::rest when l1 = l2 ->
-      Group (Symbol "loop"::Symbol l1::xs)::(detect_loops' rest)
-  | x::xs ->
-      x::(detect_loops' xs)
-  | [] -> []
 
 (* Remove return if is the only constituent of a block *)
 let remove_single_return = function 
-  | Symbol "let"::symbols::Group (Symbol "return"::prog)::[] ->
+  | [Symbol "let"; symbols; Group (Symbol "return"::prog)] ->
       make_let symbols prog
-  | Symbol "progn"::Group (Symbol "return"::prog)::[] ->
+  | [Symbol "progn"; Group (Symbol "return"::prog)] ->
       make_progn prog
   | _ -> raise NoMatch
 
 (* If setq value is defined through let1 it means that computations can be moved
  * before setq *)
 let rec setq_reduce = function
-  | (Symbol "setq"::newVar::Group (Symbol "let1"::oldVar::group)::[]) ->
+  | [Symbol "setq"; newVar; Group (Symbol "let1"::oldVar::group)] ->
       make_progn (substitute oldVar newVar group)
   | _ -> raise NoMatch
 
@@ -253,6 +251,11 @@ and simplify_arg = function
       make_let (Group [Symbol temp]) body
   | _ -> raise NoMatch
 
+let rec exit_to_return = function
+  | [Symbol "exit"; value] ->
+      make_return "seq" value
+  | _ -> raise NoMatch
+
 (* s-expr rewrite engine *)
 let rec rewrite func = function
   | Group lst ->
@@ -271,9 +274,11 @@ let rec rewrite_n fs exp =
 
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
-  seq_to_progn;
+  seq_to_block;
+  detect_loops;
   lett_to_setq;
   cond_to_if;
+  exit_to_return;
   prog_to_let;
   setq_reduce;
   simplify_exit;
