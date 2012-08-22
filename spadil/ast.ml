@@ -33,12 +33,11 @@ let translate_op op =
 type tree =
   | Apply of tree * tree list
   | ArrayRef of string * tree
-  | Assignment of string * tree
+  | Assign of string * tree
   | BinOp of string * tree * tree
-  | Block of tree list
+  | Block of string list * tree list
   | Char of char
   | Cons of tree * tree
-  | DefVar of string list * tree
   | Float of float
   | Function of string * string list * tree
   | IfThen of tree * tree
@@ -130,15 +129,15 @@ and convert_fun_decl = function
 
 and convert_let = function
   | (Sexpr.Group symbols)::body ->
-      DefVar (convert_symbol_list symbols, convert_progn body)
+      Block (convert_symbol_list symbols, List.map convert body)
   | e -> error "Malformed let s-form" e
 
 and convert_setq = function
   | (Sexpr.Symbol name)::value::[] ->
-      Assignment (name, convert value)
+      Assign (name, convert value)
   | e -> error "Malformed setq s-form" e
 
-and convert_progn body = Block (List.map convert body)
+and convert_progn body = Block ([], List.map convert body)
 
 and convert_if = function
   | pred::if_true::if_false::[] ->
@@ -154,35 +153,36 @@ let rec print = function
   | ArrayRef (name, index) ->
       printf "%s." (string_of_symbol name);
       print_char '['; print index; print_char ']'
-  | Assignment (name, value) ->
-      printf "%s := " (string_of_symbol name);
-      (match value with
-      | DefVar _
-      | Block _ -> printf "(@[<v>"; print value; printf "@])"
-      | _ -> printf "@[<v>"; print value; printf "@]")
+  | Assign (name, value) ->
+      printf "%s := " (string_of_symbol name); print value
   | BinOp (op, lhs, rhs) ->
       print_char '('; print lhs; printf " %s " op; print rhs; print_char ')'
-  | Block tree ->
-      printf "@[<v>@[<v 2>begin@,"; print_block tree; printf "@]@,end@]"
+  | Block (vars, tree) ->
+      printf "@[<v>@[<v 2>begin@,";
+      if List.length vars > 0 then
+        printf "var %s@," (string_of_symbol_list vars);
+      print_block tree;
+      printf "@]@,end@]"
   | Char c -> 
       printf "'%c'" c
   | Cons (a, Cons _) as lst ->
       print_char '['; print_cons lst; print_char ']'
   | Cons (a, b) ->
       print_char '{'; print a; printf "; "; print b; print_char '}'
-  | DefVar (names, exp) ->
-      printf "var %s@," (string_of_symbol_list names);
-      (match exp with
-      | Block body -> print_block body
-      | exp -> print exp)
   | Float n ->
       print_float n
   | Function (name, args, body) ->
       let name = (string_of_symbol name)
-      and args = (string_of_symbol_list args)
-      in printf "@[<v>def %s(%s)@,@[<v 2>begin@," name args;
-      print body;
-      printf "@]@,@]end@."
+      and args = (string_of_symbol_list args) in
+      printf "@[<v>def %s(%s)@," name args;
+      (
+        match body with
+        | Block (_, _) ->
+            print body;
+        | _ ->
+            printf "@[<v 2>begin@,"; print body; printf "@]@,end"
+      );
+      printf "@]@."
   | IfThen (pred, if_true) ->
       printf "@[<v>";
       printf "@[<v 2>if@,"; print pred; printf "@]@,";
