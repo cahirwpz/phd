@@ -173,7 +173,7 @@ let rec seq_to_block = function
 and seq_to_block' = function
   | Symbol label::rest ->
       let (exps, rest) = split_by (Symbol "g191") rest in
-      [make_block label exps; make_block "g191" rest]
+      [make_block label exps] @ rest
   | x::xs -> x::(seq_to_block' xs)
   | [] -> []
 

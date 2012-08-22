@@ -57,17 +57,24 @@ let rec convert_symbol_list = function
   | [] -> []
   | e -> error "Expected a list of symbols" e
 
-let rec convert = function
-  | Sexpr.Float n -> Float n
-  | Sexpr.Group g -> convert_group g
-  | Sexpr.Int n -> Int n
-  | Sexpr.Quote (Sexpr.Group g) ->
-      let reduce = fun a b -> Cons (convert a, b) 
-      in List.fold_right reduce g (Symbol "nil")
-  | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
-  | Sexpr.String s -> String s
-  | Sexpr.Symbol s -> Symbol s
-  | e -> raise (SyntaxError ("Unknown s-expression", e))
+let rec convert exp =
+  try
+    begin
+      match exp with
+      | Sexpr.Float n -> Float n
+      | Sexpr.Group g -> convert_group g
+      | Sexpr.Int n -> Int n
+      | Sexpr.Quote (Sexpr.Group g) ->
+          let reduce = fun a b -> Cons (convert a, b) 
+          in List.fold_right reduce g (Symbol "nil")
+      | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
+      | Sexpr.String s -> String s
+      | Sexpr.Symbol s -> Symbol s
+      | e -> raise (SyntaxError ("Unknown s-expression", e))
+    end
+  with SyntaxError (s, exp) ->
+    printf "@[<v 2>*SYNTAX ERROR* %s:@," s; Sexpr.print exp; printf "@]@.";
+    Symbol "*invalid*"
 
 and convert_group = function
   | (Sexpr.Symbol op)::body when List.mem op binOps && List.length body > 1 ->
@@ -247,8 +254,3 @@ and print_block' exps =
   | [] -> ()
   | tree::[] -> print tree
   | tree::rest -> print tree; printf "@,"; print_block' rest
-
-let print_safe expr =
-  try print (convert expr) with SyntaxError (s, exp) ->
-    printf "@[<v 2>*SYNTAX ERROR* %s:@," s; Sexpr.print exp; printf "@]";
-  printf "@."
