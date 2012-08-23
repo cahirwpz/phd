@@ -1,3 +1,8 @@
+module StringSet = Set.Make(String)
+
+let makeStringSet strings =
+  List.fold_right StringSet.add strings StringSet.empty
+
 (* Some helpful predicates and functions *)
 let rec last = function
   | x::[] -> x

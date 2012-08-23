@@ -1,4 +1,5 @@
-open Format;;
+open Format
+open Utils
 
 exception SyntaxError of string * Sexpr.sexpr;;
 exception UnknownForm of string;;
@@ -36,7 +37,7 @@ let translate_op op =
 type tree =
   | Apply of tree * tree list
   | Assign of string * tree
-  | Block of string list * tree list
+  | Block of StringSet.t * tree list
   | Char of char
   | Cons of tree * tree
   | Float of float
@@ -113,7 +114,7 @@ and convert_spec_form = function
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
-      Block ([],  List.map convert rest)
+      Block (StringSet.empty, List.map convert rest)
   | e -> error "Malformed block s-form" e
 
 and convert_label = function
@@ -144,12 +145,13 @@ and convert_fun_decl = function
 
 and convert_let = function
   | (Sexpr.Group symbols)::body ->
-      Block (convert_symbol_list symbols, List.map convert body)
+      let symbols = convert_symbol_list symbols in
+      Block (makeStringSet symbols, List.map convert body)
   | e -> error "Malformed let s-form" e
 
 and convert_return = function
   | [value] ->
-      Block ([], [convert value; Return])
+      Block (StringSet.empty, [convert value; Return])
   | e -> error "Malformed return s-form" e
 
 and convert_setq = function
@@ -157,7 +159,8 @@ and convert_setq = function
       Assign (name, convert value)
   | e -> error "Malformed setq s-form" e
 
-and convert_progn body = Block ([], List.map convert body)
+and convert_progn body =
+  Block (StringSet.empty, List.map convert body)
 
 and convert_if = function
   | pred::if_true::if_false::[] ->
@@ -239,8 +242,8 @@ and print_fun_body body =
       printf "@[<v 2>begin@,"; print body; printf "@]@,end"
 
 and print_block vars exps =
-  if List.length vars > 0 then
-    printf "var %s@," (string_of_symbol_list vars);
+  if not (StringSet.is_empty vars) then
+    printf "var %s@," (string_of_symbol_list (StringSet.elements vars));
   print_block' exps
 
 and print_block' exps =

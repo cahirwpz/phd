@@ -1,6 +1,7 @@
-open Ast;;
+open Ast
+open Utils
 
-exception NoMatch;;
+exception NoMatch
 
 let is_compound = function
   | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ | Global _ ->
@@ -58,7 +59,7 @@ let rec extract_compound_args exp =
   let vars = get_variables ()
   and body = List.rev (n_exp::(get_assignments ())) in
   if List.length body > 1
-  then Block ((if List.length vars > 0 then List.rev vars else []), body)
+  then Block (makeStringSet vars, body)
   else exp
 
 and extract_compound_args' = function
@@ -92,22 +93,23 @@ and rewrite_compound exp =
 (* Reduce a block that contains only one expression*)
 let reduce_block = function
   | Block (vars1, [Block (vars2, exps)]) ->
-      Block (vars1 @ vars2, exps)
-  | Block ([], [exp]) ->
+      Block (StringSet.union vars1 vars2, exps)
+  | Block (vars, [exp]) when StringSet.is_empty vars ->
       exp
   | _ -> raise NoMatch
 
 (* Flatten structure of a block *)
 let rec flatten_block = function
   | Block (vars, body) ->
-      let body = List.map flatten_block body
-      in Block (vars @ (collect_vars body), collect_exps body)
+      let body = List.map flatten_block body in
+      let vars = StringSet.union vars (collect_vars body) in
+      Block (vars, collect_exps body)
   | x -> x
 
 and collect_vars = function
-  | (Block (vs, _))::xs -> vs @ (collect_vars xs)
+  | (Block (vs, _))::xs -> StringSet.union vs (collect_vars xs)
   | x::xs -> collect_vars xs
-  | [] -> []
+  | [] -> StringSet.empty
       
 and collect_exps = function
   | (Block (_, x))::xs -> x @ (collect_exps xs)
