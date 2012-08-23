@@ -25,10 +25,10 @@ let rec rewrite rule e =
   | Assign (name, exp) -> Assign (name, r exp)
   | Block (vars, exps) -> Block (vars, rn exps)
   | Cons (fst, snd) -> Cons (r fst, r snd)
-  | IfThen (pred, t) -> IfThen (r pred, r t)
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
   | Lambda (args, exp) -> Lambda (args, r exp)
   | Loop exp -> Loop (r exp)
+  | Return exp -> Return (r exp)
   | e -> e
 and apply rule exp =
   let exp = (try (rule exp) with NoMatch -> exp)
@@ -67,19 +67,19 @@ and extract_compound_args' = function
       Apply (rewrite_compound fn, List.map rewrite_compound args)
   | IfThenElse (pred, t, f) ->
       IfThenElse (rewrite_compound pred, t, f)
-  | IfThen (pred, t) ->
-      IfThen (rewrite_compound pred, t)
   | Assign (name, Apply (fn, args)) ->
       let value = Apply (rewrite_compound fn, List.map rewrite_compound args)
       in Assign (name, value)
   | Assign (name, IfThenElse (pred, t, f)) ->
       let value = IfThenElse (rewrite_compound pred, t, f)
       in Assign (name, value)
+  | Return exp ->
+      Return (rewrite_compound exp)
   | e -> e
 
 and rewrite_compound exp =
   match exp with
-  | Apply (_, _) | IfThenElse (_, _, _) | Lambda (_, _) ->
+  | Apply (_, _) | IfThenElse (_, _, _) | Lambda (_, _) | Return _ ->
       let n_exp = extract_compound_args' exp
       and t = make_var () in
       variables := t::!variables;
@@ -88,6 +88,11 @@ and rewrite_compound exp =
   | Assign (x, y) ->
       assignments := exp::!assignments;
       Symbol x
+  | Block (_, _) ->
+      let t = make_var () in
+      variables := t::!variables;
+      assignments := (Assign (t, exp))::!assignments;
+      Symbol t
   | _ -> exp
 
 (* Reduce a block that contains only one expression*)
@@ -116,30 +121,38 @@ and collect_exps = function
   | x::xs -> x::(collect_exps xs)
   | [] -> []
 
-(* If "jump $L; label $L" is in a block then remove it. *)
-let rec reduce_spurious_jumps = function
-  | Block (vars, exps) ->
-      Block (vars, reduce_spurious_jump' exps)
-  | _ -> raise NoMatch
-
-and reduce_spurious_jump' = function
-  | (Jump l1)::(Label l2)::rest when l1 = l2 ->
-      reduce_spurious_jump' rest
-  | x::xs ->
-      x::(reduce_spurious_jump' xs)
-  | [] -> []
-
 (* Reduce one-time lambda invocations *)
 let rec reduce_lambda = function
   | Apply (Lambda ([], body), []) ->
       body
   | _ -> raise NoMatch
 
+(* push assign deeper into the structure *)
+let rec rewrite_assign = function
+  | Assign (var, IfThenElse (pred, t, f)) ->
+      let t = rewrite_assign (Assign (var, t))
+      and f = rewrite_assign (Assign (var, f))
+      in IfThenElse (pred, t, f)
+  | Assign (var, Block (vars, exps)) when not (StringSet.mem var vars) ->
+      let (xs, x) = split_at_last exps
+      in Block (vars, xs @ [rewrite_assign (Assign (var, x))])
+  | Assign (var1, Assign (var2, exp)) ->
+      Block (StringSet.empty, [Assign (var2, exp); Assign (var1, Symbol var2)])
+  | x -> x
+
+(* push return deeper into the structure *)
+let rec rewrite_return = function
+  | Return (Block (vars, exps)) ->
+      let (xs, x) = split_at_last exps
+      in Block (vars, xs @ [rewrite_return (Return x)])
+  | x -> x
+
 let rules = [
   reduce_lambda;
+  rewrite_return;
   extract_compound_args;
+  rewrite_assign;
   flatten_block;
-  reduce_spurious_jumps;
   reduce_block;
 ]
 

@@ -13,3 +13,5 @@ let rec but_last = function
   | x::[] -> []
   | x::xs -> x::(but_last xs)
   | _ -> failwith "Expected list of at least one element."
+
+let split_at_last xs = (but_last xs, last xs)

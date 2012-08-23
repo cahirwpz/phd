@@ -95,10 +95,6 @@ let make_block label body =
   Group ((Symbol "BLOCK")::(Symbol label)::body)
 let make_cons left right =
   Group [Symbol "CONS"; left; right]
-let make_seq body = 
-  Group (Symbol "SEQ"::body)
-let make_exit name = 
-  Group [Symbol "EXIT"; Symbol name]
 let make_loop body =
   Group ((Symbol "LOOP")::body)
 
@@ -137,9 +133,9 @@ let rec cond_to_if = function
 (* Rewrite prog / prog1 / prog2 to let *)
 let rec prog_to_let = function
   | Symbol "PROG"::Group []::body ->
-      make_block "NIL" (reduce_return' body)
-  | Symbol "PROG"::vars::prog ->
-      make_block "NIL" [make_let vars (reduce_return' prog)]
+      make_block "NIL" body
+  | Symbol "PROG"::vars::body ->
+      make_block "NIL" [make_let vars body]
   | Symbol "PROG1"::value::rest ->
       let temp = make_var ()
       in make_let (Group [Symbol temp]) ((make_setq temp value)::rest)
@@ -148,10 +144,11 @@ let rec prog_to_let = function
       in make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
   | _ -> raise NoMatch
 
-and reduce_return' = function
-  | [Group [Symbol "RETURN"; body]] ->
-      [body]
-  | x -> x
+(* skip it until it's really handled *)
+let skip_declare = function
+  | Symbol "PROG"::vars::(Group (Symbol "DECLARE"::_))::body ->
+      Group (Symbol "PROG"::vars::body)
+  | _ -> raise NoMatch
 
 (* Rewrite dots as cons *)
 let rec dot_to_cons lst =
@@ -213,6 +210,7 @@ let rules = [
   detect_loops;
   lett_to_setq;
   cond_to_if;
+  skip_declare;
   prog_to_let;
   dot_to_cons;
   ]

@@ -41,14 +41,13 @@ type tree =
   | Char of char
   | Cons of tree * tree
   | Float of float
-  | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
   | Global of string
   | Int of int
   | Jump of string
   | Label of string
   | Lambda of string list * tree
-  | Return
+  | Return of tree
   | Loop of tree
   | String of string
   | Symbol of string
@@ -151,7 +150,7 @@ and convert_let = function
 
 and convert_return = function
   | [value] ->
-      Block (StringSet.empty, [convert value; Return])
+      Return (convert value)
   | e -> error "Malformed return s-form" e
 
 and convert_setq = function
@@ -165,8 +164,6 @@ and convert_progn body =
 and convert_if = function
   | pred::if_true::if_false::[] ->
       IfThenElse (convert pred, convert if_true, convert if_false)
-  | pred::if_true::[] ->
-      IfThen (convert pred, convert if_true)
   | e -> error "Malformed if s-form" e
 
 (* stringification *)
@@ -189,10 +186,6 @@ let rec print = function
       print_char '{'; print a; printf "; "; print b; print_char '}'
   | Float n ->
       print_float n
-  | IfThen (pred, if_true) ->
-      printf "@[<v>";
-      printf "@[<v 2>if@,"; print pred; printf "@]@,";
-      printf "@[<v 2>then@,"; print if_true; printf "@]@,endif@]"
   | IfThenElse (pred, if_true, if_false) ->
       printf "@[<v>";
       printf "@[<v 2>if@,"; print pred; printf "@]@,";
@@ -213,8 +206,8 @@ let rec print = function
       printf "@[<v>@[<v 2>loop@,"; print_block vars exps; printf "@]@,endloop@]"
   | Loop tree ->
       printf "@[<v>@[<v 2>loop@,"; print tree; printf "@]@,endloop@]"
-  | Return ->
-      printf "return"
+  | Return tree ->
+      printf "return "; print tree
   | String str ->
       printf "\"%s\"" (String.escaped str)
   | Symbol name ->
