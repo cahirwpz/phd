@@ -12,8 +12,8 @@ let print lisp =
   let il_opt = Rewrite.simplify il in
   printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.";
   printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.";
-  printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.";
-  printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@."
+  printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@.";
+  printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@."
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf

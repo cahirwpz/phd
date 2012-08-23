@@ -5,7 +5,7 @@ exception UnknownForm of string;;
 
 let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 
-let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "or"; "and"; "equal"]
+let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
@@ -25,27 +25,28 @@ let string_of_symbol_list symbols =
 
 let translate_op op =
   match op with
-  | "or" -> "||"
-  | "and" -> "&&"
-  | "equal" -> "=="
+  | "+" -> "ADD"
+  | "-" -> "SUB"
+  | "*" -> "MUL"
+  | "/" -> "DIV"
+  | "<" -> "LT"
+  | ">" -> "GT"
   | _ as x -> x
 
 type tree =
   | Apply of tree * tree list
-  | ArrayRef of string * tree
   | Assign of string * tree
-  | BinOp of string * tree * tree
   | Block of string list * tree list
   | Char of char
   | Cons of tree * tree
   | Float of float
-  | Function of string * string list * tree
   | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
   | Int of int
-  | Label of string * tree
+  | Jump of string
+  | Label of string
   | Lambda of string list * tree
-  | Leave of string * tree
+  | Return
   | Loop of tree
   | String of string
   | Symbol of string
@@ -90,42 +91,37 @@ and convert_group = function
 
 and convert_bin_op op = function
   | head::tail ->
-      let reduce = fun a b -> BinOp (op, a, convert b)
+      let reduce = fun a b -> Apply (Symbol op, [a; convert b])
       in List.fold_left reduce (convert head) tail
   | e -> error "BinOp requires at least 2 args" e
 
 and convert_spec_form = function
-  | "block" -> convert_block
-  | "char" -> convert_char
-  | "defun" -> convert_fun_decl
-  | "elt" -> convert_elt
-  | "if" -> convert_if
-  | "label" -> convert_label
-  | "lambda" -> convert_lambda
-  | "let" -> convert_let
-  | "loop" -> convert_loop
-  | "progn" -> convert_progn
-  | "return-from" -> convert_return_from
-  | "setq" -> convert_setq
+  | "BLOCK" -> convert_block
+  | "CHAR" -> convert_char
+  | "DEFUN" -> convert_fun_decl
+  | "IF" -> convert_if
+  | "LABEL" -> convert_label
+  | "LAMBDA" -> convert_lambda
+  | "LET" -> convert_let
+  | "LOOP" -> convert_loop
+  | "PROGN" -> convert_progn
+  | "RETURN" -> convert_return
+  | "SETQ" -> convert_setq
   | e -> raise (UnknownForm e)
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
-      Label (label, convert_progn rest)
+      Block ([],  List.map convert rest)
   | e -> error "Malformed block s-form" e
 
 and convert_label = function
-  | [Sexpr.Symbol label; rest] ->
-      Label (label, convert rest)
+  | [Sexpr.Symbol label] ->
+      Label label
   | e -> error "Malformed label s-form" e
 
 and convert_char = function
   | [Sexpr.Quote (Sexpr.Symbol c)] -> Char c.[0]
   | e -> error "Malformed char s-form" e
-
-and convert_elt = function
-  | [Sexpr.Symbol name; index] -> ArrayRef (name, convert index)
-  | e -> error "Malformed elt s-form" e
 
 and convert_lambda = function
   | (Sexpr.Group args)::body ->
@@ -136,7 +132,7 @@ and convert_loop body = Loop (convert_progn body)
 
 and convert_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
-      Function (name, convert_symbol_list args, Label ("nil", convert body))
+      Assign (name, Lambda (convert_symbol_list args, convert body))
   | e -> error "Malformed defun s-form" e
 
 and convert_let = function
@@ -144,10 +140,10 @@ and convert_let = function
       Block (convert_symbol_list symbols, List.map convert body)
   | e -> error "Malformed let s-form" e
 
-and convert_return_from = function
-  | [Sexpr.Symbol name; value] ->
-      Leave (name, convert value)
-  | e -> error "Malformed return-from s-form" e
+and convert_return = function
+  | [value] ->
+      Block ([], [convert value; Return])
+  | e -> error "Malformed return s-form" e
 
 and convert_setq = function
   | [Sexpr.Symbol name; value] ->
@@ -167,13 +163,12 @@ and convert_if = function
 let rec print = function
   | Apply (func, args) ->
       print func; print_char '('; print_list ", " args; print_char ')'
-  | ArrayRef (name, index) ->
-      printf "%s." (string_of_symbol name);
-      print_char '['; print index; print_char ']'
+  | Assign (name, Lambda (args, body)) ->
+      let name = (string_of_symbol name)
+      and args = (string_of_symbol_list args) in
+      printf "@[<v>def %s(%s)@," name args; print_fun_body body; printf "@]"
   | Assign (name, value) ->
       printf "%s := " (string_of_symbol name); print value
-  | BinOp (op, lhs, rhs) ->
-      print_char '('; print lhs; printf " %s " op; print rhs; print_char ')'
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
   | Char c -> 
@@ -184,18 +179,6 @@ let rec print = function
       print_char '{'; print a; printf "; "; print b; print_char '}'
   | Float n ->
       print_float n
-  | Function (name, args, body) ->
-      let name = (string_of_symbol name)
-      and args = (string_of_symbol_list args) in
-      printf "@[<v>def %s(%s)@," name args;
-      (
-        match body with
-        | Block (_, _) ->
-            print body;
-        | _ ->
-            printf "@[<v 2>begin@,"; print body; printf "@]@,end"
-      );
-      printf "@]@."
   | IfThen (pred, if_true) ->
       printf "@[<v>";
       printf "@[<v 2>if@,"; print pred; printf "@]@,";
@@ -207,24 +190,19 @@ let rec print = function
       printf "@[<v 2>else@,"; print if_false; printf "@]@,endif@]"
   | Int n ->
       print_int n
+  | Jump name ->
+      printf "jump %s" name
   | Lambda (args, body) ->
-      let s_args = String.concat ", " (List.map string_of_symbol args) in
-      printf "(%s) +-> " s_args;
-      print body
+      let args = (string_of_symbol_list args) in
+      printf "@[<v>fn (%s) -> @," args; print_fun_body body; printf "@] "
+  | Label name ->
+      printf "label %s:" name
+  | Loop (Block (vars, exps)) ->
+      printf "@[<v>@[<v 2>loop@,"; print_block vars exps; printf "@]@,endloop@]"
   | Loop tree ->
       printf "@[<v>@[<v 2>loop@,"; print tree; printf "@]@,endloop@]"
-  | Label (name, body) ->
-      printf "@[<v>@[<v 2>label %s@," name;
-      begin
-        match body with
-        | Block (vars, body) ->
-            print_block vars body
-        | _ ->
-            print body
-      end;
-      printf "@]@,endlabel@]"
-  | Leave (name, value) ->
-      printf "leave %s with " name; print value
+  | Return ->
+      printf "return"
   | String str ->
       printf "\"%s\"" (String.escaped str)
   | Symbol name ->
@@ -243,6 +221,13 @@ and print_cons = function
   | Cons (a, Symbol "nil") ->
       print a
   | _ -> failwith "Not a list."
+
+and print_fun_body body =
+  match body with
+  | Block (_, _) ->
+      print body
+  | _ ->
+      printf "@[<v 2>begin@,"; print body; printf "@]@,end"
 
 and print_block vars exps =
   if List.length vars > 0 then

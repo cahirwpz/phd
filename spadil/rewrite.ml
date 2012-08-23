@@ -4,7 +4,7 @@ exception NoMatch;;
 
 let is_compound exp =
   match exp with
-  | Char _ | Float _ | Int _ | String _ | Symbol _ -> false
+  | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ -> false
   | _ -> true
 
 (* generate new symbols on demand *)
@@ -20,16 +20,11 @@ let rec rewrite rule e =
   let r = apply rule and rn = apply_to_list rule in
   match e with
   | Apply (fn, exps) -> Apply (r fn, rn exps)
-  | ArrayRef (name, exp) -> ArrayRef (name, r exp)
   | Assign (name, exp) -> Assign (name, r exp)
-  | BinOp (op, exp1, exp2) -> BinOp (op, r exp1, r exp2)
   | Block (vars, exps) -> Block (vars, rn exps)
   | Cons (fst, snd) -> Cons (r fst, r snd)
-  | Function (name, args, exp) -> Function (name, args, r exp)
   | IfThen (pred, t) -> IfThen (r pred, r t)
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
-  | Label (name, exp) -> Label (name, r exp)
-  | Leave (name, exp) -> Leave (name, r exp)
   | Lambda (args, exp) -> Lambda (args, r exp)
   | Loop exp -> Loop (r exp)
   | e -> e
@@ -66,15 +61,23 @@ let rec extract_compound_args exp =
   else exp
 
 and extract_compound_args' = function
-  | BinOp (op, e1, e2) ->
-      BinOp (op, recurse_if_compound e1, recurse_if_compound e1)
   | Apply (fn, args) ->
-      Apply (fn, List.map recurse_if_compound args)
+      Apply (rewrite_compound fn, List.map rewrite_compound args)
+  | IfThenElse (pred, t, f) ->
+      IfThenElse (rewrite_compound pred, t, f)
+  | IfThen (pred, t) ->
+      IfThen (rewrite_compound pred, t)
+  | Assign (name, Apply (fn, args)) ->
+      let value = Apply (rewrite_compound fn, List.map rewrite_compound args)
+      in Assign (name, value)
+  | Assign (name, IfThenElse (pred, t, f)) ->
+      let value = IfThenElse (rewrite_compound pred, t, f)
+      in Assign (name, value)
   | e -> e
 
-and recurse_if_compound exp =
+and rewrite_compound exp =
   match exp with
-  | BinOp (_, _, _) | Apply (_, _) | IfThenElse (_, _, _) ->
+  | Apply (_, _) | IfThenElse (_, _, _) | Lambda (_, _) ->
       let n_exp = extract_compound_args' exp
       and t = make_var () in
       variables := t::!variables;
@@ -96,8 +99,9 @@ let reduce_block = function
 (* Flatten structure of a block *)
 let rec flatten_block = function
   | Block (vars, body) ->
-      Block (vars @ (collect_vars body), collect_exps body)
-  | _ -> raise NoMatch
+      let body = List.map flatten_block body
+      in Block (vars @ (collect_vars body), collect_exps body)
+  | x -> x
 
 and collect_vars = function
   | (Block (vs, _))::xs -> vs @ (collect_vars xs)
@@ -109,27 +113,31 @@ and collect_exps = function
   | x::xs -> x::(collect_exps xs)
   | [] -> []
 
-(* If "leave $L with x" is last in $L block then remove it. *)
-let rec reduce_last_leave = function
-  | (Label (l1, Block (vars, exps))) ->
-      Label (l1, Block (vars, reduce_last_leave' l1 exps))
+(* If "jump $L; label $L" is in a block then remove it. *)
+let rec reduce_spurious_jumps = function
+  | Block (vars, exps) ->
+      Block (vars, reduce_spurious_jump' exps)
   | _ -> raise NoMatch
 
-and reduce_last_leave' l1 = function
-  | [Leave (l2, exp)] when l1 = l2 ->
-      [exp]
+and reduce_spurious_jump' = function
+  | (Jump l1)::(Label l2)::rest when l1 = l2 ->
+      reduce_spurious_jump' rest
   | x::xs ->
-      x::(reduce_last_leave' l1 xs)
+      x::(reduce_spurious_jump' xs)
   | [] -> []
 
-(* Remove label if not used *)
-(* TODO *)
+(* Reduce one-time lambda invocations *)
+let rec reduce_lambda = function
+  | Apply (Lambda ([], body), []) ->
+      body
+  | _ -> raise NoMatch
 
 let rules = [
-  reduce_last_leave;
+  reduce_lambda;
   extract_compound_args;
-  reduce_block;
   flatten_block;
+  reduce_spurious_jumps;
+  reduce_block;
 ]
 
 let simplify exp =
