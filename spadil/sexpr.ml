@@ -38,20 +38,20 @@ and print_form_sep n sep lst =
   printf "@]"
 and print_form n lst = print_form_sep n " " lst
 and print_group = function
-  | Symbol "defun"::_ as g -> print_form 3 g
-  | Symbol "lambda"::_
-  | Symbol "let"::_
-  | Symbol "block"::_
-  | Symbol "prog"::_ as g -> print_form 2 g
-  | Symbol "loop"::_
-  | Symbol "progn"::_
-  | Symbol "return"::_
-  | Symbol "or"::_
-  | Symbol "and"::_
-  | Symbol "if"::_
-  | Symbol "seq"::_
-  | Symbol "unwind-protect"::_
-  | Symbol "cond"::_ as g -> print_form_sep 1 "@," g
+  | Symbol "DEFUN"::_ as g -> print_form 3 g
+  | Symbol "LAMBDA"::_
+  | Symbol "LET"::_
+  | Symbol "BLOCK"::_
+  | Symbol "PROG"::_ as g -> print_form 2 g
+  | Symbol "LOOP"::_
+  | Symbol "PROGN"::_
+  | Symbol "RETURN"::_
+  | Symbol "OR"::_
+  | Symbol "AND"::_
+  | Symbol "IF"::_
+  | Symbol "SEQ"::_
+  | Symbol "UNWIND-PROTECT"::_
+  | Symbol "COND"::_ as g -> print_form_sep 1 "@," g
   | _ as e -> print_list e
 and print_rec = function
   | Float n -> print_float n
@@ -82,27 +82,25 @@ and split_by' elem left = function
   | [] -> (List.rev left, [])
 
 let make_progn body =
-  Group (Symbol "progn"::body)
+  Group (Symbol "PROGN"::body)
 let make_if pred if_true = 
-  Group [Symbol "if"; pred; if_true]
+  Group [Symbol "IF"; pred; if_true]
 let make_if_else pred if_true if_false = 
-  Group [Symbol "if"; pred; if_true; if_false]
+  Group [Symbol "IF"; pred; if_true; if_false]
 let make_let vars body =
-  Group (Symbol "let"::vars::body)
+  Group (Symbol "LET"::vars::body)
 let make_setq name value =
-  Group [Symbol "setq"; Symbol name; value]
+  Group [Symbol "SETQ"; Symbol name; value]
 let make_block label body =
-  Group ((Symbol "block")::(Symbol label)::body)
+  Group ((Symbol "BLOCK")::(Symbol label)::body)
 let make_cons left right =
-  Group [Symbol "cons"; left; right]
+  Group [Symbol "CONS"; left; right]
 let make_seq body = 
-  Group (Symbol "seq"::body)
+  Group (Symbol "SEQ"::body)
 let make_exit name = 
-  Group [Symbol "exit"; Symbol name]
+  Group [Symbol "EXIT"; Symbol name]
 let make_loop body =
-  Group ((Symbol "loop")::body)
-let make_return name value =
-  Group [Symbol "return-from"; Symbol name; value]
+  Group ((Symbol "LOOP")::body)
 
 (* Find recursively all occurences of old term and replace them with new term *)
 let rec substitute oldTerm newTerm lst =
@@ -128,27 +126,32 @@ let make_var () =
  
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
-  | [Symbol "cond"; Group (Quote (Symbol "t")::body)] ->
+  | [Symbol "COND"; Group (Quote (Symbol "T")::body)] ->
       make_progn body 
-  | [Symbol "cond"; Group (pred::body)] ->
+  | [Symbol "COND"; Group (pred::body)] ->
       make_if pred (make_progn body)
-  | Symbol "cond"::(Group (pred::body))::rest ->
-      make_if_else pred (make_progn body) (cond_to_if (Symbol "cond"::rest))
+  | Symbol "COND"::(Group (pred::body))::rest ->
+      make_if_else pred (make_progn body) (cond_to_if (Symbol "COND"::rest))
   | _ -> raise NoMatch
 
 (* Rewrite prog / prog1 / prog2 to let *)
-let prog_to_let = function
-  | Symbol "prog"::Group []::body ->
-      make_progn body
-  | Symbol "prog"::vars::prog ->
-      make_let vars prog
-  | Symbol "prog1"::value::rest ->
+let rec prog_to_let = function
+  | Symbol "PROG"::Group []::body ->
+      make_block "NIL" (reduce_return' body)
+  | Symbol "PROG"::vars::prog ->
+      make_block "NIL" [make_let vars (reduce_return' prog)]
+  | Symbol "PROG1"::value::rest ->
       let temp = make_var ()
       in make_let (Group [Symbol temp]) ((make_setq temp value)::rest)
-  | Symbol "prog2"::value1::value2::rest ->
+  | Symbol "PROG2"::value1::value2::rest ->
       let temp = make_var ()
       in make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
   | _ -> raise NoMatch
+
+and reduce_return' = function
+  | [Group [Symbol "RETURN"; body]] ->
+      [body]
+  | x -> x
 
 (* Rewrite dots as cons *)
 let rec dot_to_cons lst =
@@ -161,39 +164,31 @@ and dot_to_cons_rec = function
 
 (* Rewrite lett as let *)
 let lett_to_setq = function
-  | Symbol "lett"::Symbol var::value::_ ->
+  | Symbol "LETT"::Symbol var::value::_ ->
       make_setq var value
   | _ -> raise NoMatch
 
 (* Rewrite seq as block seq *)
 let rec seq_to_block = function
-  | Symbol "seq"::body ->
-      make_block "seq" (seq_to_block' body)
+  | Symbol "SEQ"::body ->
+      make_block "SEQ" (seq_to_block' body)
   | _ -> raise NoMatch
 and seq_to_block' = function
   | Symbol label::rest ->
-      let (exps, rest) = split_by (Symbol "g191") rest in
+      let (exps, rest) = split_by (Symbol "G191") rest in
       [make_block label exps] @ rest
   | x::xs -> x::(seq_to_block' xs)
   | [] -> []
 
 (* Find loops block g190 begin ... end goto g190 *)
 let rec detect_loops = function
-  | Symbol "block"::(Symbol label)::body ->
+  | Symbol "BLOCK"::(Symbol label)::body ->
       begin
         match (Utils.last body) with
-        | Group [Symbol "go"; Symbol dst] when dst = label ->
+        | Group [Symbol "GO"; Symbol dst] when dst = label ->
             make_block label [make_loop (Utils.but_last body)]
         | _ -> raise NoMatch
       end
-  | _ -> raise NoMatch
-
-(* convert exit / return to return-from *)
-let rec unify_returns = function
-  | [Symbol "return"; value] ->
-      make_return "nil" value
-  | [Symbol "exit"; value] ->
-      make_return "seq" value
   | _ -> raise NoMatch
 
 (* s-expr rewrite engine *)
@@ -218,7 +213,6 @@ let rules = [
   detect_loops;
   lett_to_setq;
   cond_to_if;
-  unify_returns;
   prog_to_let;
   dot_to_cons;
   ]
