@@ -52,11 +52,10 @@
 let digit = ['0'-'9']
 let space = [' ' '\t']
 let alpha = ['a'-'z' 'A'-'Z']
-let graph = ['_' '-' '.' '&' ':' '*' '$' '%' '}' '{' ']' '[' '!' '^' '?' '@' '~']
+let graph = ['_' '+' '-' '.' '&' ':' '*' '$' '%' '{' '}' '[' ']' '!' '^' '?'
+             '@' '~' '/' '>' '<' '=']
 let symbol = (alpha | graph)
 let id = symbol (symbol | digit)*
-let arith = ("+" | "-" | "*" | "/")
-let cmp = ("=" | "<" | "<=" | ">" | ">=")
 
 let integer = digit+
 let real = digit+ '.' digit*
@@ -73,7 +72,7 @@ rule token = parse
   | ')' { RPAREN }
   | real as num { FNUM (float_of_string num) }
   | integer as num { INUM (int_of_string num) }
-  | (cmp | arith | id) as name { SYMBOL (String.lowercase name) }
+  | id as name { SYMBOL (String.uppercase name) }
   | eof	{ EOF }
   | _ as c { unknown_char lexbuf c; token lexbuf }
 
