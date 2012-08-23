@@ -42,6 +42,7 @@ type tree =
   | Float of float
   | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
+  | Global of string
   | Int of int
   | Jump of string
   | Label of string
@@ -98,6 +99,7 @@ and convert_bin_op op = function
 and convert_spec_form = function
   | "BLOCK" -> convert_block
   | "CHAR" -> convert_char
+  | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
   | "IF" -> convert_if
   | "LABEL" -> convert_label
@@ -129,6 +131,11 @@ and convert_lambda = function
   | e -> error "Malformed lambda s-form" e
 
 and convert_loop body = Loop (convert_progn body)
+
+and convert_defvar = function
+  | [Sexpr.Symbol name] ->
+      Global name
+  | e -> error "Malformed defvar s-form" e
 
 and convert_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
@@ -192,6 +199,8 @@ let rec print = function
       print_int n
   | Jump name ->
       printf "jump %s" name
+  | Global name ->
+      printf "global %s" name
   | Lambda (args, body) ->
       let args = (string_of_symbol_list args) in
       printf "@[<v>fn (%s) -> @," args; print_fun_body body; printf "@] "

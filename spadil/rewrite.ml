@@ -2,10 +2,11 @@ open Ast;;
 
 exception NoMatch;;
 
-let is_compound exp =
-  match exp with
-  | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ -> false
-  | _ -> true
+let is_compound = function
+  | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ | Global _ ->
+      false
+  | _ ->
+      true
 
 (* generate new symbols on demand *)
 let counter = ref 0;;
