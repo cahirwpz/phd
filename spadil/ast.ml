@@ -184,7 +184,7 @@ let rec print = function
   | Char c -> 
       printf "'%c'" c
   | Cons (a, Cons _) as lst ->
-      print_char '['; print_cons lst; print_char ']'
+      printf "@[<1>["; print_cons lst; printf "]@]"
   | Cons (a, b) ->
       print_char '{'; print a; printf "; "; print b; print_char '}'
   | Float n ->
