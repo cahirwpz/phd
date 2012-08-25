@@ -146,6 +146,8 @@ let rec prog_to_let = function
 
 (* skip it until it's really handled *)
 let skip_declare = function
+  | Symbol "DEFUN"::name::vars::(Group (Symbol "DECLARE"::_))::body ->
+      Group (Symbol "DEFUN"::name::vars::body)
   | Symbol "PROG"::vars::(Group (Symbol "DECLARE"::_))::body ->
       Group (Symbol "PROG"::vars::body)
   | _ -> raise NoMatch
