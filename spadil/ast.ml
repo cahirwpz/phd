@@ -16,13 +16,11 @@ let is_simple_symbol s =
   let contains = String.contains s in
   not (List.exists contains graph)
 
-let string_of_symbol name = 
-  if is_simple_symbol name
-  then name
-  else sprintf "|%s|" name
-
-let string_of_symbol_list symbols =
-  String.concat ", " (List.map string_of_symbol symbols)
+let literal_symbol s =
+  let l = (String.length s) - 1 in
+  if s.[l] = s.[0] && s.[0] = '|'
+  then String.sub s 1 (l - 1)
+  else s
 
 let translate_op op =
   match op with
@@ -174,11 +172,11 @@ let rec print = function
   | Apply (func, args) ->
       print func; print_char '('; print_list ", " args; print_char ')'
   | Assign (name, Lambda (args, body)) ->
-      let name = (string_of_symbol name)
-      and args = (string_of_symbol_list args) in
-      printf "@[<v>def %s(%s)@," name args; print_fun_body body; printf "@]"
+      printf "@[<v>def "; print_symbol name;
+      printf "(@[<hov>"; print_symbols args; printf "@])@,";
+      print_fun_body body; printf "@]"
   | Assign (name, value) ->
-      printf "%s := " (string_of_symbol name); print value
+      print_symbol name; printf " := "; print value
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
   | Char c -> 
@@ -205,8 +203,8 @@ let rec print = function
   | Global name ->
       printf "global %s" name
   | Lambda (args, body) ->
-      let args = (string_of_symbol_list args) in
-      printf "@[<v>fn (%s) -> @," args; print_fun_body body; printf "@] "
+      printf "@[<v>fn (@[<hov>"; print_symbols args; printf "@]) -> @,";
+      print_fun_body body; printf "@] "
   | Label name ->
       printf "label %s:" name
   | Loop (Block (vars, exps)) ->
@@ -218,7 +216,7 @@ let rec print = function
   | String str ->
       printf "\"%s\"" (String.escaped str)
   | Symbol name ->
-      print_string (string_of_symbol name)
+      print_symbol name
 
 and print_list sep trees =
   match trees with
@@ -241,9 +239,22 @@ and print_fun_body body =
   | _ ->
       printf "@[<v 2>begin@,"; print body; printf "@]@,end"
 
+and print_symbol name = 
+  let name = literal_symbol name in
+  if is_simple_symbol name
+  then print_string name
+  else printf "|%s|" name
+
+and print_symbols = function
+  | x::[] -> print_symbol x 
+  | x::xs -> print_symbol x; printf ",@ "; print_symbols xs
+  | [] -> ()
+
 and print_block vars exps =
   if not (StringSet.is_empty vars) then
-    printf "var %s@," (string_of_symbol_list (StringSet.elements vars));
+    begin
+      printf "var @["; print_symbols (StringSet.elements vars); printf "@]@,"
+    end;
   print_block' exps
 
 and print_block' exps =

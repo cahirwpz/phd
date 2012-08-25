@@ -59,7 +59,7 @@ and print_rec = function
   | Int n -> print_int n
   | Quote e -> print_char '\''; print_rec e
   | String s -> printf "\"%s\"" s
-  | Symbol s -> printf "|%s|" s
+  | Symbol s -> print_string s
   | TreeDecl (n, expr) -> printf "#%d=" n; print_rec expr
   | TreeRef n -> printf "#%d#" n
 
@@ -152,15 +152,6 @@ let skip_declare = function
       Group (Symbol "PROG"::vars::body)
   | _ -> raise NoMatch
 
-(* Rewrite dots as cons *)
-let rec dot_to_cons lst =
-  Group (dot_to_cons_rec lst)
-and dot_to_cons_rec = function
-  | x::Symbol "."::y::rest ->
-      (make_cons x y)::(dot_to_cons_rec rest)
-  | x::xs -> x::(dot_to_cons_rec xs)
-  | [] -> []
-
 (* Rewrite lett as let *)
 let lett_to_setq = function
   | Symbol "LETT"::Symbol var::value::_ ->
@@ -190,6 +181,22 @@ let rec detect_loops = function
       end
   | _ -> raise NoMatch
 
+(*
+ * '(a . b) => (cons 'a 'b)
+ * '(a b c ...) => (list 'a 'b 'c) 
+ *)
+let rec unquote = function
+  | Quote (Group [a; Symbol "."; b]) ->
+      Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
+  | Quote (Group lst) ->
+      let unquoted = List.map (fun a -> Quote a) lst in
+      Group (Symbol "LIST"::(List.map unquote unquoted))
+  | Quote x ->
+      unquote x
+  | Group lst ->
+      Group (List.map unquote lst)
+  | x -> x
+
 (* s-expr rewrite engine *)
 let rec rewrite func = function
   | Group lst ->
@@ -214,7 +221,6 @@ let rules = [
   cond_to_if;
   skip_declare;
   prog_to_let;
-  dot_to_cons;
   ]
 
-let simplify expr = rewrite_n rules (reduce expr)
+let simplify expr = rewrite_n rules (unquote (reduce expr))

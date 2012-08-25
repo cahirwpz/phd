@@ -82,7 +82,7 @@ and string = parse
   | _ as c { buffer_add_char c; string lexbuf }
 
 and bar = parse
-  | '|' { buffer_output () }
+  | '|' { sprintf "|%s|" (buffer_output ()) }
   | "\\" (_ as c) { buffer_add_char (unescape c); bar lexbuf }
   | _ as c { buffer_add_char c; bar lexbuf }
 
