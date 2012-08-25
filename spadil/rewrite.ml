@@ -156,9 +156,21 @@ let rec rewrite_return = function
       in Block (vars, xs @ [rewrite_return (Return x)])
   | x -> x
 
+(*
+ * 1) p or return(x) => if not(p) then return(x)
+ * 2) p and return(x) => if p then return(x)
+ *)
+let rec rewrite_logic_abbrev = function
+  | Apply (Symbol "OR", [x; Return y]) ->
+      IfThen (Apply (Symbol "NOT", [x]), Return y)
+  | Apply (Symbol "AND", [x; Return y]) ->
+      IfThen (x, Return y)
+  | _ -> raise NoMatch
+
 let rules = [
   reduce_lambda;
   rewrite_return;
+  rewrite_logic_abbrev;
   extract_compound_args;
   rewrite_assign;
   flatten_block;
