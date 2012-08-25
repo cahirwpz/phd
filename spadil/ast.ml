@@ -99,7 +99,7 @@ and convert_bin_op op = function
 
 and convert_spec_form = function
   | "BLOCK" -> convert_block
-  | "CHAR" -> convert_char
+  | "char" -> convert_char
   | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
   | "IF" -> convert_if
