@@ -10,6 +10,10 @@ type sexpr =
   | TreeDecl of int * sexpr
   | TreeRef of int
 
+let is_compound = function
+  | Group _ | Quote _ -> true
+  | _ -> false
+
 let rec split n lst =
   split_rec n lst []
 and split_rec n lst acc =
@@ -78,17 +82,24 @@ let rec reduce_tree_subst = function
   | _ as expr -> expr
 
 (*
+ * (a . (b c)) => (a b c)
  * '(a . b) => (cons 'a 'b)
  * '(a b c ...) => (list 'a 'b 'c) 
  *)
 let rec unquote = function
-  | Quote (Group [a; Symbol "."; b]) ->
-      Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
   | Quote (Group lst) ->
       let unquoted = List.map (fun a -> Quote a) lst in
       Group (Symbol "LIST"::(List.map unquote unquoted))
-  | Quote x ->
-      unquote x
+  | Quote ((Int x) as value) ->
+      value
+  | Quote ((Float x) as value) ->
+      value
+  | Quote ((String n) as value) ->
+      value
+  | Group [a; Symbol "."; b] when not (is_compound a || is_compound b) ->
+      Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
+  | Group [a; Symbol "."; Group b] ->
+      Group ((unquote a)::(List.map unquote b))
   | Group lst ->
       Group (List.map unquote lst)
   | x -> x

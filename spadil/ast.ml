@@ -10,7 +10,7 @@ let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
-  '~'; '('; ')']
+  '~'; '('; ')'; '?'; '='; '<'; '>'; '#']
 
 let is_simple_symbol s =
   let contains = String.contains s in

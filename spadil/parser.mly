@@ -23,13 +23,13 @@ sexpr:
     FNUM { Sexpr.Float $1 }
   | INUM { Sexpr.Int $1 }
   | STRING { Sexpr.String $1 }
+  | QUOTE VECTOR sexpr_list RPAREN { Sexpr.Group ((Sexpr.Symbol "vector") :: $3) }
   | QUOTE sexpr { Sexpr.Quote $2 }
   | SYMBOL { Sexpr.Symbol $1 }
   | LABEL { Sexpr.Symbol ("#:" ^ $1) }
   | FUNCTION { Sexpr.Group [Sexpr.Symbol "function"; Sexpr.Symbol $1] }
   | TREE_REF { Sexpr.TreeRef $1 }
   | TREE_DECL sexpr { Sexpr.TreeDecl ($1, $2) }
-  | VECTOR sexpr_list RPAREN { Sexpr.Group ((Sexpr.Symbol "vector") :: $2) }
   | LPAREN sexpr_list RPAREN { Sexpr.Group $2 }
 ;;
 
