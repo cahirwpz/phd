@@ -63,17 +63,37 @@ and print_rec = function
   | TreeDecl (n, expr) -> printf "#%d=" n; print_rec expr
   | TreeRef n -> printf "#%d#" n
 
+(* Perform rewrites normally done by LISP reader. *)
+
 let slots = Array.create 20 (Group [])
 
-let rec reduce = function
-  | Group g -> Group (List.map reduce g)
-  | Quote q -> Quote (reduce q)
+(* Handle subtree substitutions *)
+let rec reduce_tree_subst = function
+  | Group g -> Group (List.map reduce_tree_subst g)
+  | Quote q -> Quote (reduce_tree_subst q)
   | TreeDecl (n, expr) ->
-      let reduced = reduce expr
+      let reduced = reduce_tree_subst expr
       in slots.(n) <- reduced; reduced
   | TreeRef n -> slots.(n)
   | _ as expr -> expr
 
+(*
+ * '(a . b) => (cons 'a 'b)
+ * '(a b c ...) => (list 'a 'b 'c) 
+ *)
+let rec unquote = function
+  | Quote (Group [a; Symbol "."; b]) ->
+      Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
+  | Quote (Group lst) ->
+      let unquoted = List.map (fun a -> Quote a) lst in
+      Group (Symbol "LIST"::(List.map unquote unquoted))
+  | Quote x ->
+      unquote x
+  | Group lst ->
+      Group (List.map unquote lst)
+  | x -> x
+
+(* Rewrite rule tools *)
 let rec split_by elem lst =
   split_by' elem [] lst
 and split_by' elem left = function
@@ -181,22 +201,6 @@ let rec detect_loops = function
       end
   | _ -> raise NoMatch
 
-(*
- * '(a . b) => (cons 'a 'b)
- * '(a b c ...) => (list 'a 'b 'c) 
- *)
-let rec unquote = function
-  | Quote (Group [a; Symbol "."; b]) ->
-      Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
-  | Quote (Group lst) ->
-      let unquoted = List.map (fun a -> Quote a) lst in
-      Group (Symbol "LIST"::(List.map unquote unquoted))
-  | Quote x ->
-      unquote x
-  | Group lst ->
-      Group (List.map unquote lst)
-  | x -> x
-
 (* s-expr rewrite engine *)
 let rec rewrite func = function
   | Group lst ->
@@ -223,4 +227,9 @@ let rules = [
   prog_to_let;
   ]
 
-let simplify expr = rewrite_n rules (unquote (reduce expr))
+let reader_pass exp =
+  unquote (reduce_tree_subst exp)
+
+let simplify exp =
+  let exp' = reader_pass exp
+  in rewrite_n rules exp'
