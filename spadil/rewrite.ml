@@ -122,9 +122,11 @@ and collect_exps = function
   | [] -> []
 
 (* Reduce one-time lambda invocations *)
-let rec reduce_lambda = function
-  | Apply (Lambda ([], body), []) ->
-      body
+let rec reduce_lambda exp =
+  match exp with
+  | Apply (Lambda (vs, body), args) when List.length vs = List.length args ->
+      let assigns = List.map2 (fun n v -> Assign (n, v)) vs args in
+      Block (makeStringSet vs, assigns @ [body])
   | _ -> raise NoMatch
 
 (* push assign deeper into the structure *)
