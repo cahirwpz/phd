@@ -144,12 +144,12 @@ let rec substitute oldTerm newTerm lst =
 exception NoMatch;;
 
 (* generate new symbols on demand *)
-let symbol = ref 0;;
+let symbol = ref 1;;
 
 let make_var () =
   let n = !symbol in
   symbol := !symbol + 1;
-  sprintf "@@%d" n
+  sprintf "|@@%d|" n
  
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
