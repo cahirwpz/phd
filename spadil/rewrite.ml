@@ -25,6 +25,7 @@ let rec rewrite rule e =
   | Assign (name, exp) -> Assign (name, r exp)
   | Block (vars, exps) -> Block (vars, rn exps)
   | Cons (fst, snd) -> Cons (r fst, r snd)
+  | IfThen (pred, t) -> IfThen (r pred, r t)
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
   | Lambda (args, exp) -> Lambda (args, r exp)
   | Loop exp -> Loop (r exp)
@@ -65,6 +66,8 @@ let rec extract_compound_args exp =
 and extract_compound_args' = function
   | Apply (fn, args) ->
       Apply (rewrite_compound fn, List.map rewrite_compound args)
+  | IfThen (pred, t) ->
+      IfThen (rewrite_compound pred, t)
   | IfThenElse (pred, t, f) ->
       IfThenElse (rewrite_compound pred, t, f)
   | Assign (name, Apply (fn, args)) ->
@@ -79,7 +82,11 @@ and extract_compound_args' = function
 
 and rewrite_compound exp =
   match exp with
-  | Apply (_, _) | IfThenElse (_, _, _) | Lambda (_, _) | Return _ ->
+  | Apply (_, _)
+  | IfThen (_, _)
+  | IfThenElse (_, _, _)
+  | Lambda (_, _)
+  | Return _ ->
       let n_exp = extract_compound_args' exp
       and t = make_var () in
       variables := t::!variables;

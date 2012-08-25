@@ -41,6 +41,7 @@ type tree =
   | Char of char
   | Cons of tree * tree
   | Float of float
+  | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
   | Global of string
   | Int of int
@@ -162,6 +163,8 @@ and convert_progn body =
   Block (StringSet.empty, List.map convert body)
 
 and convert_if = function
+  | pred::if_true::[] ->
+      IfThen (convert pred, convert if_true)
   | pred::if_true::if_false::[] ->
       IfThenElse (convert pred, convert if_true, convert if_false)
   | e -> error "Malformed if s-form" e
@@ -186,6 +189,10 @@ let rec print = function
       print_char '{'; print a; printf "; "; print b; print_char '}'
   | Float n ->
       print_float n
+  | IfThen (pred, if_true) ->
+      printf "@[<v>";
+      printf "@[<v 2>if*@,"; print pred; printf "@]@,";
+      printf "@[<v 2>then@,"; print if_true; printf "@]@,endif@]"
   | IfThenElse (pred, if_true, if_false) ->
       printf "@[<v>";
       printf "@[<v 2>if@,"; print pred; printf "@]@,";
