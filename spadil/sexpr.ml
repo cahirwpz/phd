@@ -155,11 +155,18 @@ let make_var () =
 let rec cond_to_if = function
   | [Symbol "COND"; Group (Quote (Symbol "T")::body)] ->
       make_progn body 
-  | [Symbol "COND"; Group (pred::body)] ->
-      make_if pred (make_progn body)
-  | Symbol "COND"::(Group (pred::body))::rest ->
-      make_if_else pred (make_progn body) (cond_to_if (Symbol "COND"::rest))
+  | [Symbol "COND"; Group (pred::_) as body] ->
+      make_if pred (cond_clause body)
+  | Symbol "COND"::(Group (pred::_) as body)::rest ->
+      make_if_else pred (cond_clause body) (cond_to_if (Symbol "COND"::rest))
   | _ -> raise NoMatch
+
+and cond_clause = function
+  | Group [pred] ->
+      pred
+  | Group (pred::body) ->
+      make_progn body
+  | _ -> failwith "Malformed cond clause."
 
 (* Rewrite prog / prog1 / prog2 to let *)
 let rec prog_to_let = function
