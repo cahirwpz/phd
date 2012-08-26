@@ -14,33 +14,39 @@ let is_compound = function
   | Group _ | Quote _ -> true
   | _ -> false
 
-let rec split n lst =
-  split_rec n lst []
-and split_rec n lst acc =
-  if n > 0
-  then split_rec (n - 1) (List.tl lst) (List.hd lst::acc)
-  else (List.rev acc, lst)
+let rec print = function
+  | Float n -> print_float n
+  | Group l -> printf "@[<v 1>("; print_group l; printf ")@]"
+  | Int n -> print_int n
+  | Quote e -> print_char '\''; print e
+  | String s -> printf "\"%s\"" s
+  | Symbol s -> print_string s
+  | TreeDecl (n, expr) -> printf "#%d=" n; print expr
+  | TreeRef n -> printf "#%d#" n
 
-let rec print e =
-  print_rec e;
-  printf "@."
 and print_list_sep sep = function
   | head::(_::_ as tail) ->
-      print_rec head;
+      print head;
       printf sep; 
       print_list_sep sep tail
   | head::_ ->
-      print_rec head;
+      print head;
   | [] -> ()
-and print_list lst = print_list_sep " " lst
+
+and print_list lst =
+  print_list_sep " " lst
+
 and print_form_sep n sep lst =
-  let (fst, snd) = split n lst in
+  let (fst, snd) = Utils.split n lst in
   printf "@[<v>";
   print_list fst;
   printf "@,";
   print_list_sep sep snd;
   printf "@]"
-and print_form n lst = print_form_sep n " " lst
+
+and print_form n lst =
+  print_form_sep n " " lst
+
 and print_group = function
   | Symbol "DEFUN"::_ as g -> print_form 3 g
   | Symbol "LAMBDA"::_
@@ -57,15 +63,6 @@ and print_group = function
   | Symbol "UNWIND-PROTECT"::_
   | Symbol "COND"::_ as g -> print_form_sep 1 "@," g
   | _ as e -> print_list e
-and print_rec = function
-  | Float n -> print_float n
-  | Group l -> printf "@[<v 1>("; print_group l; printf ")@]"
-  | Int n -> print_int n
-  | Quote e -> print_char '\''; print_rec e
-  | String s -> printf "\"%s\"" s
-  | Symbol s -> print_string s
-  | TreeDecl (n, expr) -> printf "#%d=" n; print_rec expr
-  | TreeRef n -> printf "#%d#" n
 
 (* Perform rewrites normally done by LISP reader. *)
 
