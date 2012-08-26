@@ -1,4 +1,6 @@
-open Format;;
+open Format
+open List
+open Utils
 
 type sexpr =
   | Float of float
@@ -24,35 +26,23 @@ let rec print = function
   | TreeDecl (n, expr) -> printf "#%d=" n; print expr
   | TreeRef n -> printf "#%d#" n
 
-and print_list_sep sep = function
-  | head::(_::_ as tail) ->
-      print head;
-      printf sep; 
-      print_list_sep sep tail
-  | head::_ ->
-      print head;
-  | [] -> ()
-
-and print_list lst =
-  print_list_sep " " lst
+and print_list_sep sep lst =
+  iter_join print (fun () -> printf sep) lst
 
 and print_form_sep n sep lst =
-  let (fst, snd) = Utils.split n lst in
-  printf "@[<v>";
-  print_list fst;
+  let (fst, snd) = split_at n lst in
+  printf "@[<hov>";
+  print_list_sep " " fst;
   printf "@,";
   print_list_sep sep snd;
   printf "@]"
 
-and print_form n lst =
-  print_form_sep n " " lst
-
 and print_group = function
-  | Symbol "DEFUN"::_ as g -> print_form 3 g
+  | Symbol "DEFUN"::_ as g -> print_form_sep 3 "@ " g
   | Symbol "LAMBDA"::_
   | Symbol "LET"::_
   | Symbol "BLOCK"::_
-  | Symbol "PROG"::_ as g -> print_form 2 g
+  | Symbol "PROG"::_ as g -> print_form_sep 2 "@ " g
   | Symbol "LOOP"::_
   | Symbol "PROGN"::_
   | Symbol "RETURN"::_
@@ -62,7 +52,7 @@ and print_group = function
   | Symbol "SEQ"::_
   | Symbol "UNWIND-PROTECT"::_
   | Symbol "COND"::_ as g -> print_form_sep 1 "@," g
-  | _ as e -> print_list e
+  | _ as e -> print_list_sep " " e
 
 (* Perform rewrites normally done by LISP reader. *)
 
@@ -70,7 +60,7 @@ let slots = Array.create 20 (Group [])
 
 (* Handle subtree substitutions *)
 let rec reduce_tree_subst = function
-  | Group g -> Group (List.map reduce_tree_subst g)
+  | Group g -> Group (map reduce_tree_subst g)
   | Quote q -> Quote (reduce_tree_subst q)
   | TreeDecl (n, expr) ->
       let reduced = reduce_tree_subst expr
@@ -85,8 +75,8 @@ let rec reduce_tree_subst = function
  *)
 let rec unquote = function
   | Quote (Group lst) ->
-      let unquoted = List.map (fun a -> Quote a) lst in
-      Group (Symbol "LIST"::(List.map unquote unquoted))
+      let unquoted = map (fun a -> Quote a) lst in
+      Group (Symbol "LIST"::(map unquote unquoted))
   | Quote ((Int x) as value) ->
       value
   | Quote ((Float x) as value) ->
@@ -96,19 +86,12 @@ let rec unquote = function
   | Group [a; Symbol "."; b] when not (is_compound a || is_compound b) ->
       Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
   | Group [a; Symbol "."; Group b] ->
-      Group ((unquote a)::(List.map unquote b))
+      Group ((unquote a)::(map unquote b))
   | Group lst ->
-      Group (List.map unquote lst)
+      Group (map unquote lst)
   | x -> x
 
 (* Rewrite rule tools *)
-let rec split_by elem lst =
-  split_by' elem [] lst
-and split_by' elem left = function
-  | x::xs when x = elem -> (List.rev left, xs)
-  | x::xs -> split_by' elem (x::left) xs
-  | [] -> (List.rev left, [])
-
 let make_progn body =
   Group (Symbol "PROGN"::body)
 let make_if pred if_true = 
@@ -126,10 +109,10 @@ let make_cons left right =
 let make_loop body =
   Group ((Symbol "LOOP")::body)
 
-(* Find recursively all occurences of old term and replace them with new term *)
+(* Find recursively all occurences of old term and replace them with new term. *)
 let rec substitute oldTerm newTerm lst =
-  let recurse = substitute oldTerm newTerm
-  in match lst with
+  let recurse = substitute oldTerm newTerm in
+  match lst with
   | term::rest when term = oldTerm ->
       newTerm::(recurse rest)
   | (Group lst)::rest ->
@@ -179,7 +162,7 @@ let rec prog_to_let = function
       in make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
   | _ -> raise NoMatch
 
-(* skip it until it's really handled *)
+(* Skip (DECLARE (SPECIAL (...))) until it's really handled. *)
 let skip_declare = function
   | Symbol "DEFUN"::name::vars::(Group (Symbol "DECLARE"::_))::body ->
       Group (Symbol "DEFUN"::name::vars::body)
@@ -209,9 +192,9 @@ and seq_to_block' = function
 let rec detect_loops = function
   | Symbol "BLOCK"::(Symbol label)::body ->
       begin
-        match (Utils.last body) with
+        match (last body) with
         | Group [Symbol "GO"; Symbol dst] when dst = label ->
-            make_block label [make_loop (Utils.but_last body)]
+            make_block label [make_loop (but_last body)]
         | _ -> raise NoMatch
       end
   | _ -> raise NoMatch
@@ -224,7 +207,7 @@ let rec rewrite func = function
   | e -> e
 and rewrite_rec func = function
   | Group lst ->
-      Group (List.map (rewrite func) lst)
+      Group (map (rewrite func) lst)
   | e -> e
 
 let rec rewrite_n fs exp =

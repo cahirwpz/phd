@@ -1,13 +1,10 @@
 open Ast
+open List
 open Utils
 
-exception NoMatch
+module VarSet = StringSet
 
-let is_compound = function
-  | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ | Global _ ->
-      false
-  | _ ->
-      true
+exception NoMatch
 
 (* generate new symbols on demand *)
 let counter = ref 0;;
@@ -19,7 +16,7 @@ let make_var () =
 
 (* ast rewrite engine *)
 let rec rewrite rule e =
-  let r = apply rule and rn = apply_to_list rule in
+  let r = apply rule and rn = map (apply rule) in
   match e with
   | Apply (fn, exps) -> Apply (r fn, rn exps)
   | Assign (name, exp) -> Assign (name, r exp)
@@ -31,11 +28,10 @@ let rec rewrite rule e =
   | Loop exp -> Loop (r exp)
   | Return exp -> Return (r exp)
   | e -> e
+
 and apply rule exp =
   let exp = (try (rule exp) with NoMatch -> exp)
   in rewrite rule exp
-and apply_to_list rule exps =
-  List.map (apply rule) exps
 
 let rec rewrite_n ruleset exp =
   match ruleset with
@@ -58,20 +54,20 @@ let get_variables () =
 let rec extract_compound_args exp =
   let n_exp = extract_compound_args' exp in
   let vars = get_variables ()
-  and body = List.rev (n_exp::(get_assignments ())) in
-  if List.length body > 1
+  and body = rev (n_exp::(get_assignments ())) in
+  if length body > 1
   then Block (makeStringSet vars, body)
   else exp
 
 and extract_compound_args' = function
   | Apply (fn, args) ->
-      Apply (rewrite_compound fn, List.map rewrite_compound args)
+      Apply (rewrite_compound fn, map rewrite_compound args)
   | IfThen (pred, t) ->
       IfThen (rewrite_compound pred, t)
   | IfThenElse (pred, t, f) ->
       IfThenElse (rewrite_compound pred, t, f)
   | Assign (name, Apply (fn, args)) ->
-      let value = Apply (rewrite_compound fn, List.map rewrite_compound args)
+      let value = Apply (rewrite_compound fn, map rewrite_compound args)
       in Assign (name, value)
   | Assign (name, IfThenElse (pred, t, f)) ->
       let value = IfThenElse (rewrite_compound pred, t, f)
@@ -105,23 +101,23 @@ and rewrite_compound exp =
 (* Reduce a block that contains only one expression*)
 let reduce_block = function
   | Block (vars1, [Block (vars2, exps)]) ->
-      Block (StringSet.union vars1 vars2, exps)
-  | Block (vars, [exp]) when StringSet.is_empty vars ->
+      Block (VarSet.union vars1 vars2, exps)
+  | Block (vars, [exp]) when VarSet.is_empty vars ->
       exp
   | _ -> raise NoMatch
 
 (* Flatten structure of a block *)
 let rec flatten_block = function
   | Block (vars, body) ->
-      let body = List.map flatten_block body in
-      let vars = StringSet.union vars (collect_vars body) in
+      let body = map flatten_block body in
+      let vars = VarSet.union vars (collect_vars body) in
       Block (vars, collect_exps body)
   | x -> x
 
 and collect_vars = function
-  | (Block (vs, _))::xs -> StringSet.union vs (collect_vars xs)
+  | (Block (vs, _))::xs -> VarSet.union vs (collect_vars xs)
   | x::xs -> collect_vars xs
-  | [] -> StringSet.empty
+  | [] -> VarSet.empty
       
 and collect_exps = function
   | (Block (_, x))::xs -> x @ (collect_exps xs)
@@ -131,8 +127,8 @@ and collect_exps = function
 (* Reduce one-time lambda invocations *)
 let rec reduce_lambda exp =
   match exp with
-  | Apply (Lambda (vs, body), args) when List.length vs = List.length args ->
-      let assigns = List.map2 (fun n v -> Assign (n, v)) vs args in
+  | Apply (Lambda (vs, body), args) when length vs = length args ->
+      let assigns = map2 (fun n v -> Assign (n, v)) vs args in
       Block (makeStringSet vs, assigns @ [body])
   | _ -> raise NoMatch
 
@@ -142,11 +138,11 @@ let rec rewrite_assign = function
       let t = rewrite_assign (Assign (var, t))
       and f = rewrite_assign (Assign (var, f))
       in IfThenElse (pred, t, f)
-  | Assign (var, Block (vars, exps)) when not (StringSet.mem var vars) ->
+  | Assign (var, Block (vars, exps)) when not (VarSet.mem var vars) ->
       let (xs, x) = split_at_last exps
       in Block (vars, xs @ [rewrite_assign (Assign (var, x))])
   | Assign (var1, Assign (var2, exp)) ->
-      Block (StringSet.empty, [Assign (var2, exp); Assign (var1, Symbol var2)])
+      Block (VarSet.empty, [Assign (var2, exp); Assign (var1, Symbol var2)])
   | x -> x
 
 (* push return deeper into the structure *)

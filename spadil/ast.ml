@@ -1,36 +1,6 @@
 open Format
+open List
 open Utils
-
-exception SyntaxError of string * Sexpr.sexpr;;
-exception UnknownForm of string;;
-
-let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
-
-let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
-
-let graph = [
-  '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
-  '~'; '('; ')'; '?'; '='; '<'; '>'; '#']
-
-let is_simple_symbol s =
-  let contains = String.contains s in
-  not (List.exists contains graph)
-
-let literal_symbol s =
-  let l = (String.length s) - 1 in
-  if s.[l] = s.[0] && s.[0] = '|'
-  then String.sub s 1 (l - 1)
-  else s
-
-let translate_op op =
-  match op with
-  | "+" -> "ADD"
-  | "-" -> "SUB"
-  | "*" -> "MUL"
-  | "/" -> "DIV"
-  | "<" -> "LT"
-  | ">" -> "GT"
-  | _ as x -> x
 
 type tree =
   | Apply of tree * tree list
@@ -51,12 +21,43 @@ type tree =
   | String of string
   | Symbol of string
 
+let is_compound = function
+  | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ | Global _ ->
+      false
+  | _ ->
+      true
+
 (* conversion from S-Expressions *)
 
-let rec convert_symbol_list = function
-  | (Sexpr.Symbol symbol)::symbols -> symbol::(convert_symbol_list symbols)
-  | [] -> []
-  | e -> error "Expected a list of symbols" e
+exception SyntaxError of string * Sexpr.sexpr;;
+exception UnknownForm of string;;
+
+let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
+
+let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
+
+let graph = [
+  '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
+  '~'; '('; ')'; '?'; '='; '<'; '>'; '#']
+
+let is_simple_symbol s =
+  let contains = String.contains s in
+  not (exists contains graph)
+
+let literal_symbol s =
+  let l = (String.length s) - 1 in
+  if s.[l] = s.[0] && s.[0] = '|'
+  then String.sub s 1 (l - 1)
+  else s
+
+let translate_op = function
+  | "+" -> "ADD"
+  | "-" -> "SUB"
+  | "*" -> "MUL"
+  | "/" -> "DIV"
+  | "<" -> "LT"
+  | ">" -> "GT"
+  | _ as x -> x
 
 let rec convert exp =
   try
@@ -67,7 +68,7 @@ let rec convert exp =
       | Sexpr.Int n -> Int n
       | Sexpr.Quote (Sexpr.Group g) ->
           let reduce = fun a b -> Cons (convert a, b) 
-          in List.fold_right reduce g (Symbol "nil")
+          in fold_right reduce g (Symbol "nil")
       | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
       | Sexpr.String s -> String s
       | Sexpr.Symbol s -> Symbol s
@@ -78,21 +79,21 @@ let rec convert exp =
     Symbol "*invalid*"
 
 and convert_group = function
-  | (Sexpr.Symbol op)::body when List.mem op binOps && List.length body > 1 ->
+  | (Sexpr.Symbol op)::body when mem op binOps && length body > 1 ->
       convert_bin_op (translate_op op) body
   | (Sexpr.Symbol name)::body -> (
       try
         convert_spec_form name body
       with UnknownForm _ ->
-        Apply (Symbol name , List.map convert body))
+        Apply (Symbol name , map convert body))
   | (Sexpr.Group func)::body ->
-      Apply (convert_group func, List.map convert body)
+      Apply (convert_group func, map convert body)
   | e -> error "Malformed group" e
 
 and convert_bin_op op = function
   | head::tail ->
       let reduce = fun a b -> Apply (Symbol op, [a; convert b])
-      in List.fold_left reduce (convert head) tail
+      in fold_left reduce (convert head) tail
   | e -> error "BinOp requires at least 2 args" e
 
 and convert_spec_form = function
@@ -112,7 +113,7 @@ and convert_spec_form = function
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
-      Block (StringSet.empty, List.map convert rest)
+      Block (StringSet.empty, map convert rest)
   | e -> error "Malformed block s-form" e
 
 and convert_label = function
@@ -144,7 +145,7 @@ and convert_fun_decl = function
 and convert_let = function
   | (Sexpr.Group symbols)::body ->
       let symbols = convert_symbol_list symbols in
-      Block (makeStringSet symbols, List.map convert body)
+      Block (makeStringSet symbols, map convert body)
   | e -> error "Malformed let s-form" e
 
 and convert_return = function
@@ -158,7 +159,7 @@ and convert_setq = function
   | e -> error "Malformed setq s-form" e
 
 and convert_progn body =
-  Block (StringSet.empty, List.map convert body)
+  Block (StringSet.empty, map convert body)
 
 and convert_if = function
   | pred::if_true::[] ->
@@ -167,10 +168,17 @@ and convert_if = function
       IfThenElse (convert pred, convert if_true, convert if_false)
   | e -> error "Malformed if s-form" e
 
+and convert_symbol_list = function
+  | (Sexpr.Symbol symbol)::symbols -> symbol::(convert_symbol_list symbols)
+  | [] -> []
+  | e -> error "Expected a list of symbols" e
+
 (* stringification *)
 let rec print = function
   | Apply (func, args) ->
-      print func; print_char '('; print_list ", " args; print_char ')'
+      print func; print_char '(';
+      iter_join print (fun () -> printf ", ") args;
+      print_char ')'
   | Assign (name, Lambda (args, body)) ->
       printf "@[<v>def "; print_symbol name;
       printf "(@[<hov>"; print_symbols args; printf "@])@,";
@@ -218,13 +226,6 @@ let rec print = function
   | Symbol name ->
       print_symbol name
 
-and print_list sep trees =
-  match trees with
-  | tree::[] -> print tree
-  | tree::rest ->
-      print tree; print_string sep; print_list sep rest
-  | [] -> ()
-
 and print_cons = function
   | Cons (a, (Cons (_, _) as rest)) ->
       print a; printf ";@ "; print_cons rest
@@ -232,12 +233,16 @@ and print_cons = function
       print a
   | _ -> failwith "Not a list."
 
-and print_fun_body body =
-  match body with
-  | Block (_, _) ->
+and print_fun_body = function
+  | Block (_, _) as body ->
       print body
-  | _ ->
+  | _ as body ->
       printf "@[<v 2>begin@,"; print body; printf "@]@,end"
+
+and print_block vars exps =
+  if not (StringSet.is_empty vars) then
+    (printf "var @["; print_symbols (StringSet.elements vars); printf "@]@,");
+  iter_join (fun t -> print t) (fun () -> printf "@,") exps
 
 and print_symbol name = 
   let name = literal_symbol name in
@@ -245,20 +250,5 @@ and print_symbol name =
   then print_string name
   else printf "|%s|" name
 
-and print_symbols = function
-  | x::[] -> print_symbol x 
-  | x::xs -> print_symbol x; printf ",@ "; print_symbols xs
-  | [] -> ()
-
-and print_block vars exps =
-  if not (StringSet.is_empty vars) then
-    begin
-      printf "var @["; print_symbols (StringSet.elements vars); printf "@]@,"
-    end;
-  print_block' exps
-
-and print_block' exps =
-  match exps with
-  | [] -> ()
-  | tree::[] -> print tree
-  | tree::rest -> print tree; printf "@,"; print_block' rest
+and print_symbols lst =
+  iter_join (fun s -> print_symbol s) (fun () -> printf ",@ ") lst
