@@ -7,5 +7,5 @@ class strbuf =
     method puts s = 
       Buffer.add_string buffer s
     method gets =
-      Scanf.unescaped (Buffer.contents buffer)
+      Buffer.contents buffer
   end

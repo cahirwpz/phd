@@ -19,7 +19,7 @@
 let digit = ['0'-'9']
 let space = [' ' '\t']
 let alpha = ['a'-'z' 'A'-'Z']
-let graph = ['!' '?' '\'']
+let graph = ['!' '?' '\'' '&' '_']
 let symbol = alpha (alpha | digit | graph)*
 let comment = [^ '\n']+
 
@@ -50,10 +50,11 @@ rule token = parse
   | '^' { Pow }
   | '#' { Length }
   | '%' { Self }
+  | '|' { Bar }
   | '\'' { Quote }
 
   (* Unambiguous two character tokens: '\/' *)
-  | '\\' '/' { Or }
+  | '\\' ('_')? '/' { Or }
 
   (* Ambiguous tokens that begin with colon character - ':', ':=', '::'. *)
   | ":=" { Assign }
@@ -80,7 +81,7 @@ rule token = parse
   | '.' { Dot }
 
   (* Ambiguous tokens that begin with slash character - '/', '/\'. *)
-  | '/' '\\' { And }
+  | '/' ('_')? '\\' { And }
   | '/' { By }
 
   (* Ambiguous tokens that begin with less-than character - '<', '<='. *)
@@ -139,13 +140,15 @@ rule token = parse
   (* Delimeters. *)
   | '\n' { new_line lexbuf; Eol }
   | eof { Eof }
+
   | _ as c { failwith (unknown_char lexbuf c) }
 
 and lex_comment buf = parse
   | [^'\n']+ as str { Comment str }
-  | '\n' { Eol }
+  | '\n' { new_line lexbuf; Eol }
 
 and lex_string buf = parse
   | '"' { String buf#gets }
-  | '\\' (_ as c) { buf#putc '\\'; buf#putc c; lex_string buf lexbuf }
-  | _ as c { buf#putc c; lex_string buf lexbuf }
+  | '_' (_ as c) { buf#putc c; lex_string buf lexbuf }
+  | _ as c {
+    if c = '\n' then new_line lexbuf; buf#putc c; lex_string buf lexbuf }

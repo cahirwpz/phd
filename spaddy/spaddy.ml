@@ -4,7 +4,7 @@ let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
   with Failure s ->
-    Printf.printf "%s\n" s; []
+    Printf.printf "%s\n" s; exit 0
 
 and tokenize' lexbuf tokens =
   match Lexer.token lexbuf with

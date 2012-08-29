@@ -40,12 +40,12 @@ rule token = parse
   | _ as c { unknown_char lexbuf c; token lexbuf }
 
 and string buf = parse
-  | '"' { STRING buf#gets }
+  | '"' { STRING (Scanf.unescaped buf#gets) }
   | '\\' (_ as c) { buf#putc '\\'; buf#putc c; string buf lexbuf }
   | _ as c { buf#putc c; string buf lexbuf }
 
 and bar buf = parse
-  | '|' as c { buf#putc c; buf#gets }
+  | '|' as c { buf#putc c; Scanf.unescaped buf#gets }
   | "\\" (_ as c) { buf#putc '\\'; buf#putc c; bar buf lexbuf }
   | _ as c { buf#putc c; bar buf lexbuf }
 

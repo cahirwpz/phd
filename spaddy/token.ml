@@ -72,6 +72,9 @@ type token =
   (* Type substitution. *)
   | Self
 
+  (* If in list comprehensions. *)
+  | Bar
+
   (* -=[ keywords ]=-------------------------------------------------------- *)
 
   (*
@@ -137,6 +140,7 @@ let as_string = function
   | Length -> "#"
   | Quote -> "'"
   | Self -> "%"
+  | Bar -> "|"
   | Add -> "add"
   | With -> "with"
   | Import -> "import"
