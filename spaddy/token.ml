@@ -1,6 +1,9 @@
 type token =
-  (* Indentation and formatting. Cl = continue line ('_\n'). *)
-  | Indent of int | Eol | Eof | Cl
+  (* Indentation and formatting. Lc = line continuation ('_\n'). *)
+  | Indent of int | Eol | Lc
+ 
+  (* Comment that begins with '--' or '++'. *)
+  | Comment of string
 
   (* Name that begins with capital letter or is '%'. *)
   | TypeName of string
@@ -9,7 +12,7 @@ type token =
   | Name of string
 
   (* Basic types. *)
-  | Float of float | Int of int | String of string | Char of char
+  | Float of float | Int of int | String of string
 
   (* Expression grouping, etc. *)
   | LParen | RParen
@@ -31,7 +34,7 @@ type token =
   | ToType | UsesType | ReturnsType | Pretend
 
   (* X case T = if X is of T type. *)
-  | IfType 
+  | HasType 
 
   (* Assignment (':='), delayed binding ('==') and macro ('==>') operators. *)
   | Assign | Bind | Macro
@@ -46,7 +49,7 @@ type token =
   | Comma | Semicolon
 
   (* Arithmetic operators '+', '-', '*', '/', '^' *)
-  | Plus | Minus | Mul | Div | Pow
+  | Plus | Minus | Times | By | Pow
 
   (* Extra arithmetic operators 'quo', 'exquo', 'rem' *)
   | Quo | Exquo | Rem
@@ -60,19 +63,22 @@ type token =
   (* Structure accessor '.'. *)
   | Dot
 
+  (* Container length '#'. *)
+  | Length
+
   (* -=[ keywords ]=-------------------------------------------------------- *)
 
   (*
    * Type construction:
-   * 'add', 'with', 'Exports', 'import', 'where', 'Implementation'.
+   * 'add', 'with', 'import', 'where'.
    *)
-  | Add | With | Exports | Import | Where | Implementation
+  | Add | With | Import | Where
 
   (* Control flow: 'if', 'then', 'else', '=>', 'return', 'error'. *)
   | If | Then | Else | When | Return | Error
 
   (* Control flow - loops: 'for', 'in', 'by', 'repeat', 'break', 'iterate'. *)
-  | For | In | Repeat | By | Break | Continue
+  | For | In | Repeat | Step | Break | Continue
 
   (* Type handling related: 'has'. *)
   | Has
