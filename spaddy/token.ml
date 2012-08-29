@@ -1,6 +1,6 @@
 type token =
   (* Indentation and formatting. Lc = line continuation ('_\n'). *)
-  | Indent of int | Eol | Lc
+  | Indent of int | Eol | Eof | Lc
  
   (* Comment that begins with '--' or '++'. *)
   | Comment of string
@@ -93,7 +93,7 @@ let as_string = function
   | Indent n -> String.make n ' '
   | Eol -> "\n"
   | Lc -> "_\n"
-  | Comment _ -> ""
+  | Eof | Comment _ -> ""
   | Name name | TypeName name -> name
   | Float f -> string_of_float f
   | Int i -> string_of_int i
@@ -156,4 +156,4 @@ let as_string = function
   | Has -> "has"
 
 let print tokens =
-  Stream.iter (fun token -> print_string (as_string token)) tokens
+  List.iter (fun token -> print_string (as_string token)) tokens
