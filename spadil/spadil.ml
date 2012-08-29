@@ -1,10 +1,6 @@
 open Lexing
 open Format
-
-let open_lexbuf input fname =
-  let lexbuf = Lexing.from_channel input in
-  lexbuf.lex_curr_p <- {lexbuf.lex_curr_p with pos_fname = fname};
-  lexbuf
+open Lextools
 
 let print lisp =
   printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@.";
@@ -26,9 +22,9 @@ let main () =
      let filename = Sys.argv.(i) in
      let file = open_in filename in
      printf "**** %s ****@." filename;
-     parse (open_lexbuf file filename);
+     parse (open_named_lexbuf file filename);
      close_in file
    done
-  else parse (open_lexbuf stdin "<stdin>")
+  else parse (open_named_lexbuf stdin "<stdin>")
 
 let _ = Printexc.print main ()
