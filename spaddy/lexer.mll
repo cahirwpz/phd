@@ -1,8 +1,9 @@
 {
+  open Lexing
+  open Lextools
+  open Strbuf
   open Token
   open Tokpos
-  open Strbuf
-  open Lextools
 
   let count_spaces spaces =
     let l = ref 0 in
@@ -30,7 +31,7 @@ rule token = parse
   | space+ as spaces { Indent (count_spaces spaces) }
 
   (* Escaping delimeter. *)
-  | '_' '\n' { incr_line_num lexbuf; Lc }
+  | '_' '\n' { new_line lexbuf; Lc }
   | '_' { token lexbuf }
   
   (* Strings (the contents is being unescaped). *)
@@ -136,7 +137,7 @@ rule token = parse
   }
 
   (* Delimeters. *)
-  | '\n' { incr_line_num lexbuf; Eol }
+  | '\n' { new_line lexbuf; Eol }
   | eof { Eof }
   | _ as c { failwith (unknown_char lexbuf c) }
 
