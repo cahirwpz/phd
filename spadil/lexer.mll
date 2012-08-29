@@ -1,28 +1,27 @@
 {
-  open Printf
   open Parser
   open Lexing
 
   (* token position *)
-  let get_lnum buf = buf.lex_curr_p.pos_lnum
-  let get_cnum buf = buf.lex_curr_p.pos_cnum
+  class tokpos filename line column =
+    object (self)
+      val filename : string = filename
+      val line : int = line
+      val column : int = column
+      method as_string =
+        Printf.sprintf "%s:%d:%d" filename line column
+    end
 
-  type tokpos = { p_fname : string; p_line : int; p_col : int }
-
-  let get_tokpos lexbuf =
+  let tokpos_from_lexbuf lexbuf =
     let p = lexeme_start_p lexbuf in
     let f_name = p.pos_fname
     and l_num = p.pos_lnum 
-    and c_num = p.pos_cnum - p.pos_bol in
-    {p_fname = f_name; p_line = l_num; p_col = c_num}
-
-  let string_of_tokpos p =
-    let file = p.p_fname and line = p.p_line and column = p.p_col in
-    sprintf "%s:%d:%d" file line column
+    and c_num = p.pos_cnum - p.pos_bol
+    in new tokpos f_name l_num c_num
 
   let unknown_char lexbuf c = 
-    let s = string_of_tokpos (get_tokpos lexbuf) in
-    printf "%s Unrecognized character '%c'\n" s c
+    let s = (tokpos_from_lexbuf lexbuf)#as_string in
+    Printf.printf "%s Unrecognized character '%c'\n" s c
 
   (* String buffer class - a simple wrapper for stdlib's Buffer. *)
   class strbuf =
