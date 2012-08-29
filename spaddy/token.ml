@@ -66,6 +66,12 @@ type token =
   (* Container length '#'. *)
   | Length
 
+  (* Quote ? *)
+  | Quote
+
+  (* Type substitution. *)
+  | Self
+
   (* -=[ keywords ]=-------------------------------------------------------- *)
 
   (*
@@ -82,3 +88,72 @@ type token =
 
   (* Type handling related: 'has'. *)
   | Has
+
+let as_string = function
+  | Indent n -> String.make n ' '
+  | Eol -> "\n"
+  | Lc -> "_\n"
+  | Comment _ -> ""
+  | Name name | TypeName name -> name
+  | Float f -> string_of_float f
+  | Int i -> string_of_int i
+  | String str -> "\"" ^ str ^ "\""
+  | LParen -> "("
+  | RParen -> ")"
+  | LBracket -> "["
+  | RBracket -> "]"
+  | OfType -> ":"
+  | Arrow -> "->"
+  | ToType -> "::"
+  | UsesType -> "$"
+  | ReturnsType -> "@"
+  | Pretend -> "pretend"
+  | HasType -> "case"
+  | Assign -> ":="
+  | Bind -> "=="
+  | Macro -> "==>"
+  | Lambda -> "+->"
+  | Ellipsis -> ".."
+  | Comma -> ","
+  | Semicolon -> ";"
+  | Plus -> "+"
+  | Minus -> "-"
+  | Times -> "*"
+  | By -> "/"
+  | Pow -> "^"
+  | Quo -> "quo"
+  | Exquo -> "exquo"
+  | Rem -> "rem"
+  | Lt -> "<"
+  | Le -> "<="
+  | Eq -> "="
+  | Ne -> "~="
+  | Ge -> ">=" 
+  | Gt -> ">"
+  | And -> "and"
+  | Or -> "or"
+  | Not -> "not"
+  | Dot -> "."
+  | Length -> "#"
+  | Quote -> "'"
+  | Self -> "%"
+  | Add -> "add"
+  | With -> "with"
+  | Import -> "import"
+  | Where -> "where"
+  | If -> "if"
+  | Then -> "then"
+  | Else -> "else"
+  | When -> "=>"
+  | Return -> "return"
+  | Error -> "error"
+  | For -> "for"
+  | In -> "in"
+  | Repeat -> "repeat"
+  | Step -> "by"
+  | Break -> "break"
+  | Continue -> "iterate"
+  | Has -> "has"
+
+let print tokens =
+  Stream.iter (fun token -> print_string (as_string token)) tokens

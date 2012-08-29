@@ -7,6 +7,7 @@ let rec lex = parser
   | [< ' ('\t'); stream >] ->
       lex_indent 8 stream
   | [< ' ('\n'); stream=lex >] ->
+      Printf.printf "%d\n" (Stream.count stream);
       [< 'Eol; stream >]
 
   (* Escaping delimeter. *)
@@ -41,6 +42,8 @@ let rec lex = parser
   | [< ' (';'); stream=lex >] -> [< 'Semicolon; stream >]
   | [< ' ('^'); stream=lex >] -> [< 'Pow; stream >]
   | [< ' ('#'); stream=lex >] -> [< 'Length; stream >]
+  | [< ' ('%'); stream=lex >] -> [< 'Self; stream >]
+  | [< ' ('\''); stream=lex >] -> [< 'Quote; stream >]
 
   (* Unambiguous two character tokens: '\/' *)
   | [< ' ('\\'); ' ('/'); stream=lex >] -> [< 'Or; stream >]
@@ -73,8 +76,8 @@ let rec lex = parser
   (* Ambiguous tokens that begin with plus character - '+', '++', '+->'. *)
   | [< ' ('+'); stream >] ->
       begin parser
-        | [< ' ('+'); stream=lex >] ->
-            [< stream >]
+        | [< ' ('+'); stream >] ->
+            lex_comment (Buffer.create 1) stream
         | [< ' ('-'); ' ('>'); stream=lex >] ->
             [< 'Lambda; stream >]
         | [< stream=lex >] ->
@@ -86,8 +89,8 @@ let rec lex = parser
       begin parser
         | [< ' ('>'); stream=lex >] ->
             [< 'Arrow; stream >]
-        | [< ' ('-'); stream=lex >] ->
-            [< stream >]
+        | [< ' ('-'); stream >] ->
+            lex_comment (Buffer.create 1) stream
         | [< stream=lex >] ->
             [< 'Minus; stream >]
       end stream
@@ -146,6 +149,13 @@ let rec lex = parser
   (* end of stream. *)
   | [< >] -> [< >]
 
+and lex_comment buffer = parser
+  | [< ' ('\n'); stream=lex >] ->
+      [< 'Comment (Buffer.contents buffer); 'Eol; stream >]
+  | [< 'c; stream >] ->
+      Buffer.add_char buffer c;
+      lex_comment buffer stream
+
 and lex_indent spaces = parser
   | [< ' (' '); stream >] ->
       lex_indent (spaces + 1) stream
@@ -162,9 +172,12 @@ and lex_string buffer = parser
   | [< ' ('"'); stream=lex >] ->
       let s = Buffer.contents buffer in
       [< 'String (Scanf.unescaped s); stream >]
+  | [< 'c; stream >] ->
+      Buffer.add_char buffer c;
+      lex_string buffer stream
 
 and lex_id buffer = parser
-  | [< ' ('A'..'Z' | 'a'..'z' | '0'..'9' as c); stream >] ->
+  | [< ' ('A'..'Z' | 'a'..'z' | '0'..'9' | '?' | '!' as c); stream >] ->
       Buffer.add_char buffer c;
       lex_id buffer stream
   | [< stream=lex >] ->
