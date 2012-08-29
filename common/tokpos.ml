@@ -7,7 +7,7 @@ class tokpos filename line column =
     val line : int = line
     val column : int = column
     method as_string =
-      Printf.sprintf "%s:%d:%d" filename line column
+      Printf.sprintf "%s:%d:%d" filename line (column + 1)
   end
 
 let tokpos_from_lexbuf lexbuf =

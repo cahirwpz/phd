@@ -31,6 +31,7 @@ rule token = parse
 
   (* Escaping delimeter. *)
   | '_' '\n' { incr_line_num lexbuf; Lc }
+  | '_' { token lexbuf }
   
   (* Strings (the contents is being unescaped). *)
   | '"' { lex_string (new strbuf) lexbuf }
