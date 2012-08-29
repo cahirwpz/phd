@@ -24,26 +24,17 @@
     let s = string_of_tokpos (get_tokpos lexbuf) in
     printf "%s Unrecognized character '%c'\n" s c
 
-  (* buffer for collecting symbol and string characters *)
-  let buffer = Buffer.create 256
+  (* Routines for easy Buffer access. *)
+  let new_buf () =
+    Buffer.create 1
 
-  let buffer_output () =
-    let contents = Buffer.contents buffer in
-    Buffer.clear buffer;
-    contents
-  
-  let buffer_add_string s =
-    Buffer.add_string buffer s
+  let new_buf_with_char c =
+    let buf = Buffer.create 1 
+    in Buffer.add_char buf c; buf
 
-  let buffer_add_char s =
-    Buffer.add_char buffer s
-
-  (* unescaping sequences *)
-  let unescape c =
-    match c with
-    | 'n' -> '\n'
-    | 't' -> '\t'
-    | _ as c -> c
+  let gets buf = Scanf.unescaped (Buffer.contents buf)
+  let putc = Buffer.add_char
+  let puts = Buffer.add_string
 
   (* convert digit character to number *)
   let int_of_digit d = int_of_char d - int_of_char '0'
@@ -63,8 +54,8 @@ let real = digit+ '.' digit*
 rule token = parse
   | space+ { token lexbuf }
   | '#' { reader lexbuf }
-  | '|' { SYMBOL (bar lexbuf) }
-  | '"' { string lexbuf }
+  | '|' as c { SYMBOL (bar (new_buf_with_char c) lexbuf) }
+  | '"' { string (new_buf ()) lexbuf }
   | "'" { QUOTE }
   | '\n' { new_line lexbuf; token lexbuf }
   | ';' [^'\n']* { token lexbuf }
@@ -76,21 +67,21 @@ rule token = parse
   | eof	{ EOF }
   | _ as c { unknown_char lexbuf c; token lexbuf }
 
-and string = parse
-  | '"' { STRING (buffer_output ()) }
-  | "\\" (_ as c) { buffer_add_char (unescape c); string lexbuf }
-  | _ as c { buffer_add_char c; string lexbuf }
+and string buf = parse
+  | '"' { STRING (gets buf) }
+  | '\\' (_ as c) { putc buf '\\'; putc buf c; string buf lexbuf }
+  | _ as c { putc buf c; string buf lexbuf }
 
-and bar = parse
-  | '|' { sprintf "|%s|" (buffer_output ()) }
-  | "\\" (_ as c) { buffer_add_char (unescape c); bar lexbuf }
-  | _ as c { buffer_add_char c; bar lexbuf }
+and bar buf = parse
+  | '|' as c { putc buf c; gets buf }
+  | "\\" (_ as c) { putc buf '\\'; putc buf c; bar buf lexbuf }
+  | _ as c { putc buf c; bar buf lexbuf }
 
 and reader = parse
   | (integer as num) '=' { TREE_DECL (int_of_string num) }
   | (integer as num) '#' { TREE_REF (int_of_string num) }
   | ':' (id as name) { LABEL name }
   | '(' { VECTOR }
-  | "'" '|' { FUNCTION (bar lexbuf) }
+  | "'" '|' { FUNCTION (bar (new_buf_with_char '|') lexbuf) }
   | "'" (id as name) { FUNCTION name }
   | _ as c { unknown_char lexbuf c; token lexbuf }
