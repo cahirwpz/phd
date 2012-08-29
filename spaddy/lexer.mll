@@ -49,7 +49,7 @@ rule token = parse
   | ';' { Semicolon }
   | '^' { Pow }
   | '#' { Length }
-  | '%' { Self }
+  | '%' { TypeName "%" }
   | '|' { Bar }
   | '\'' { Quote }
 

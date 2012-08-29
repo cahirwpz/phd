@@ -69,9 +69,6 @@ type token =
   (* Quote ? *)
   | Quote
 
-  (* Type substitution. *)
-  | Self
-
   (* If in list comprehensions. *)
   | Bar
 
@@ -139,7 +136,6 @@ let as_string = function
   | Dot -> "."
   | Length -> "#"
   | Quote -> "'"
-  | Self -> "%"
   | Bar -> "|"
   | Add -> "add"
   | With -> "with"
