@@ -3,8 +3,8 @@ open Lextools
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with Failure s ->
-    Printf.printf "%s\n" s; exit 0
+  with Lexer.Failure (pos, msg) ->
+    Printf.printf "%s %s\n" pos#as_string msg; exit 0
 
 and tokenize' lexbuf tokens =
   match Lexer.token lexbuf with

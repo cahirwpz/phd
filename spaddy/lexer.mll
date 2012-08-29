@@ -11,9 +11,7 @@
       l := !l + (if c = '\t' then 8 else 1)
     in String.iter counter spaces; !l
 
-  let unknown_char lexbuf c = 
-    let s = (tokpos_from_lexbuf lexbuf)#as_string in
-    Printf.sprintf "%s: Unrecognized character '%c'" s c
+  exception Failure of tokpos * string
 }
 
 let digit = ['0'-'9']
@@ -141,7 +139,9 @@ rule token = parse
   | '\n' { new_line lexbuf; Eol }
   | eof { Eof }
 
-  | _ as c { failwith (unknown_char lexbuf c) }
+  | _ as c { let pos = tokpos_from_lexbuf lexbuf
+             and msg = Printf.sprintf "Unrecognized character '%c'" c
+             in raise (Failure (pos, msg)) }
 
 and lex_comment buf = parse
   | [^'\n']+ as str { Comment str }
