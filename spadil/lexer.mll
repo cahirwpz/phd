@@ -24,17 +24,17 @@
     let s = string_of_tokpos (get_tokpos lexbuf) in
     printf "%s Unrecognized character '%c'\n" s c
 
-  (* Routines for easy Buffer access. *)
-  let new_buf () =
-    Buffer.create 1
-
-  let new_buf_with_char c =
-    let buf = Buffer.create 1 
-    in Buffer.add_char buf c; buf
-
-  let gets buf = Scanf.unescaped (Buffer.contents buf)
-  let putc = Buffer.add_char
-  let puts = Buffer.add_string
+  (* String buffer class - a simple wrapper for stdlib's Buffer. *)
+  class strbuf =
+    object (self)
+      val buffer = Buffer.create 1
+      method putc c =
+        Buffer.add_char buffer c
+      method puts s = 
+        Buffer.add_string buffer s
+      method gets =
+        Scanf.unescaped (Buffer.contents buffer)
+    end
 
   (* convert digit character to number *)
   let int_of_digit d = int_of_char d - int_of_char '0'
@@ -54,8 +54,8 @@ let real = digit+ '.' digit*
 rule token = parse
   | space+ { token lexbuf }
   | '#' { reader lexbuf }
-  | '|' as c { SYMBOL (bar (new_buf_with_char c) lexbuf) }
-  | '"' { string (new_buf ()) lexbuf }
+  | '|' { let buf = new strbuf in buf#putc '|'; SYMBOL (bar buf lexbuf) }
+  | '"' { string (new strbuf) lexbuf }
   | "'" { QUOTE }
   | '\n' { new_line lexbuf; token lexbuf }
   | ';' [^'\n']* { token lexbuf }
@@ -68,20 +68,20 @@ rule token = parse
   | _ as c { unknown_char lexbuf c; token lexbuf }
 
 and string buf = parse
-  | '"' { STRING (gets buf) }
-  | '\\' (_ as c) { putc buf '\\'; putc buf c; string buf lexbuf }
-  | _ as c { putc buf c; string buf lexbuf }
+  | '"' { STRING buf#gets }
+  | '\\' (_ as c) { buf#putc '\\'; buf#putc c; string buf lexbuf }
+  | _ as c { buf#putc c; string buf lexbuf }
 
 and bar buf = parse
-  | '|' as c { putc buf c; gets buf }
-  | "\\" (_ as c) { putc buf '\\'; putc buf c; bar buf lexbuf }
-  | _ as c { putc buf c; bar buf lexbuf }
+  | '|' as c { buf#putc c; buf#gets }
+  | "\\" (_ as c) { buf#putc '\\'; buf#putc c; bar buf lexbuf }
+  | _ as c { buf#putc c; bar buf lexbuf }
 
 and reader = parse
   | (integer as num) '=' { TREE_DECL (int_of_string num) }
   | (integer as num) '#' { TREE_REF (int_of_string num) }
   | ':' (id as name) { LABEL name }
   | '(' { VECTOR }
-  | "'" '|' { FUNCTION (bar (new_buf_with_char '|') lexbuf) }
+  | "'" '|'{ let buf = new strbuf in buf#putc '|'; FUNCTION (bar buf lexbuf) }
   | "'" (id as name) { FUNCTION name }
   | _ as c { unknown_char lexbuf c; token lexbuf }
