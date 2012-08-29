@@ -1,42 +1,15 @@
 {
   open Parser
   open Lexing
-
-  (* token position *)
-  class tokpos filename line column =
-    object (self)
-      val filename : string = filename
-      val line : int = line
-      val column : int = column
-      method as_string =
-        Printf.sprintf "%s:%d:%d" filename line column
-    end
-
-  let tokpos_from_lexbuf lexbuf =
-    let p = lexeme_start_p lexbuf in
-    let f_name = p.pos_fname
-    and l_num = p.pos_lnum 
-    and c_num = p.pos_cnum - p.pos_bol
-    in new tokpos f_name l_num c_num
+  open Tokpos
+  open Strbuf
 
   let unknown_char lexbuf c = 
     let s = (tokpos_from_lexbuf lexbuf)#as_string in
     Printf.printf "%s Unrecognized character '%c'\n" s c
 
-  (* String buffer class - a simple wrapper for stdlib's Buffer. *)
-  class strbuf =
-    object (self)
-      val buffer = Buffer.create 1
-      method putc c =
-        Buffer.add_char buffer c
-      method puts s = 
-        Buffer.add_string buffer s
-      method gets =
-        Scanf.unescaped (Buffer.contents buffer)
-    end
-
   (* convert digit character to number *)
-  let int_of_digit d = int_of_char d - int_of_char '0'
+  let int_of_digit d = Char.code d - Char.code '0'
 }
 
 let digit = ['0'-'9']
