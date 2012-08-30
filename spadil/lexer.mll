@@ -1,11 +1,11 @@
 {
   open Parser
   open Lexing
-  open Tokpos
   open Strbuf
+  open Wordpos
 
   let unknown_char lexbuf c = 
-    let s = (tokpos_from_lexbuf lexbuf)#as_string in
+    let s = (wordpos_from_lexbuf lexbuf)#as_string in
     Printf.printf "%s Unrecognized character '%c'\n" s c
 
   (* convert digit character to number *)

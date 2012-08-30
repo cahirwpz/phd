@@ -3,7 +3,7 @@
   open Lextools
   open Strbuf
   open Token
-  open Tokpos
+  open Wordpos
 
   let count_spaces spaces =
     let l = ref 0 in
@@ -11,7 +11,7 @@
       l := !l + (if c = '\t' then 8 else 1)
     in String.iter counter spaces; !l
 
-  exception Failure of tokpos * string
+  exception Failure of wordpos * string
 }
 
 let digit = ['0'-'9']
@@ -139,7 +139,7 @@ rule token = parse
   | '\n' { new_line lexbuf; Eol }
   | eof { Eof }
 
-  | _ as c { let pos = tokpos_from_lexbuf lexbuf
+  | _ as c { let pos = wordpos_from_lexbuf lexbuf
              and msg = Printf.sprintf "Unrecognized character '%c'" c
              in raise (Failure (pos, msg)) }
 
