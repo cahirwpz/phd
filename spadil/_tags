@@ -1,1 +1,3 @@
 <common>: include
+<*.ml>: package(llvm)
+<*.{byte,native}>: package(llvm)

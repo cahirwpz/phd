@@ -1,12 +1,14 @@
+FLAGS = -use-ocamlfind
+
 all: spadil.native
 
 tests = $(wildcard tests/*.lisp)
 
 spadil.native:
-	ocamlbuild $@
+	ocamlbuild $(FLAGS) $@
 
 spadil.byte:
-	ocamlbuild -lflag -g -cflag -g $@
+	ocamlbuild $(FLAGS) -lflag -g -cflag -g $@
 
 test: spadil.native
 	@for test in $(tests); do echo "*** $${test}"; ./$^ $${test}; done

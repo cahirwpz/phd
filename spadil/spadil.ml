@@ -2,6 +2,9 @@ open Lexing
 open Format
 open Lextools
 
+let codegen il =
+  try Codegen.codegen il with Codegen.Error s -> printf "%s\n" s
+
 let print lisp =
   printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@.";
   let lisp_opt = Sexpr.simplify lisp in
@@ -9,7 +12,8 @@ let print lisp =
   let il = Ast.convert lisp_opt in
   printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@.";
   let il_opt = Rewrite.simplify il in
-  printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@."
+  printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@.";
+  printf "@[<v 2>LLVM IR@,@,"; codegen il_opt; printf "@]@.@."
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
