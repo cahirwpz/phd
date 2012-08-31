@@ -123,13 +123,7 @@ let rec substitute oldTerm newTerm lst =
 
 exception NoMatch;;
 
-(* generate new symbols on demand *)
-let symbol = ref 1;;
-
-let make_var () =
-  let n = !symbol in
-  symbol := !symbol + 1;
-  sprintf "|@@%d|" n
+let symgen = new Symbol.gen "|:T%d|"
  
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
@@ -155,20 +149,38 @@ let rec prog_to_let = function
   | Symbol "PROG"::vars::body ->
       make_block "NIL" [make_let vars body]
   | Symbol "PROG1"::value::rest ->
-      let temp = make_var ()
-      in make_let (Group [Symbol temp]) ((make_setq temp value)::rest)
+      let temp = symgen#get in
+      make_let (Group [Symbol temp]) ((make_setq temp value)::rest)
   | Symbol "PROG2"::value1::value2::rest ->
-      let temp = make_var ()
-      in make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
+      let temp = symgen#get in
+      make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
   | _ -> raise NoMatch
 
-(* Skip (DECLARE (SPECIAL (...))) until it's really handled. *)
-let skip_declare = function
-  | Symbol "DEFUN"::name::vars::(Group (Symbol "DECLARE"::_))::body ->
-      Group (Symbol "DEFUN"::name::vars::body)
-  | Symbol "PROG"::vars::(Group (Symbol "DECLARE"::_))::body ->
-      Group (Symbol "PROG"::vars::body)
+(* Handle global variable shadowing (DECLARE (SPECIAL (...))). *)
+let rec globals_shadowing = function
+  | Symbol "DEFUN"::name::(Group vs)::(Group [Symbol "DECLARE"; special])::body ->
+      Group (Symbol "DEFUN"::name::(rewrite_special vs body special))
+  | Symbol "PROG"::(Group vs)::(Group [Symbol "DECLARE"; special])::body ->
+      Group (Symbol "PROG"::(rewrite_special vs body special))
   | _ -> raise NoMatch
+
+and rewrite_special vs body = function
+  | Group (Symbol "SPECIAL"::vs2) ->
+      let to_symbol = fun x -> Symbol x in
+      let vs' = get_symbols [] vs and vs2' = get_symbols [] vs2 in
+      let diffs = map to_symbol (VarSet.elements (VarSet.diff vs' vs2')) in
+      let temps = map (fun _ -> symgen#get) vs2 in
+      let temps' = map to_symbol temps in
+      let saves = map2 make_setq temps vs2
+      and restores = map2 make_setq (VarSet.elements vs2') temps' in
+      [Group (temps' @ diffs); 
+       make_progn saves; make_progn body; make_progn restores]
+  | _ -> failwith "Expected special."
+
+and get_symbols acc = function
+  | [] -> VarSet.from_list acc
+  | (Symbol x)::xs -> get_symbols (x::acc) xs
+  | _ -> failwith "Symbols expected."
 
 (* Rewrite lett as let *)
 let lett_to_setq = function
@@ -231,7 +243,7 @@ let rules = [
   seq_to_block;
   lett_to_setq;
   cond_to_if;
-  skip_declare;
+  globals_shadowing;
   prog_to_let;
   reduce_progn;
   transform_loops;
