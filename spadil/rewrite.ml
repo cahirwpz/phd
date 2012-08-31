@@ -4,13 +4,7 @@ open Utils
 
 exception NoMatch
 
-(* generate new symbols on demand *)
-let counter = ref 0;;
-
-let make_var () =
-  let n = !counter in
-  counter := !counter + 1;
-  "@" ^ (string_of_int n)
+let symgen = new Symbol.gen "@%d"
 
 (* ast rewrite engine *)
 let rec rewrite rule e =
@@ -82,7 +76,7 @@ and rewrite_compound exp =
   | Lambda (_, _)
   | Return _ ->
       let n_exp = extract_compound_args' exp
-      and t = make_var () in
+      and t = symgen#get in
       variables := t::!variables;
       assignments := (Assign (t, n_exp))::!assignments;
       Symbol t
@@ -90,7 +84,7 @@ and rewrite_compound exp =
       assignments := exp::!assignments;
       Symbol x
   | Block (_, _) ->
-      let t = make_var () in
+      let t = symgen#get in
       variables := t::!variables;
       assignments := (Assign (t, exp))::!assignments;
       Symbol t
@@ -174,5 +168,5 @@ let rules = [
 ]
 
 let simplify exp =
-  counter := 0;
+  symgen#reset;
   rewrite_n rules exp
