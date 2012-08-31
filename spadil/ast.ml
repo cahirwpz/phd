@@ -5,13 +5,13 @@ open Utils
 type tree =
   | Apply of tree * tree list
   | Assign of string * tree
-  | Block of StringSet.t * tree list
+  | Block of VarSet.t * tree list
   | Char of char
   | Cons of tree * tree
   | Float of float
   | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
-  | Global of string
+  | Global of string * tree option
   | Int of int
   | Jump of string
   | Label of string
@@ -99,6 +99,7 @@ and convert_bin_op op = function
 and convert_spec_form = function
   | "BLOCK" -> convert_block
   | "char" -> convert_char
+  | "DEFPARAMETER"
   | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
   | "IF" -> convert_if
@@ -113,7 +114,7 @@ and convert_spec_form = function
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
-      Block (StringSet.empty, map convert rest)
+      Block (VarSet.empty, map convert rest)
   | e -> error "Malformed block s-form" e
 
 and convert_label = function
@@ -133,8 +134,10 @@ and convert_lambda = function
 and convert_loop body = Loop (convert_progn body)
 
 and convert_defvar = function
+  | [Sexpr.Symbol name; value] ->
+      Global (name, Some (convert value))
   | [Sexpr.Symbol name] ->
-      Global name
+      Global (name, None)
   | e -> error "Malformed defvar s-form" e
 
 and convert_fun_decl = function
@@ -145,7 +148,7 @@ and convert_fun_decl = function
 and convert_let = function
   | (Sexpr.Group symbols)::body ->
       let symbols = convert_symbol_list symbols in
-      Block (makeStringSet symbols, map convert body)
+      Block (VarSet.from_list symbols, map convert body)
   | e -> error "Malformed let s-form" e
 
 and convert_return = function
@@ -159,7 +162,7 @@ and convert_setq = function
   | e -> error "Malformed setq s-form" e
 
 and convert_progn body =
-  Block (StringSet.empty, map convert body)
+  Block (VarSet.empty, map convert body)
 
 and convert_if = function
   | pred::if_true::[] ->
@@ -208,8 +211,12 @@ let rec print = function
       print_int n
   | Jump name ->
       printf "jump %s" name
-  | Global name ->
-      printf "global %s" name
+  | Global (name, value) ->
+      printf "global %s" name;
+      begin match value with
+      | Some tree -> printf " := "; print tree
+      | None -> ()
+      end
   | Lambda (args, body) ->
       printf "@[<v>fn (@[<hov>"; print_symbols args; printf "@]) -> @,";
       print_fun_body body; printf "@] "
@@ -240,8 +247,8 @@ and print_fun_body = function
       printf "@[<v 2>begin@,"; print body; printf "@]@,end"
 
 and print_block vars exps =
-  if not (StringSet.is_empty vars) then
-    (printf "var @["; print_symbols (StringSet.elements vars); printf "@]@,");
+  if not (VarSet.is_empty vars) then
+    (printf "var @["; print_symbols (VarSet.elements vars); printf "@]@,");
   iter_join (fun t -> print t) (fun () -> printf "@,") exps
 
 and print_symbol name = 

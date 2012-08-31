@@ -1,8 +1,12 @@
 (* Set of strings *)
-module StringSet = Set.Make(String)
 
-let makeStringSet strings =
-  List.fold_right StringSet.add strings StringSet.empty
+module VarSet =
+  struct
+    include Set.Make(String)
+
+    let from_list strings =
+      List.fold_right add strings empty
+  end
 
 (* Iterate over all elements, calling function in between *)
 let rec iter_join fn join_fn = function

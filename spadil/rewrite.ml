@@ -2,8 +2,6 @@ open Ast
 open List
 open Utils
 
-module VarSet = StringSet
-
 exception NoMatch
 
 (* generate new symbols on demand *)
@@ -56,7 +54,7 @@ let rec extract_compound_args exp =
   let vars = get_variables ()
   and body = rev (n_exp::(get_assignments ())) in
   if length body > 1
-  then Block (makeStringSet vars, body)
+  then Block (VarSet.from_list vars, body)
   else exp
 
 and extract_compound_args' = function
@@ -129,7 +127,7 @@ let rec reduce_lambda exp =
   match exp with
   | Apply (Lambda (vs, body), args) when length vs = length args ->
       let assigns = map2 (fun n v -> Assign (n, v)) vs args in
-      Block (makeStringSet vs, assigns @ [body])
+      Block (VarSet.from_list vs, assigns @ [body])
   | _ -> raise NoMatch
 
 (* push assign deeper into the structure *)
