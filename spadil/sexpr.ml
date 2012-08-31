@@ -31,7 +31,7 @@ and print_list_sep sep lst =
 
 and print_form_sep n sep lst =
   let (fst, snd) = split_at n lst in
-  printf "@[<hov>";
+  printf "@[<v>";
   print_list_sep " " fst;
   printf "@,";
   print_list_sep sep snd;
@@ -188,16 +188,27 @@ and seq_to_block' = function
   | x::xs -> x::(seq_to_block' xs)
   | [] -> []
 
-(* Find loops block g190 begin ... end goto g190 *)
-let rec detect_loops = function
-  | Symbol "BLOCK"::(Symbol label)::body ->
-      begin
-        match (last body) with
-        | Group [Symbol "GO"; Symbol dst] when dst = label ->
-            make_block label [make_loop (but_last body)]
-        | _ -> raise NoMatch
-      end
+(* Reduce progn block that contains single item *)
+let reduce_progn = function
+  | [Symbol "PROGN"; expr] ->
+      expr
   | _ -> raise NoMatch
+
+let rec transform_loops = function
+  | Symbol "LOOP"::(Group [Symbol "IF"; p; t; f])::body when is_return_nil t ->
+      Group (Symbol "WHILE"::(transform_while p (f::body)))
+  | _ -> raise NoMatch
+
+and is_return_nil = function
+  | Group [Symbol "RETURN"; Symbol "NIL"] -> true
+  | _ -> false
+
+and transform_while p body =
+  match p with
+  | Group [Symbol "OR"; Group [Symbol "ATOM"; x] as p'; Group snd]
+    when last snd = Symbol "NIL" ->
+      p'::(Group (but_last snd))::body
+  | _ -> p::body
 
 (* s-expr rewrite engine *)
 let rec rewrite func = function
@@ -218,11 +229,12 @@ let rec rewrite_n fs exp =
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
   seq_to_block;
-  detect_loops;
   lett_to_setq;
   cond_to_if;
   skip_declare;
   prog_to_let;
+  reduce_progn;
+  transform_loops;
   ]
 
 let reader_pass exp =

@@ -23,8 +23,8 @@ let rec rewrite rule e =
   | IfThen (pred, t) -> IfThen (r pred, r t)
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
   | Lambda (args, exp) -> Lambda (args, r exp)
-  | Loop exp -> Loop (r exp)
   | Return exp -> Return (r exp)
+  | While (pred, exp) -> While (r pred, r exp)
   | e -> e
 
 and apply rule exp =
@@ -148,6 +148,8 @@ let rec rewrite_return = function
   | Return (Block (vars, exps)) ->
       let (xs, x) = split_at_last exps
       in Block (vars, xs @ [rewrite_return (Return x)])
+  | Return (IfThenElse (p, t, f)) ->
+      IfThenElse (p, rewrite_return (Return t), rewrite_return (Return f))
   | x -> x
 
 (*
@@ -165,7 +167,7 @@ let rules = [
   reduce_lambda;
   rewrite_return;
   rewrite_logic_abbrev;
-  extract_compound_args;
+  (*extract_compound_args;*)
   rewrite_assign;
   flatten_block;
   reduce_block;

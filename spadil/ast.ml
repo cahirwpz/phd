@@ -13,16 +13,14 @@ type tree =
   | IfThenElse of tree * tree * tree
   | Global of string * tree option
   | Int of int
-  | Jump of string
-  | Label of string
   | Lambda of string list * tree
   | Return of tree
-  | Loop of tree
   | String of string
   | Symbol of string
+  | While of tree * tree
 
 let is_compound = function
-  | Char _ | Float _ | Int _ | String _ | Symbol _ | Label _ | Global _ ->
+  | Char _ | Float _ | Int _ | String _ | Symbol _ | Global _ ->
       false
   | _ ->
       true
@@ -103,24 +101,19 @@ and convert_spec_form = function
   | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
   | "IF" -> convert_if
-  | "LABEL" -> convert_label
   | "LAMBDA" -> convert_lambda
   | "LET" -> convert_let
   | "LOOP" -> convert_loop
   | "PROGN" -> convert_progn
   | "RETURN" -> convert_return
   | "SETQ" -> convert_setq
+  | "WHILE" -> convert_while
   | e -> raise (UnknownForm e)
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
       Block (VarSet.empty, map convert rest)
   | e -> error "Malformed block s-form" e
-
-and convert_label = function
-  | [Sexpr.Symbol label] ->
-      Label label
-  | e -> error "Malformed label s-form" e
 
 and convert_char = function
   | [Sexpr.Quote (Sexpr.Symbol c)] -> Char c.[0]
@@ -131,7 +124,8 @@ and convert_lambda = function
       Lambda (convert_symbol_list args, convert_progn body)
   | e -> error "Malformed lambda s-form" e
 
-and convert_loop body = Loop (convert_progn body)
+and convert_loop body =
+  While (Symbol "T", convert_progn body)
 
 and convert_defvar = function
   | [Sexpr.Symbol name; value] ->
@@ -171,6 +165,11 @@ and convert_if = function
       IfThenElse (convert pred, convert if_true, convert if_false)
   | e -> error "Malformed if s-form" e
 
+and convert_while = function
+  | pred::body ->
+      While (convert pred, convert_progn body)
+  | e -> error "Malformed while s-form" e
+
 and convert_symbol_list = function
   | (Sexpr.Symbol symbol)::symbols -> symbol::(convert_symbol_list symbols)
   | [] -> []
@@ -200,17 +199,15 @@ let rec print = function
       print_float n
   | IfThen (pred, if_true) ->
       printf "@[<v>";
-      printf "@[<v 2>if*@,"; print pred; printf "@]@,";
-      printf "@[<v 2>then@,"; print if_true; printf "@]@,endif@]"
+      printf "@[<v 2>if*@,"; print_inline pred; printf "@]@,";
+      printf "@[<v 2>then@,"; print_inline if_true; printf "@]@,endif@]"
   | IfThenElse (pred, if_true, if_false) ->
       printf "@[<v>";
-      printf "@[<v 2>if@,"; print pred; printf "@]@,";
-      printf "@[<v 2>then@,"; print if_true; printf "@]@,";
-      printf "@[<v 2>else@,"; print if_false; printf "@]@,endif@]"
+      printf "@[<v 2>if@,"; print_inline pred; printf "@]@,";
+      printf "@[<v 2>then@,"; print_inline if_true; printf "@]@,";
+      printf "@[<v 2>else@,"; print_inline if_false; printf "@]@,endif@]"
   | Int n ->
       print_int n
-  | Jump name ->
-      printf "jump %s" name
   | Global (name, value) ->
       printf "global %s" name;
       begin match value with
@@ -220,18 +217,19 @@ let rec print = function
   | Lambda (args, body) ->
       printf "@[<v>fn (@[<hov>"; print_symbols args; printf "@]) -> @,";
       print_fun_body body; printf "@] "
-  | Label name ->
-      printf "label %s:" name
-  | Loop (Block (vars, exps)) ->
-      printf "@[<v>@[<v 2>loop@,"; print_block vars exps; printf "@]@,endloop@]"
-  | Loop tree ->
-      printf "@[<v>@[<v 2>loop@,"; print tree; printf "@]@,endloop@]"
   | Return tree ->
       printf "return "; print tree
   | String str ->
       printf "\"%s\"" (String.escaped str)
   | Symbol name ->
       print_symbol name
+  | While (pred, body) ->
+      printf "@[<v>@[<v 2>while@,"; print_inline pred;
+      printf "@]@,@[<v 2>do@,"; print_inline body; printf "@]@,endwhile@]"
+
+and print_inline = function
+  | Block (vs, exps) -> print_block vs exps
+  | x -> print x
 
 and print_cons = function
   | Cons (a, (Cons (_, _) as rest)) ->
