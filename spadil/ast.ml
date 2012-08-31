@@ -4,6 +4,7 @@ open Utils
 
 type tree =
   | Apply of tree * tree list
+  | Call of string * tree list
   | Assign of string * tree
   | Block of VarSet.t * tree list
   | Char of char
@@ -17,10 +18,11 @@ type tree =
   | Return of tree
   | String of string
   | Symbol of string
+  | Value of string
   | While of tree * tree
 
 let is_compound = function
-  | Char _ | Float _ | Int _ | String _ | Symbol _ | Global _ ->
+  | Char _ | Float _ | Int _ | String _ | Symbol _ | Global _ | Value _ ->
       false
   | _ ->
       true
@@ -32,11 +34,12 @@ exception UnknownForm of string;;
 
 let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 
-let binOps = ["+"; "-"; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
+let unOps = ["NOT"]
+let binOps = ["+"; "-"; "="; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
-  '~'; '('; ')'; '?'; '='; '<'; '>'; '#']
+  '~'; '('; ')'; '='; '<'; '>'; '#']
 
 let is_simple_symbol s =
   let contains = String.contains s in
@@ -49,12 +52,10 @@ let literal_symbol s =
   else s
 
 let translate_op = function
-  | "+" -> "ADD"
-  | "-" -> "SUB"
-  | "*" -> "MUL"
-  | "/" -> "DIV"
-  | "<" -> "LT"
-  | ">" -> "GT"
+  | "OR" -> "||"
+  | "AND" -> "&&"
+  | "EQ" | "EQL" | "EQUAL" -> "="
+  | "NOT" -> "!"
   | _ as x -> x
 
 let rec convert exp =
@@ -69,7 +70,7 @@ let rec convert exp =
           in fold_right reduce g (Symbol "nil")
       | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
       | Sexpr.String s -> String s
-      | Sexpr.Symbol s -> Symbol s
+      | Sexpr.Symbol s -> Value s
       | e -> raise (SyntaxError ("Unknown s-expression", e))
     end
   with SyntaxError (s, exp) ->
@@ -78,19 +79,19 @@ let rec convert exp =
 
 and convert_group = function
   | (Sexpr.Symbol op)::body when mem op binOps && length body > 1 ->
-      convert_bin_op (translate_op op) body
+      convert_bin_op op body
   | (Sexpr.Symbol name)::body -> (
       try
         convert_spec_form name body
       with UnknownForm _ ->
-        Apply (Symbol name , map convert body))
+        Call (name, map convert body))
   | (Sexpr.Group func)::body ->
       Apply (convert_group func, map convert body)
   | e -> error "Malformed group" e
 
 and convert_bin_op op = function
   | head::tail ->
-      let reduce = fun a b -> Apply (Symbol op, [a; convert b])
+      let reduce = fun a b -> Call (op, [a; convert b])
       in fold_left reduce (convert head) tail
   | e -> error "BinOp requires at least 2 args" e
 
@@ -189,6 +190,15 @@ let rec print = function
       print_symbol name; printf " := "; print value
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
+  | Call (op, [x]) when mem op unOps ->
+      printf "@[<hov>"; print_string (translate_op op); print x; printf "@]"
+  | Call (op, [x; y]) when mem op binOps ->
+      printf "@[<hov>("; print x; printf "@ %s@ " (translate_op op); print y;
+      printf ")@]"
+  | Call (name, args) ->
+      print_symbol name; print_char '(';
+      iter_join print (fun () -> printf ", ") args;
+      print_char ')'
   | Char c -> 
       printf "'%c'" c
   | Cons (a, Cons _) as lst ->
@@ -222,6 +232,8 @@ let rec print = function
   | String str ->
       printf "\"%s\"" (String.escaped str)
   | Symbol name ->
+      print_char '\''; print_symbol name
+  | Value name ->
       print_symbol name
   | While (pred, body) ->
       printf "@[<v>@[<v 2>while@,"; print_inline pred;

@@ -1,5 +1,4 @@
 (* Set of strings *)
-
 module VarSet =
   struct
     include Set.Make(String)
