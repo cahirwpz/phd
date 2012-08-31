@@ -3,7 +3,7 @@ open Format
 open Lextools
 
 let codegen il =
-  try Codegen.codegen il with Codegen.Error s -> printf "%s\n" s
+  try Llvm.dump_value (Codegen.codegen il) with Codegen.Error s -> printf "%s\n" s
 
 let print lisp =
   printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@.";
