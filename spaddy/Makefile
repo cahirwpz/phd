@@ -8,7 +8,7 @@ spaddy.byte:
 
 clean:
 	ocamlbuild -clean spaddy.{byte,native}
-	rm -f *~
+	@find . -follow -iname '*~' | xargs rm
 
 .PHONY: spaddy.byte spaddy.native test clean
 

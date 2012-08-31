@@ -15,7 +15,7 @@ test: spadil.native
 
 clean:
 	ocamlbuild -clean spadil.{byte,native}
-	rm -f *~
+	@find . -follow -iname '*~' | xargs rm
 
 .PHONY: spadil.byte spadil.native test clean
 
