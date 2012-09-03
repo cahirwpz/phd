@@ -80,11 +80,18 @@ let rec codegen = function
   | Ast.Call ("*", [lhs; rhs]) ->
       build_mul (codegen lhs) (codegen rhs) "multmp" the_builder
   | Ast.Call (name, args) ->
+      let name = Ast.literal_symbol name in
       let args = List.map codegen args in
       build_call (functions#get name) (Array.of_list args) "calltmp" the_builder
   | Ast.Global (name, None) ->
-      declare_global i32_type name the_module
+      let var = declare_global i32_type name the_module in
+      values#add name var; var
+  | Ast.Global (name, Some value) ->
+      let var = define_global name (codegen value) the_module in
+      values#add name var;
+      var;
   | Ast.Assign (name, Ast.Lambda (args, body)) ->
+      let name = Ast.literal_symbol name in
       codegen_function name args body
   | Ast.Assign (name, value) ->
       build_store (codegen value) (values#get name) the_builder
@@ -174,4 +181,3 @@ let init () =
   add_cfg_simplification the_fpm;
 
   ignore (PassManager.initialize the_fpm);
-
