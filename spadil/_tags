@@ -1,2 +1,6 @@
 <common>: include
 <*.*>: package(llvm)
+<*.*>: package(llvm.analysis)
+<*.*>: package(llvm.executionengine)
+<*.*>: package(llvm.scalar_opts)
+<*.*>: package(llvm.target)
