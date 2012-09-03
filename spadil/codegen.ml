@@ -83,6 +83,8 @@ let rec codegen = function
       let name = Ast.literal_symbol name in
       let args = List.map codegen args in
       build_call (functions#get name) (Array.of_list args) "calltmp" the_builder
+  | Ast.IfThenElse (pred, t, f) ->
+      codegen_if_then_else pred t f
   | Ast.Global (name, None) ->
       let var = declare_global i32_type name the_module in
       values#add name var; var
@@ -116,6 +118,59 @@ and create_argument_allocas the_function args =
 
     values#add name alloca;
   ) (params the_function)
+
+and codegen_if_then_else pred t f =
+  let cond = codegen pred in
+
+  (* Convert condition to a bool by comparing equal to 0. *)
+  let zero = const_int i32_type 0 in
+  let cond_val = build_icmp Icmp.Ne cond zero "ifcond" the_builder in
+
+  (* Grab the first block so that we might later add the conditional branch
+   * to it at the end of the function. *)
+  let start_bb = insertion_block the_builder in
+  let the_function = block_parent start_bb in
+  let else_bb = append_block the_context "else" the_function in
+  let then_bb = append_block the_context "then" the_function in
+
+  (* Emit 'then' value. *)
+  position_at_end then_bb the_builder;
+  let then_val = codegen t in
+
+  (* Codegen of 'then' can change the current block, update then_bb for the
+   * phi. We create a new name because one is used for the phi node, and the
+   * other is used for the conditional branch. *)
+  let new_then_bb = insertion_block the_builder in
+
+  (* Emit 'else' value. *)
+  position_at_end else_bb the_builder;
+  let else_val = codegen f in
+
+  (* Codegen of 'else' can change the current block, update else_bb for the
+   * phi. *)
+  let new_else_bb = insertion_block the_builder in
+
+  (* Emit merge block. *)
+  let merge_bb = append_block the_context "ifcont" the_function in
+  position_at_end merge_bb the_builder;
+  let incoming = [(then_val, new_then_bb); (else_val, new_else_bb)] in
+  let phi = build_phi incoming "iftmp" the_builder in
+
+  (* Return to the start block to add the conditional branch. *)
+  position_at_end start_bb the_builder;
+  ignore (build_cond_br cond_val then_bb else_bb the_builder);
+
+  (* Set a unconditional branch at the end of the 'then' block and the
+   * 'else' block to the 'merge' block. *)
+  position_at_end new_then_bb the_builder;
+  ignore (build_br merge_bb the_builder);
+  position_at_end new_else_bb the_builder;
+  ignore (build_br merge_bb the_builder);
+
+  (* Finally, set the builder to the end of the merge block. *)
+  position_at_end merge_bb the_builder;
+
+  phi
 
 and codegen_function name args body =
   let args' = Array.make (List.length args) i32_type in
