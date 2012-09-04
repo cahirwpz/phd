@@ -23,22 +23,31 @@ class structure_map =
       Hashtbl.add map name the_struct
   end
 
-class value_map = 
-  object
-    val map : (string, llvalue) Hashtbl.t = Hashtbl.create 10
-    method get name = Hashtbl.find map name
+class valueStore = 
+  object (self)
+    val map : (string, llvalue Stack.t) Hashtbl.t = Hashtbl.create 10
+    method private get_stack name =
+      try
+        Hashtbl.find map name
+      with Not_found ->
+        let stack = Stack.create () in
+        Hashtbl.add map name stack;
+        stack
     method add name value =
-      begin
-        try
-          Hashtbl.add map name value
-        with Not_found ->
-          failwith (sprintf "Variable '%s' not found." name)
-      end
+      Stack.push value (self#get_stack name)
+    method rem name =
+      let stack = self#get_stack name in
+      ignore (Stack.pop stack)
+    method get name =
+      let stack = self#get_stack name in
+      if Stack.is_empty stack
+      then failwith (sprintf "Cannot find %s var." name);
+      Stack.top stack
   end
 
 let structures = new structure_map
-let values = new value_map
-let functions = new value_map
+let values = new valueStore
+let functions = new valueStore
 
 let double_type = double_type the_context
 let i1_type = i1_type the_context
@@ -109,11 +118,12 @@ and create_argument_allocas the_function args =
   ) (params the_function)
 
 and codegen_block vars exps =
-  List.iter (fun name ->
-    let alloca = build_alloca i32_type name the_builder in
-    values#add name alloca)
-  (vars);
-  Utils.last (List.map codegen exps)
+  let create_local_var name =
+    values#add name (build_alloca i32_type name the_builder) in
+  List.iter create_local_var vars;
+  let last = Utils.last (List.map codegen exps) in
+  List.iter (fun name -> values#rem name) vars;
+  last
 
 and codegen_binary_op op lhs rhs =
   match op with
@@ -130,7 +140,7 @@ and codegen_binary_op op lhs rhs =
 
 and codegen_fun_call name args =
   let args' = Array.map codegen args in
-  build_call (functions#get name) args' "calltmp" the_builder
+  build_call (functions#get name) args' "call_tmp" the_builder
 
 and codegen_predicate pred =
   match type_of pred with
