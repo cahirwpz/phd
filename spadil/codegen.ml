@@ -84,14 +84,14 @@ let create_argument_allocas the_function args =
     values#add name alloca;
   ) (params the_function)
 
-let cast_to_bool pred =
-  match type_of pred with
+let cast_to_bool cond =
+  match type_of cond with
   | t when t = i32_type ->
-      build_icmp Icmp.Ne pred izero "nz_tmp" the_builder
+      build_icmp Icmp.Ne cond izero "nz_tmp" the_builder
   | t when t = double_type ->
-      build_fcmp Fcmp.Une pred fzero "fnz_tmp" the_builder
+      build_fcmp Fcmp.Une cond fzero "fnz_tmp" the_builder
   | t when t = i1_type ->
-      pred
+      cond
   | _ -> failwith "Type not handled."
 
 (* Code generation starts here *)
@@ -116,14 +116,16 @@ let rec codegen = function
       codegen_binary_op op (codegen lhs) (codegen rhs)
   | Ast.Call (name, args) ->
       codegen_fun_call (Ast.literal_symbol name) (Array.of_list args)
-  | Ast.IfThenElse (pred, t, f) ->
-      codegen_if_then_else (codegen pred) t f
+  | Ast.IfThenElse (cond, t, f) ->
+      codegen_if_then_else (codegen cond) t f
   | Ast.Global (name, None) ->
       let var = declare_global i32_type name the_module in
       values#add name var; var
   | Ast.Global (name, Some value) ->
       let var = define_global name (codegen value) the_module in
       values#add name var; var
+  | Ast.While (cond, body) ->
+      codegen_while cond body
   | Ast.Assign (name, Ast.Lambda (args, body)) ->
       codegen_function (Ast.literal_symbol name) (Array.of_list args) body
   | Ast.Assign (name, value) ->
@@ -173,16 +175,16 @@ and codegen_fun_call name args =
   let args' = Array.map codegen args in
   build_call (functions#get name) args' "call_tmp" the_builder
 
-and codegen_if_then_else pred t f =
+and codegen_if_then_else cond t f =
   (* Convert condition to a bool by comparing equal to 0. *)
-  let cond_val = cast_to_bool pred in
+  let cond_val = cast_to_bool cond in
 
   (* Grab the first block so that we might later add the conditional branch
    * to it at the end of the function. *)
   let start_bb = insertion_block the_builder in
   let the_function = block_parent start_bb in
-  let else_bb = append_block the_context "else" the_function in
   let then_bb = append_block the_context "then" the_function in
+  let else_bb = append_block the_context "else" the_function in
 
   (* Emit 'then' value. *)
   position_at_end then_bb the_builder;
@@ -223,6 +225,28 @@ and codegen_if_then_else pred t f =
 
   phi
 
+and codegen_while cond body =
+  let start_bb = insertion_block the_builder in
+  let the_function = block_parent start_bb in
+  let loop_bb = append_block the_context "loop" the_function in
+  let body_bb = append_block the_context "body" the_function in
+  let end_loop_bb = append_block the_context "end_loop" the_function in
+
+  (* Terminate predecessor block with uncoditional jump to loop. *)
+  position_at_end start_bb the_builder;
+  ignore (build_br loop_bb the_builder);
+
+  position_at_end loop_bb the_builder;
+  let cond_val = codegen cond in
+  ignore (build_cond_br cond_val body_bb end_loop_bb the_builder);
+
+  position_at_end body_bb the_builder;
+  ignore (codegen body);
+  ignore (build_br loop_bb the_builder);
+
+  position_at_end end_loop_bb the_builder;
+  izero
+
 and codegen_function name args body =
   let args' = Array.make (Array.length args) i32_type in
   let ft = function_type i32_type args' in
@@ -244,7 +268,7 @@ and codegen_function name args body =
       Llvm_analysis.assert_valid_function the_function;
 
       (* Optimize the function. *)
-      ignore(PassManager.run_function the_function the_fpm);
+      (* ignore(PassManager.run_function the_function the_fpm); *)
 
       functions#add name the_function;
 
