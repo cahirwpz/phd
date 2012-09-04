@@ -65,6 +65,36 @@ let create_entry_block_alloca the_function var_name =
   let builder = builder_at the_context (instr_begin (entry_block the_function)) in
   build_alloca i32_type var_name builder
 
+let create_arguments the_function args =
+  Array.iteri (fun i value ->
+    let name = args.(i) in
+    set_value_name name value;
+    values#add name value 
+  ) (params the_function)
+
+let create_argument_allocas the_function args =
+  Array.iteri (fun i value ->
+    let name = args.(i) in
+    (* Create an alloca for this variable. *)
+    let alloca = create_entry_block_alloca the_function name in
+
+    (* Store the initial value into the alloca. *)
+    ignore(build_store value alloca the_builder);
+
+    values#add name alloca;
+  ) (params the_function)
+
+let cast_to_bool pred =
+  match type_of pred with
+  | t when t = i32_type ->
+      build_icmp Icmp.Ne pred izero "nz_tmp" the_builder
+  | t when t = double_type ->
+      build_fcmp Fcmp.Une pred fzero "fnz_tmp" the_builder
+  | t when t = i1_type ->
+      pred
+  | _ -> failwith "Type not handled."
+
+(* Code generation starts here *)
 let rec codegen = function
   | Ast.Char c ->
       const_int i8_type (Char.code c)
@@ -101,25 +131,6 @@ let rec codegen = function
   | _ ->
       const_int i32_type 0
 
-and create_arguments the_function args =
-  Array.iteri (fun i value ->
-    let name = args.(i) in
-    set_value_name name value;
-    values#add name value 
-  ) (params the_function);
-
-and create_argument_allocas the_function args =
-  Array.iteri (fun i value ->
-    let name = args.(i) in
-    (* Create an alloca for this variable. *)
-    let alloca = create_entry_block_alloca the_function name in
-
-    (* Store the initial value into the alloca. *)
-    ignore(build_store value alloca the_builder);
-
-    values#add name alloca;
-  ) (params the_function)
-
 and codegen_block vars exps =
   let create_local_var name =
     values#add name (build_alloca i32_type name the_builder) in
@@ -146,13 +157,9 @@ and codegen_binary_op op lhs rhs =
   | "/" -> build_sdiv lhs rhs "sdiv_tmp" the_builder
   | "REM" -> build_srem rhs lhs "rem_tmp" the_builder
   | "AND" ->
-      let lhs' = codegen_predicate lhs
-      and rhs' = codegen_predicate rhs in
-      build_and lhs' rhs' "and_tmp" the_builder
+      build_and (cast_to_bool lhs) (cast_to_bool rhs) "and_tmp" the_builder
   | "OR" ->
-      let lhs' = codegen_predicate lhs
-      and rhs' = codegen_predicate rhs in
-      build_or lhs' rhs' "or_tmp" the_builder
+      build_or (cast_to_bool lhs) (cast_to_bool rhs) "or_tmp" the_builder
   | ">" -> build_icmp Icmp.Sgt lhs rhs "gt_tmp" the_builder
   | "<" -> build_icmp Icmp.Slt lhs rhs "lt_tmp" the_builder
   | ">=" -> build_icmp Icmp.Sge lhs rhs "ge_tmp" the_builder
@@ -166,19 +173,9 @@ and codegen_fun_call name args =
   let args' = Array.map codegen args in
   build_call (functions#get name) args' "call_tmp" the_builder
 
-and codegen_predicate pred =
-  match type_of pred with
-  | t when t = i32_type ->
-      build_icmp Icmp.Ne pred izero "nz_tmp" the_builder
-  | t when t = double_type ->
-      build_fcmp Fcmp.Une pred fzero "fnz_tmp" the_builder
-  | t when t = i1_type ->
-      pred
-  | _ -> failwith "Type not handled."
-
 and codegen_if_then_else pred t f =
   (* Convert condition to a bool by comparing equal to 0. *)
-  let cond_val = codegen_predicate pred in
+  let cond_val = cast_to_bool pred in
 
   (* Grab the first block so that we might later add the conditional branch
    * to it at the end of the function. *)
