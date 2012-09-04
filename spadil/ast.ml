@@ -50,9 +50,9 @@ let is_simple_symbol s =
   not (exists contains graph)
 
 let literal_symbol s =
-  let l = (String.length s) - 1 in
-  if l >= 3 && (s.[l] = s.[0] && s.[0] = '|')
-  then String.sub s 1 (l - 1)
+  let l = String.length s in
+  if l > 2 && (s.[l-1] = s.[0] && s.[0] = '|')
+  then String.sub s 1 (l - 2)
   else s
 
 let translate_op = function
