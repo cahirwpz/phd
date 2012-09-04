@@ -34,8 +34,12 @@ exception UnknownForm of string;;
 
 let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 
-let unOps = ["NOT"]
-let binOps = ["+"; "-"; "="; "*"; "/"; "<"; ">"; "OR"; "AND"; "EQUAL"; "EQ"; "EQL"]
+let unary = ["-"; "NOT"]
+let binary = [
+  "+"; "-"; "="; "*"; "/"; "REM"; "QUO"; 
+  "<"; ">"; ">="; "<=";
+  "EQUAL"; "EQ"; "EQL";
+  "OR"; "AND"]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
@@ -47,7 +51,7 @@ let is_simple_symbol s =
 
 let literal_symbol s =
   let l = (String.length s) - 1 in
-  if s.[l] = s.[0] && s.[0] = '|'
+  if l >= 3 && (s.[l] = s.[0] && s.[0] = '|')
   then String.sub s 1 (l - 1)
   else s
 
@@ -56,6 +60,7 @@ let translate_op = function
   | "AND" -> "&&"
   | "EQ" | "EQL" | "EQUAL" -> "="
   | "NOT" -> "!"
+  | "REM" -> "%"
   | _ as x -> x
 
 let rec convert exp =
@@ -78,7 +83,7 @@ let rec convert exp =
     Symbol "*invalid*"
 
 and convert_group = function
-  | (Sexpr.Symbol op)::body when mem op binOps && length body > 1 ->
+  | (Sexpr.Symbol op)::body when mem op binary && length body > 1 ->
       convert_bin_op op body
   | (Sexpr.Symbol name)::body -> (
       try
@@ -190,9 +195,9 @@ let rec print = function
       print_symbol name; printf " := "; print value
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
-  | Call (op, [x]) when mem op unOps ->
+  | Call (op, [x]) when mem op unary ->
       printf "@[<hov>"; print_string (translate_op op); print x; printf "@]"
-  | Call (op, [x; y]) when mem op binOps ->
+  | Call (op, [x; y]) when mem op binary ->
       printf "@[<hov>("; print x; printf "@ %s@ " (translate_op op); print y;
       printf ")@]"
   | Call (name, args) ->

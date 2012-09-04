@@ -56,13 +56,14 @@ let i32_type = i32_type the_context
 let const_stringz = const_stringz the_context
 let struct_type = struct_type the_context
 
+let izero = const_int i32_type 0
+let fzero = const_float double_type 0.0
+
 (* Create an alloca instruction in the entry block of the function. This
  * is used for mutable variables etc. *)
 let create_entry_block_alloca the_function var_name =
   let builder = builder_at the_context (instr_begin (entry_block the_function)) in
   build_alloca i32_type var_name builder
-
-let binary = ["+"; "-"; "*"; ">"; "<"; ">="; "<="; "="; "~="]
 
 let rec codegen = function
   | Ast.Char c ->
@@ -79,7 +80,9 @@ let rec codegen = function
       codegen_block (VarSet.elements vars) exps
   | Ast.Return x ->
       codegen x
-  | Ast.Call (op, [lhs; rhs]) when List.mem op binary ->
+  | Ast.Call (op, [exp]) when List.mem op Ast.unary ->
+      codegen_unary_op op (codegen exp)
+  | Ast.Call (op, [lhs; rhs]) when List.mem op Ast.binary ->
       codegen_binary_op op (codegen lhs) (codegen rhs)
   | Ast.Call (name, args) ->
       codegen_fun_call (Ast.literal_symbol name) (Array.of_list args)
@@ -125,18 +128,39 @@ and codegen_block vars exps =
   List.iter (fun name -> values#rem name) vars;
   last
 
+and codegen_unary_op op exp =
+  match op with
+  | "-" ->
+      build_sub izero exp "neg_tmp" the_builder
+  | "NOT" ->
+      let one = const_int i1_type 1 in
+      build_xor one exp "not_tmp" the_builder
+  | _ ->
+      failwith (sprintf "Unknown operator '%s'." op)
+
 and codegen_binary_op op lhs rhs =
   match op with
   | "+" -> build_add lhs rhs "add_tmp" the_builder
   | "-" -> build_sub lhs rhs "sub_tmp" the_builder
   | "*" -> build_mul lhs rhs "mul_tmp" the_builder
+  | "/" -> build_sdiv lhs rhs "sdiv_tmp" the_builder
+  | "REM" -> build_srem rhs lhs "rem_tmp" the_builder
+  | "AND" ->
+      let lhs' = codegen_predicate lhs
+      and rhs' = codegen_predicate rhs in
+      build_and lhs' rhs' "and_tmp" the_builder
+  | "OR" ->
+      let lhs' = codegen_predicate lhs
+      and rhs' = codegen_predicate rhs in
+      build_or lhs' rhs' "or_tmp" the_builder
   | ">" -> build_icmp Icmp.Sgt lhs rhs "gt_tmp" the_builder
   | "<" -> build_icmp Icmp.Slt lhs rhs "lt_tmp" the_builder
   | ">=" -> build_icmp Icmp.Sge lhs rhs "ge_tmp" the_builder
   | "<=" -> build_icmp Icmp.Sle lhs rhs "le_tmp" the_builder
   | "=" -> build_icmp Icmp.Eq lhs rhs "eq_tmp" the_builder
   | "~=" -> build_icmp Icmp.Ne lhs rhs "ne_tmp" the_builder
-  | _ -> failwith (sprintf "Unknown operator '%s'." op)
+  | _ ->
+      failwith (sprintf "Unknown operator '%s'." op)
 
 and codegen_fun_call name args =
   let args' = Array.map codegen args in
@@ -145,11 +169,9 @@ and codegen_fun_call name args =
 and codegen_predicate pred =
   match type_of pred with
   | t when t = i32_type ->
-      let zero = const_int i32_type 0 in
-      build_icmp Icmp.Ne pred zero "nz_tmp" the_builder
+      build_icmp Icmp.Ne pred izero "nz_tmp" the_builder
   | t when t = double_type ->
-      let zero = const_float double_type 0.0 in
-      build_fcmp Fcmp.Une pred zero "fnz_tmp" the_builder
+      build_fcmp Fcmp.Une pred fzero "fnz_tmp" the_builder
   | t when t = i1_type ->
       pred
   | _ -> failwith "Type not handled."
