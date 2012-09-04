@@ -53,6 +53,8 @@ let create_entry_block_alloca the_function var_name =
   let builder = builder_at the_context (instr_begin (entry_block the_function)) in
   build_alloca i32_type var_name builder
 
+let binary = ["+"; "-"; "*"; ">"; "<"; ">="; "<="; "="; "~="]
+
 let rec codegen = function
   | Ast.Char c ->
       const_int i8_type (Char.code c)
@@ -65,36 +67,23 @@ let rec codegen = function
   | Ast.Value s ->
       build_load (values#get s) s the_builder
   | Ast.Block (vars, exps) ->
-      List.iter (fun name ->
-        let alloca = build_alloca i32_type name the_builder in
-        values#add name alloca)
-      (VarSet.elements vars);
-      let values = List.map codegen exps in
-      Utils.last values
+      codegen_block (VarSet.elements vars) exps
   | Ast.Return x ->
       codegen x
-  | Ast.Call ("+", [lhs; rhs]) ->
-      build_add (codegen lhs) (codegen rhs) "addtmp" the_builder
-  | Ast.Call ("-", [lhs; rhs]) ->
-      build_sub (codegen lhs) (codegen rhs) "subtmp" the_builder
-  | Ast.Call ("*", [lhs; rhs]) ->
-      build_mul (codegen lhs) (codegen rhs) "multmp" the_builder
+  | Ast.Call (op, [lhs; rhs]) when List.mem op binary ->
+      codegen_binary_op op (codegen lhs) (codegen rhs)
   | Ast.Call (name, args) ->
-      let name = Ast.literal_symbol name in
-      let args = List.map codegen args in
-      build_call (functions#get name) (Array.of_list args) "calltmp" the_builder
+      codegen_fun_call (Ast.literal_symbol name) (Array.of_list args)
   | Ast.IfThenElse (pred, t, f) ->
-      codegen_if_then_else pred t f
+      codegen_if_then_else (codegen pred) t f
   | Ast.Global (name, None) ->
       let var = declare_global i32_type name the_module in
       values#add name var; var
   | Ast.Global (name, Some value) ->
       let var = define_global name (codegen value) the_module in
-      values#add name var;
-      var;
+      values#add name var; var
   | Ast.Assign (name, Ast.Lambda (args, body)) ->
-      let name = Ast.literal_symbol name in
-      codegen_function name args body
+      codegen_function (Ast.literal_symbol name) (Array.of_list args) body
   | Ast.Assign (name, value) ->
       build_store (codegen value) (values#get name) the_builder
   | _ ->
@@ -102,14 +91,14 @@ let rec codegen = function
 
 and create_arguments the_function args =
   Array.iteri (fun i value ->
-    let name = List.nth args i in
+    let name = args.(i) in
     set_value_name name value;
     values#add name value 
   ) (params the_function);
 
 and create_argument_allocas the_function args =
   Array.iteri (fun i value ->
-    let name = List.nth args i in
+    let name = args.(i) in
     (* Create an alloca for this variable. *)
     let alloca = create_entry_block_alloca the_function name in
 
@@ -119,12 +108,45 @@ and create_argument_allocas the_function args =
     values#add name alloca;
   ) (params the_function)
 
-and codegen_if_then_else pred t f =
-  let cond = codegen pred in
+and codegen_block vars exps =
+  List.iter (fun name ->
+    let alloca = build_alloca i32_type name the_builder in
+    values#add name alloca)
+  (vars);
+  Utils.last (List.map codegen exps)
 
+and codegen_binary_op op lhs rhs =
+  match op with
+  | "+" -> build_add lhs rhs "add_tmp" the_builder
+  | "-" -> build_sub lhs rhs "sub_tmp" the_builder
+  | "*" -> build_mul lhs rhs "mul_tmp" the_builder
+  | ">" -> build_icmp Icmp.Sgt lhs rhs "gt_tmp" the_builder
+  | "<" -> build_icmp Icmp.Slt lhs rhs "lt_tmp" the_builder
+  | ">=" -> build_icmp Icmp.Sge lhs rhs "ge_tmp" the_builder
+  | "<=" -> build_icmp Icmp.Sle lhs rhs "le_tmp" the_builder
+  | "=" -> build_icmp Icmp.Eq lhs rhs "eq_tmp" the_builder
+  | "~=" -> build_icmp Icmp.Ne lhs rhs "ne_tmp" the_builder
+  | _ -> failwith (sprintf "Unknown operator '%s'." op)
+
+and codegen_fun_call name args =
+  let args' = Array.map codegen args in
+  build_call (functions#get name) args' "calltmp" the_builder
+
+and codegen_predicate pred =
+  match type_of pred with
+  | t when t = i32_type ->
+      let zero = const_int i32_type 0 in
+      build_icmp Icmp.Ne pred zero "nz_tmp" the_builder
+  | t when t = double_type ->
+      let zero = const_float double_type 0.0 in
+      build_fcmp Fcmp.Une pred zero "fnz_tmp" the_builder
+  | t when t = i1_type ->
+      pred
+  | _ -> failwith "Type not handled."
+
+and codegen_if_then_else pred t f =
   (* Convert condition to a bool by comparing equal to 0. *)
-  let zero = const_int i32_type 0 in
-  let cond_val = build_icmp Icmp.Ne cond zero "ifcond" the_builder in
+  let cond_val = codegen_predicate pred in
 
   (* Grab the first block so that we might later add the conditional branch
    * to it at the end of the function. *)
@@ -173,7 +195,7 @@ and codegen_if_then_else pred t f =
   phi
 
 and codegen_function name args body =
-  let args' = Array.make (List.length args) i32_type in
+  let args' = Array.make (Array.length args) i32_type in
   let ft = function_type i32_type args' in
   let the_function = declare_function name ft the_module in
   create_arguments the_function args;
