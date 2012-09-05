@@ -17,7 +17,6 @@ let parse lexbuf =
   in List.iter print trees
 
 let main () =
-  ignore (Codegen.init ());
   if Array.length Sys.argv > 1
   then
    for i = 1 to Array.length Sys.argv - 1 do

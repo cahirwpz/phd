@@ -1,7 +1,4 @@
 open Llvm
-open Llvm_executionengine
-open Llvm_target
-open Llvm_scalar_opts
 open Printf 
 open Utils
 
@@ -10,8 +7,6 @@ exception Error of string
 let the_context = global_context ()
 let the_module = create_module the_context "some-name"
 let the_builder = builder the_context
-let the_execution_engine = ExecutionEngine.create the_module
-let the_fpm = PassManager.create_function the_module
 
 class structure_map =
   object
@@ -267,9 +262,6 @@ and codegen_function name args body =
       (* Validate the generated code, checking for consistency. *)
       Llvm_analysis.assert_valid_function the_function;
 
-      (* Optimize the function. *)
-      (* ignore(PassManager.run_function the_function the_fpm); *)
-
       functions#add name the_function;
 
       the_function;
@@ -285,30 +277,3 @@ let codegen_safe il =
     printf "Error: %s\n" s;
     None
 
-let init () =
-  structures#add "any" [i8_type] false;
-  structures#add "char" [i8_type; i32_type] false;
-  structures#add "int" [i8_type; i32_type] false;
-  structures#add "bool" [i8_type; i1_type] false;
-  structures#add "float" [i8_type; double_type] false;
-
-  (* Set up the optimizer pipeline.  Start with registering info about how the
-   * target lays out data structures. *)
-  TargetData.add (ExecutionEngine.target_data the_execution_engine) the_fpm;
-
-  (* Promote allocas to registers. *)
-  add_memory_to_register_promotion the_fpm;
-
-  (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
-  add_instruction_combination the_fpm;
-
-  (* reassociate expressions. *)
-  add_reassociation the_fpm;
-
-  (* Eliminate Common SubExpressions. *)
-  add_gvn the_fpm;
-
-  (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
-  add_cfg_simplification the_fpm;
-
-  ignore (PassManager.initialize the_fpm);
