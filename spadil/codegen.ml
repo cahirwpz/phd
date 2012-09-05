@@ -1,3 +1,4 @@
+open Codegen_dt
 open Codegen_base
 open Printf 
 open Utils
@@ -10,7 +11,7 @@ let cast_to_bool builder cond =
       builder#build_fcmp Fcmp.Une cond fzero
   | t when t = i1_type ->
       cond
-  | _ -> raise (Error "Type not handled.")
+  | _ -> raise (TypeError "Type not handled.")
 
 (* Code generation starts here *)
 let rec codegen builder exp =
@@ -57,7 +58,7 @@ and codegen_unary_op builder op exp =
   match op with
   | "-" -> builder#build_neg exp
   | "NOT" -> builder#build_not exp
-  | _ -> raise (Error (sprintf "Unknown operator '%s'." op))
+  | _ -> raise (NameError (sprintf "Unknown operator '%s'." op))
 
 and codegen_binary_op builder op lhs rhs =
   let cast_to_bool = cast_to_bool builder in
@@ -75,7 +76,7 @@ and codegen_binary_op builder op lhs rhs =
   | "<=" -> builder#build_icmp Icmp.Sle lhs rhs
   | "=" -> builder#build_icmp Icmp.Eq lhs rhs
   | "~=" -> builder#build_icmp Icmp.Ne lhs rhs
-  | _ -> raise (Error (sprintf "Unknown operator '%s'." op))
+  | _ -> raise (NameError (sprintf "Unknown operator '%s'." op))
 
 and codegen_fun_call builder name args =
   let codegen = codegen builder in
@@ -175,10 +176,15 @@ let rec codegen_toplevel pkg tree =
             Llvm.delete_function fn; raise e
         end
     | _ ->
-        raise (Error "Not a toplevel construction.")
-  with Error s ->
-    printf "Error: %s\n" s;
-    None
+        print_string "Syntax Error: Not a toplevel construction.\n";
+        None
+  with
+  | NameError s ->
+      printf "Name Error: %s\n" s;
+      None
+  | TypeError s ->
+      printf "Type Error: %s\n" s;
+      None
 
 and codegen_function_decl pkg name args =
   (* Declare function type. *)
