@@ -2,7 +2,7 @@ open Llvm
 open Llvm_executionengine
 open Llvm_target
 open Llvm_scalar_opts
-open Format
+open Printf 
 open Utils
 
 exception Error of string
@@ -41,7 +41,7 @@ class valueStore =
     method get name =
       let stack = self#get_stack name in
       if Stack.is_empty stack
-      then failwith (sprintf "Cannot find %s var." name);
+      then raise (Error (sprintf "Cannot find %s var." name));
       Stack.top stack
   end
 
@@ -92,7 +92,7 @@ let cast_to_bool cond =
       build_fcmp Fcmp.Une cond fzero "fnz_tmp" the_builder
   | t when t = i1_type ->
       cond
-  | _ -> failwith "Type not handled."
+  | _ -> raise (Error "Type not handled.")
 
 (* Code generation starts here *)
 let rec codegen = function
@@ -149,7 +149,7 @@ and codegen_unary_op op exp =
       let one = const_int i1_type 1 in
       build_xor one exp "not_tmp" the_builder
   | _ ->
-      failwith (sprintf "Unknown operator '%s'." op)
+      raise (Error (sprintf "Unknown operator '%s'." op))
 
 and codegen_binary_op op lhs rhs =
   match op with
@@ -169,7 +169,7 @@ and codegen_binary_op op lhs rhs =
   | "=" -> build_icmp Icmp.Eq lhs rhs "eq_tmp" the_builder
   | "~=" -> build_icmp Icmp.Ne lhs rhs "ne_tmp" the_builder
   | _ ->
-      failwith (sprintf "Unknown operator '%s'." op)
+      raise (Error (sprintf "Unknown operator '%s'." op))
 
 and codegen_fun_call name args =
   let args' = Array.map codegen args in
@@ -280,12 +280,13 @@ and codegen_function name args body =
 
 let codegen_safe il =
   try
-    ignore (codegen il);
-  with
-  | Error s -> printf "@.%s@." s
+    Some (codegen il)
+  with Error s ->
+    printf "Error: %s\n" s;
+    None
 
 let init () =
-  structures#add "some" [i8_type] false;
+  structures#add "any" [i8_type] false;
   structures#add "char" [i8_type; i32_type] false;
   structures#add "int" [i8_type; i32_type] false;
   structures#add "bool" [i8_type; i1_type] false;

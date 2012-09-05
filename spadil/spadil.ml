@@ -10,7 +10,7 @@ let print lisp =
   printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@.";
   let il_opt = Rewrite.simplify il in
   printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@.";
-  Codegen.codegen_safe il
+  ignore (Codegen.codegen_safe il)
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
