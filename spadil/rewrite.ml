@@ -30,67 +30,7 @@ let rec rewrite_n ruleset exp =
   | rule::rules -> rewrite_n rules (rewrite rule exp)
   | [] -> exp
 
-(* Used to simplify function calls *)
-let assignments = ref [];;
-let variables = ref [];;
-
-let get_assignments () =
-  let value = !assignments
-  in assignments := []; value
-
-let get_variables () = 
-  let value = !variables
-  in variables := []; value
-
-(* Simplify function calls *)
-let rec extract_compound_args exp =
-  let n_exp = extract_compound_args' exp in
-  let vars = get_variables ()
-  and body = rev (n_exp::(get_assignments ())) in
-  if length body > 1
-  then Block (VarSet.from_list vars, body)
-  else exp
-
-and extract_compound_args' = function
-  | Apply (fn, args) ->
-      Apply (rewrite_compound fn, map rewrite_compound args)
-  | IfThen (pred, t) ->
-      IfThen (rewrite_compound pred, t)
-  | IfThenElse (pred, t, f) ->
-      IfThenElse (rewrite_compound pred, t, f)
-  | Assign (name, Apply (fn, args)) ->
-      let value = Apply (rewrite_compound fn, map rewrite_compound args)
-      in Assign (name, value)
-  | Assign (name, IfThenElse (pred, t, f)) ->
-      let value = IfThenElse (rewrite_compound pred, t, f)
-      in Assign (name, value)
-  | Return exp ->
-      Return (rewrite_compound exp)
-  | e -> e
-
-and rewrite_compound exp =
-  match exp with
-  | Apply (_, _)
-  | IfThen (_, _)
-  | IfThenElse (_, _, _)
-  | Lambda (_, _)
-  | Return _ ->
-      let n_exp = extract_compound_args' exp
-      and t = symgen#get in
-      variables := t::!variables;
-      assignments := (Assign (t, n_exp))::!assignments;
-      Symbol t
-  | Assign (x, y) ->
-      assignments := exp::!assignments;
-      Symbol x
-  | Block (_, _) ->
-      let t = symgen#get in
-      variables := t::!variables;
-      assignments := (Assign (t, exp))::!assignments;
-      Symbol t
-  | _ -> exp
-
-(* Reduce a block that contains only one expression*)
+(* Reduce a block that contains only one expression. *)
 let reduce_block = function
   | Block (vars1, [Block (vars2, exps)]) ->
       Block (VarSet.union vars1 vars2, exps)
@@ -98,7 +38,7 @@ let reduce_block = function
       exp
   | _ -> raise NoMatch
 
-(* Flatten structure of a block *)
+(* Flatten structure of a block. *)
 let rec flatten_block = function
   | Block (vars, body) ->
       let body = map flatten_block body in
@@ -161,7 +101,6 @@ let rules = [
   reduce_lambda;
   rewrite_return;
   rewrite_logic_abbrev;
-  (*extract_compound_args;*)
   rewrite_assign;
   flatten_block;
   reduce_block;
