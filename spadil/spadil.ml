@@ -10,7 +10,7 @@ let print lisp =
   printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@.";
   let il_opt = Rewrite.simplify il in
   printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@.";
-  ignore (Codegen.codegen_safe il)
+  ignore (Codegen.codegen_toplevel Codegen.the il)
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
@@ -26,7 +26,7 @@ let main () =
      parse (open_named_lexbuf file filename);
      close_in file;
      (* Print out all the generated code. *)
-     Llvm.dump_module Codegen.the_module
+     Llvm.dump_module Codegen.the#package
    done
   else parse (open_named_lexbuf stdin "<stdin>")
 
