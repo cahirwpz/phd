@@ -60,9 +60,11 @@ let string_of_fcmp = function
   | Fcmp.Une -> "une"
   | Fcmp.True -> "true"
 
-class code_builder ctx =
+class code_builder pkg =
+  let ctx = Llvm.module_context pkg in
   object (self)
     val builder = Llvm.builder ctx
+    val package = pkg
     val context = ctx
 
     (* Basic types. *)
@@ -77,6 +79,8 @@ class code_builder ctx =
     val const_int = Llvm.const_int
     val const_float = Llvm.const_float
 
+    method append_block name value =
+      Llvm.append_block context name value
     method insertion_block =
       Llvm.insertion_block builder
     method position_at_end block =
@@ -138,34 +142,27 @@ class code_builder ctx =
 
   end
 
-class spad_module name =
-  let the_context = Llvm.global_context () in
-  let the_package = Llvm.create_module the_context name in
+class package name =
   object (self)
-    val context' = the_context
-    val package' = the_package
-    val builder' = new code_builder (Llvm.module_context the_package)
-    method context = context'
-    method package = package'
-    method builder = builder'
+    val package = Llvm.create_module (Llvm.global_context ()) name
 
     method add_global_def name value =
-      let var = Llvm.define_global name value package' in
+      let var = Llvm.define_global name value package in
       values#add name var; var
 
     method add_global_decl var_type name =
-      let var = Llvm.declare_global var_type name package' in
+      let var = Llvm.declare_global var_type name package in
       values#add name var; var
 
     method add_function_decl name fn_type =
-      let fn = Llvm.declare_function name fn_type package' in
+      let fn = Llvm.declare_function name fn_type package in
       functions#add name fn; fn
 
-    method append_block name value =
-      Llvm.append_block context' name value
+    method new_builder =
+      new code_builder package
 
-    method builder_at insn =
-      Llvm.builder_at context' insn
+    method dump =
+      Llvm.dump_module package
   end;;
 
 let ctx = Llvm.global_context ()

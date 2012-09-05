@@ -2,10 +2,7 @@ open Codegen_base
 open Printf 
 open Utils
 
-let the = new spad_module "some-name"
-
-let cast_to_bool cond =
-  let builder = the#builder in
+let cast_to_bool builder cond =
   match Llvm.type_of cond with
   | t when t = i32_type ->
       builder#build_icmp Icmp.Ne cond izero
@@ -16,9 +13,9 @@ let cast_to_bool cond =
   | _ -> raise (Error "Type not handled.")
 
 (* Code generation starts here *)
-let rec codegen tree =
-  let builder = the#builder in
-  match tree with
+let rec codegen builder exp =
+  let codegen = codegen builder in
+  match exp with
   | Ast.Char c ->
       const_int i8_type (Char.code c)
   | Ast.Float n ->
@@ -30,41 +27,40 @@ let rec codegen tree =
   | Ast.Value name ->
       builder#build_load  name
   | Ast.Block (vars, exps) ->
-      codegen_block (VarSet.elements vars) exps
+      codegen_block builder (VarSet.elements vars) exps
   | Ast.Return x ->
       codegen x
   | Ast.Call (op, [exp]) when List.mem op Ast.unary ->
-      codegen_unary_op op (codegen exp)
+      codegen_unary_op builder op (codegen exp)
   | Ast.Call (op, [lhs; rhs]) when List.mem op Ast.binary ->
-      codegen_binary_op op (codegen lhs) (codegen rhs)
+      codegen_binary_op builder op (codegen lhs) (codegen rhs)
   | Ast.Call (name, args) ->
-      codegen_fun_call (Ast.literal_symbol name) (Array.of_list args)
+      codegen_fun_call builder (Ast.literal_symbol name) (Array.of_list args)
   | Ast.IfThenElse (cond, t, f) ->
-      codegen_if_then_else (codegen cond) t f
+      codegen_if_then_else builder (codegen cond) t f
   | Ast.While (cond, body) ->
-      codegen_while cond body
+      codegen_while builder cond body
   | Ast.Assign (name, value) ->
       builder#build_store (codegen value) name
   | _ ->
       const_int i32_type 0
 
-and codegen_block vars exps =
-  let builder = the#builder in
+and codegen_block builder vars exps =
+  let codegen = codegen builder in
   let create_local_var name = ignore (builder#build_alloca i32_type name) in
   List.iter create_local_var vars;
   let last = Utils.last (List.map codegen exps) in
   List.iter (fun name -> values#rem name) vars;
   last
 
-and codegen_unary_op op exp =
-  let builder = the#builder in
+and codegen_unary_op builder op exp =
   match op with
   | "-" -> builder#build_neg exp
   | "NOT" -> builder#build_not exp
   | _ -> raise (Error (sprintf "Unknown operator '%s'." op))
 
-and codegen_binary_op op lhs rhs =
-  let builder = the#builder in
+and codegen_binary_op builder op lhs rhs =
+  let cast_to_bool = cast_to_bool builder in
   match op with
   | "+" -> builder#build_add lhs rhs
   | "-" -> builder#build_sub lhs rhs
@@ -81,22 +77,22 @@ and codegen_binary_op op lhs rhs =
   | "~=" -> builder#build_icmp Icmp.Ne lhs rhs
   | _ -> raise (Error (sprintf "Unknown operator '%s'." op))
 
-and codegen_fun_call name args =
-  let builder = the#builder in
+and codegen_fun_call builder name args =
+  let codegen = codegen builder in
   let args = Array.map codegen args in
   builder#build_call name args
 
-and codegen_if_then_else cond t f =
-  let builder = the#builder in
+and codegen_if_then_else builder cond t f =
+  let codegen = codegen builder in
   (* Convert condition to a bool by comparing equal to 0. *)
-  let cond_val = cast_to_bool cond in
+  let cond_val = cast_to_bool builder cond in
 
   (* Grab the first block so that we might later add the conditional branch
    * to it at the end of the function. *)
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
-  let then_bb = the#append_block "then" the_function in
-  let else_bb = the#append_block "else" the_function in
+  let then_bb = builder#append_block "then" the_function in
+  let else_bb = builder#append_block "else" the_function in
 
   (* Emit 'then' value. *)
   builder#position_at_end then_bb;
@@ -116,7 +112,7 @@ and codegen_if_then_else cond t f =
   let new_else_bb = builder#insertion_block in
 
   (* Emit merge block. *)
-  let merge_bb = the#append_block "ifcont" the_function in
+  let merge_bb = builder#append_block "ifcont" the_function in
   builder#position_at_end merge_bb;
   let incoming = [(then_val, new_then_bb); (else_val, new_else_bb)] in
   let phi = builder#build_phi incoming in
@@ -137,25 +133,23 @@ and codegen_if_then_else cond t f =
 
   phi
 
-and codegen_while cond body =
-  let builder = the#builder in
-
+and codegen_while builder cond body =
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
-  let loop_bb = the#append_block "loop" the_function in
-  let body_bb = the#append_block "body" the_function in
-  let end_loop_bb = the#append_block "end_loop" the_function in
+  let loop_bb = builder#append_block "loop" the_function in
+  let body_bb = builder#append_block "body" the_function in
+  let end_loop_bb = builder#append_block "end_loop" the_function in
 
   (* Terminate predecessor block with uncoditional jump to loop. *)
   builder#position_at_end start_bb;
   ignore (builder#build_br loop_bb);
 
   builder#position_at_end loop_bb;
-  let cond_val = codegen cond in
+  let cond_val = codegen builder cond in
   ignore (builder#build_cond_br cond_val body_bb end_loop_bb);
 
   builder#position_at_end body_bb;
-  ignore (codegen body);
+  ignore (codegen builder body);
   ignore (builder#build_br loop_bb);
 
   builder#position_at_end end_loop_bb;
@@ -167,14 +161,16 @@ let rec codegen_toplevel pkg tree =
     | Ast.Global (name, None) ->
         Some (pkg#add_global_decl i32_type name)
     | Ast.Global (name, Some value) ->
-        Some (pkg#add_global_def name (codegen value))
+        let bdr = pkg#new_builder in
+        Some (pkg#add_global_def name (codegen bdr value))
     | Ast.Assign (name, Ast.Lambda (args, body)) ->
         let name = Ast.literal_symbol name
         and args = Array.of_list args in
         let fn = codegen_function_decl pkg name args in
         begin
           try
-            Some (codegen_function_def fn args body)
+            let bdr = pkg#new_builder in
+            Some (codegen_function_def bdr fn args body)
           with e ->
             Llvm.delete_function fn; raise e
         end
@@ -196,11 +192,9 @@ and codegen_function_decl pkg name args =
   Array.iteri set_param_name (Llvm.params fn);
   fn
 
-and codegen_function_def fn args body =
-  let builder = the#builder in
-
+and codegen_function_def builder fn args body =
   (* Create a new basic block to start insertion into. *)
-  let entry_bb = the#append_block "entry" fn in
+  let entry_bb = builder#append_block "entry" fn in
   builder#position_at_end entry_bb;
 
   (* Create an alloca instruction in the entry block of the function. This
@@ -216,7 +210,7 @@ and codegen_function_def fn args body =
     ) (Llvm.params fn);
 
   (* Finish off the function. *)
-  let body_val = codegen body in
+  let body_val = codegen builder body in
   ignore(builder#build_ret body_val);
 
   (* Validate the generated code, checking for consistency. *)

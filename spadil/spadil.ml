@@ -2,6 +2,8 @@ open Lexing
 open Format
 open Lextools
 
+let pkg = new Codegen_base.package "some-name"
+
 let print lisp =
   printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@.";
   let lisp_opt = Sexpr.simplify lisp in
@@ -10,7 +12,7 @@ let print lisp =
   printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@.";
   let il_opt = Rewrite.simplify il in
   printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@.";
-  ignore (Codegen.codegen_toplevel Codegen.the il)
+  ignore (Codegen.codegen_toplevel pkg il)
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
@@ -26,7 +28,7 @@ let main () =
      parse (open_named_lexbuf file filename);
      close_in file;
      (* Print out all the generated code. *)
-     Llvm.dump_module Codegen.the#package
+     pkg#dump
    done
   else parse (open_named_lexbuf stdin "<stdin>")
 
