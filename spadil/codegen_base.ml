@@ -1,9 +1,6 @@
 open Codegen_dt
 open Printf
 
-let values = new valueStore
-let functions = new valueStore
-
 module Icmp = Llvm.Icmp
 module Fcmp = Llvm.Fcmp
 
@@ -38,11 +35,12 @@ let string_of_fcmp = function
   | Fcmp.True -> "true"
 
 class code_builder pkg =
-  let ctx = Llvm.module_context pkg in
+  let ctx = pkg#get_context in
   object (self)
     val builder = Llvm.builder ctx
     val package = pkg
     val context = ctx
+    val locals = new variables
 
     (* Basic types. *)
     val double_type = Llvm.double_type ctx
@@ -64,8 +62,8 @@ class code_builder pkg =
       Llvm.position_at_end block builder
 
     (* Control flow. *)
-    method build_call name args =
-      Llvm.build_call (functions#get name) args "call_tmp" builder
+    method build_call (name : string) args =
+      Llvm.build_call (package#get_function name) args "call_tmp" builder
     method build_phi incoming =
       Llvm.build_phi incoming "if_tmp" builder
     method build_cond_br cond then_bb else_bb =
@@ -77,13 +75,9 @@ class code_builder pkg =
 
     (* Memory access instructions. *)
     method build_load var_name = 
-      Llvm.build_load (values#get var_name) var_name builder
+      Llvm.build_load (locals#get var_name) var_name builder
     method build_store src var_name =
-      Llvm.build_store src (values#get var_name) builder
-    method build_alloca var_type var_name =
-      let alloca = Llvm.build_alloca var_type var_name builder in
-      values#add var_name alloca;
-      alloca
+      Llvm.build_store src (locals#get var_name) builder
 
     (* Arithmetic instructions. *)
     method build_add lhs rhs = 
@@ -117,26 +111,41 @@ class code_builder pkg =
       let name = sprintf "fcmp_%s_tmp" (string_of_fcmp cmp) in
       Llvm.build_fcmp cmp lhs rhs name builder
 
+    (* Handling local variables. *)
+    method var_intro var_type var_name =
+      let alloca = Llvm.build_alloca var_type var_name builder in
+      locals#add var_name alloca;
+      alloca
+    method var_forget name =
+      locals#rem name
   end
 
 class package name =
   object (self)
     val package = Llvm.create_module (Llvm.global_context ()) name
+    val globals = new variables
+    val functions = new variables
 
     method add_global_def name value =
       let var = Llvm.define_global name value package in
-      values#add name var; var
+      globals#add name var; var
 
     method add_global_decl var_type name =
       let var = Llvm.declare_global var_type name package in
-      values#add name var; var
+      globals#add name var; var
 
     method add_function_decl name fn_type =
       let fn = Llvm.declare_function name fn_type package in
       functions#add name fn; fn
 
+    method get_function name =
+      functions#get name
+
+    method get_context =
+      Llvm.module_context package
+
     method new_builder =
-      new code_builder package
+      new code_builder self 
 
     method dump =
       Llvm.dump_module package

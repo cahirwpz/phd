@@ -26,7 +26,7 @@ let rec codegen builder exp =
   | Ast.String s ->
       const_stringz s
   | Ast.Value name ->
-      builder#build_load  name
+      builder#build_load name
   | Ast.Block (vars, exps) ->
       codegen_block builder (VarSet.elements vars) exps
   | Ast.Return x ->
@@ -48,10 +48,10 @@ let rec codegen builder exp =
 
 and codegen_block builder vars exps =
   let codegen = codegen builder in
-  let create_local_var name = ignore (builder#build_alloca i32_type name) in
+  let create_local_var name = ignore (builder#var_intro i32_type name) in
   List.iter create_local_var vars;
   let last = Utils.last (List.map codegen exps) in
-  List.iter (fun name -> values#rem name) vars;
+  List.iter builder#var_forget vars;
   last
 
 and codegen_unary_op builder op exp =
@@ -209,7 +209,7 @@ and codegen_function_def builder fn args body =
     let name = args.(i) in
 
     (* Create an alloca for this variable. *)
-    ignore(builder#build_alloca i32_type name);
+    ignore(builder#var_intro i32_type name);
 
     (* Store the initial value into the alloca. *)
     ignore(builder#build_store value name);

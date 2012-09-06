@@ -3,7 +3,7 @@ open Printf
 exception NameError of string
 exception TypeError of string
 
-class valueStore = 
+class variables =
   object (self)
     val map : (string, Llvm.llvalue Stack.t) Hashtbl.t = Hashtbl.create 10
     method private get_stack name =
