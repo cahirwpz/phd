@@ -136,7 +136,7 @@ class code_builder pkg =
           end
       | Some var ->
           var
-  end
+  end;;
 
 class package name =
   object (self)
@@ -162,14 +162,45 @@ class package name =
       | Some var ->
           var
 
+    method iter_functions f =
+      Llvm.iter_functions f package
+ 
     method get_context =
       Llvm.module_context package
+
+    method get_module = package
 
     method new_builder =
       new code_builder self 
 
     method dump =
       Llvm.dump_module package
+  end;;
+
+(* function-by-function pass pipeline over the package [pkg]. It does not take
+ * ownership of [pkg]. This type of pipeline is suitable for code generation and
+ * JIT compilation tasks. *)
+class function_pass_manager pkg =
+  object (self)
+    val fpm = Llvm.PassManager.create_function (pkg#get_module)
+
+    method initialize =
+      (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
+      Llvm_scalar_opts.add_instruction_combination fpm;
+      (* reassociate expressions. *)
+      Llvm_scalar_opts.add_reassociation fpm;
+      (* Eliminate Common SubExpressions. *)
+      Llvm_scalar_opts.add_gvn fpm;
+      (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
+      Llvm_scalar_opts.add_cfg_simplification fpm;
+      (* Finally... initialize it! *)
+      Llvm.PassManager.initialize fpm
+
+    method run_function fn =
+      Llvm.PassManager.run_function fn fpm
+
+    method finalize =
+      Llvm.PassManager.finalize fpm
   end;;
 
 let ctx = Llvm.global_context ()

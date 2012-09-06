@@ -23,15 +23,19 @@ let parse lexbuf =
 let main () =
   if Array.length Sys.argv > 1
   then
-   for i = 1 to Array.length Sys.argv - 1 do
-     let filename = Sys.argv.(i) in
-     let file = open_in filename in
-     printf "**** %s ****@." filename;
-     parse (open_named_lexbuf file filename);
-     close_in file;
-     (* Print out all the generated code. *)
-     pkg#dump
-   done
+    for i = 1 to Array.length Sys.argv - 1 do
+      let filename = Sys.argv.(i) in
+      let file = open_in filename in
+      printf "**** %s ****@." filename;
+      parse (open_named_lexbuf file filename);
+      close_in file;
+      (* Print out all the generated code. *)
+      let fpm = new Codegen_base.function_pass_manager pkg in
+      ignore (fpm#initialize);
+      pkg#iter_functions (fun fn -> ignore (fpm#run_function fn));
+      ignore (fpm#finalize);
+      pkg#dump
+    done
   else parse (open_named_lexbuf stdin "<stdin>")
 
 let _ = Printexc.print main ()
