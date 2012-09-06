@@ -1,8 +1,5 @@
 open Printf
 
-exception NameError of string
-exception TypeError of string
-
 class variables =
   object (self)
     val map : (string, Llvm.llvalue Stack.t) Hashtbl.t = Hashtbl.create 10
@@ -21,6 +18,6 @@ class variables =
     method get name =
       let stack = self#get_stack name in
       if Stack.is_empty stack
-      then raise (NameError (sprintf "Cannot find '%s' variable." name));
-      Stack.top stack
+      then None
+      else Some (Stack.top stack)
   end

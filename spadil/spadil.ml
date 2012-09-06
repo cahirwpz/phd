@@ -5,14 +5,16 @@ open Lextools
 let pkg = new Codegen_base.package "some-name"
 
 let print lisp =
-  printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@.";
+  (* printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@."; *)
   let lisp_opt = Sexpr.simplify lisp in
-  printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.@.";
+  (* printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.@."; *)
   let il = Ast.convert lisp_opt in
-  printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@.";
+  (* printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@."; *)
   let il_opt = Rewrite.simplify il in
   printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@.";
-  ignore (Codegen.codegen_toplevel pkg il)
+  match Codegen.codegen_toplevel pkg il with
+  | Some _ -> ()
+  | None -> exit(1)
 
 let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf

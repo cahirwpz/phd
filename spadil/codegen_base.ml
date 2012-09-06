@@ -1,6 +1,9 @@
 open Codegen_dt
 open Printf
 
+exception NameError of string
+exception TypeError of string
+
 module Icmp = Llvm.Icmp
 module Fcmp = Llvm.Fcmp
 
@@ -63,7 +66,7 @@ class code_builder pkg =
 
     (* Control flow. *)
     method build_call (name : string) args =
-      Llvm.build_call (package#get_function name) args "call_tmp" builder
+      Llvm.build_call (package#resolve_fn_name name) args "call_tmp" builder
     method build_phi incoming =
       Llvm.build_phi incoming "if_tmp" builder
     method build_cond_br cond then_bb else_bb =
@@ -74,10 +77,10 @@ class code_builder pkg =
       Llvm.build_ret value builder
 
     (* Memory access instructions. *)
-    method build_load var_name = 
-      Llvm.build_load (locals#get var_name) var_name builder
-    method build_store src var_name =
-      Llvm.build_store src (locals#get var_name) builder
+    method build_load name = 
+      Llvm.build_load (self#resolve_var_name name) name builder
+    method build_store src name =
+      Llvm.build_store src (self#resolve_var_name name) builder
 
     (* Arithmetic instructions. *)
     method build_add lhs rhs = 
@@ -118,6 +121,21 @@ class code_builder pkg =
       alloca
     method var_forget name =
       locals#rem name
+
+    (* Resolving names. *)
+    method resolve_var_name name =
+      match locals#get name with
+      | None ->
+          begin
+            match package#get_global name with
+            | None ->
+                let msg = sprintf "Unknown variable '%s'." name in
+                raise (NameError msg)
+            | Some var ->
+                var
+          end
+      | Some var ->
+          var
   end
 
 class package name =
@@ -138,8 +156,16 @@ class package name =
       let fn = Llvm.declare_function name fn_type package in
       functions#add name fn; fn
 
-    method get_function name =
-      functions#get name
+    method resolve_fn_name name =
+      match functions#get name with
+      | None ->
+          let msg = sprintf "Unknown function '%s'." name in
+          raise (NameError msg)
+      | Some var ->
+          var
+
+    method get_global name =
+      globals#get name
 
     method get_context =
       Llvm.module_context package
