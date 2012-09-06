@@ -160,10 +160,10 @@ let rec codegen_toplevel pkg tree =
   try
     match tree with
     | Ast.Global (name, None) ->
-        Some (pkg#add_global_decl i32_type name)
+        Some (pkg#declare_global i32_type name)
     | Ast.Global (name, Some value) ->
         let bdr = pkg#new_builder in
-        Some (pkg#add_global_def name (codegen bdr value))
+        Some (pkg#define_global name (codegen bdr value))
     | Ast.Assign (name, Ast.Lambda (args, body)) ->
         let name = Ast.literal_symbol name
         and args = Array.of_list args in
@@ -192,7 +192,7 @@ and codegen_function_decl pkg name args =
   and return_t = i32_type in
   let fn_type = Llvm.function_type return_t args_t in
   (* Create the function declaration and add it to the module. *)
-  let fn = pkg#add_function_decl name fn_type in
+  let fn = pkg#declare_function name fn_type in
   (* Specify argument parameters. *)
   let set_param_name = (fun i value -> Llvm.set_value_name args.(i) value) in
   Array.iteri set_param_name (Llvm.params fn);

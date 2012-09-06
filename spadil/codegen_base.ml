@@ -66,7 +66,7 @@ class code_builder pkg =
 
     (* Control flow. *)
     method build_call (name : string) args =
-      Llvm.build_call (package#resolve_fn_name name) args "call_tmp" builder
+      Llvm.build_call (package#lookup_function name) args "call_tmp" builder
     method build_phi incoming =
       Llvm.build_phi incoming "if_tmp" builder
     method build_cond_br cond then_bb else_bb =
@@ -78,9 +78,9 @@ class code_builder pkg =
 
     (* Memory access instructions. *)
     method build_load name = 
-      Llvm.build_load (self#resolve_var_name name) name builder
+      Llvm.build_load (self#lookup_var name) name builder
     method build_store src name =
-      Llvm.build_store src (self#resolve_var_name name) builder
+      Llvm.build_store src (self#lookup_var name) builder
 
     (* Arithmetic instructions. *)
     method build_add lhs rhs = 
@@ -123,11 +123,11 @@ class code_builder pkg =
       locals#rem name
 
     (* Resolving names. *)
-    method resolve_var_name name =
+    method lookup_var name =
       match locals#get name with
       | None ->
           begin
-            match package#get_global name with
+            match package#lookup_global name with
             | None ->
                 let msg = sprintf "Unknown variable '%s'." name in
                 raise (NameError msg)
@@ -141,31 +141,26 @@ class code_builder pkg =
 class package name =
   object (self)
     val package = Llvm.create_module (Llvm.global_context ()) name
-    val globals = new variables
-    val functions = new variables
 
-    method add_global_def name value =
-      let var = Llvm.define_global name value package in
-      globals#add name var; var
+    method define_global name value =
+      Llvm.define_global name value package
 
-    method add_global_decl var_type name =
-      let var = Llvm.declare_global var_type name package in
-      globals#add name var; var
+    method declare_global var_type name =
+      Llvm.declare_global var_type name package
 
-    method add_function_decl name fn_type =
-      let fn = Llvm.declare_function name fn_type package in
-      functions#add name fn; fn
+    method lookup_global name =
+      Llvm.lookup_global name package
 
-    method resolve_fn_name name =
-      match functions#get name with
+    method declare_function name fn_type =
+      Llvm.declare_function name fn_type package
+
+    method lookup_function name =
+      match Llvm.lookup_function name package with
       | None ->
           let msg = sprintf "Unknown function '%s'." name in
           raise (NameError msg)
       | Some var ->
           var
-
-    method get_global name =
-      globals#get name
 
     method get_context =
       Llvm.module_context package
