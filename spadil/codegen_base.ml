@@ -6,6 +6,7 @@ exception TypeError of string
 
 module Icmp = Llvm.Icmp
 module Fcmp = Llvm.Fcmp
+module Jit = Llvm_executionengine.ExecutionEngine
 
 let string_of_icmp = function
   | Icmp.Eq -> "eq"
@@ -177,12 +178,27 @@ class package name =
       Llvm.dump_module package
   end;;
 
+(* JIT Interpreter. *)
+class execution_engine pkg =
+  object (self)
+    val jit = Jit.create pkg#get_module
+
+    method target_data =
+      Jit.target_data jit
+
+    method run_function fn args =
+      Jit.run_function fn args jit
+
+    method dispose = 
+      Jit.dispose jit
+  end;;
+
 (* function-by-function pass pipeline over the package [pkg]. It does not take
  * ownership of [pkg]. This type of pipeline is suitable for code generation and
  * JIT compilation tasks. *)
 class function_pass_manager pkg =
   object (self)
-    val fpm = Llvm.PassManager.create_function (pkg#get_module)
+    val fpm = Llvm.PassManager.create_function pkg#get_module
 
     method initialize =
       (* Do simple "peephole" optimizations and bit-twiddling optzn. *)

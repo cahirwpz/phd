@@ -20,6 +20,14 @@ let parse lexbuf =
   let trees = Parser.program Lexer.token lexbuf
   in List.iter print trees
 
+let execute pkg = 
+  let jit = new Codegen_base.execution_engine pkg in
+  let result = jit#run_function (pkg#lookup_function "main") [||] in
+  let result = Llvm_executionengine.GenericValue.as_int32 result in
+  printf "Evaluated to %d\n" (Int32.to_int result);
+  jit#dispose;
+  ()
+
 let main () =
   if Array.length Sys.argv > 1
   then
@@ -34,7 +42,8 @@ let main () =
       ignore (fpm#initialize);
       pkg#iter_functions (fun fn -> ignore (fpm#run_function fn));
       ignore (fpm#finalize);
-      pkg#dump
+      pkg#dump;
+      execute pkg
     done
   else parse (open_named_lexbuf stdin "<stdin>")
 
