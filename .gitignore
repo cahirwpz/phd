@@ -1,3 +1,5 @@
+.*
 *~
+*.bc
 *.native
 _build
