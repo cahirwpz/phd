@@ -2,7 +2,7 @@ open Lexing
 open Format
 open Lextools
 
-let pkg = new Codegen_base.package "some-name"
+let pkg = Codegen_base.create_package "some-name"
 
 let print lisp =
   (* printf "@[<v 2>LISP (original)@,@,"; Sexpr.print lisp; printf "@]@.@."; *)
@@ -35,7 +35,15 @@ let execute pkg =
   jit#dispose;
   ()
 
+let load_package filename =
+  match Codegen_base.load_package filename with
+  | Some pkg ->
+      pkg#dump
+  | None ->
+      ()
+
 let main () =
+  ignore (load_package "runtime.bc");
   if Array.length Sys.argv > 1
   then
     for i = 1 to Array.length Sys.argv - 1 do

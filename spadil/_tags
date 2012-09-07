@@ -4,3 +4,4 @@
 <*.*>: package(llvm.executionengine)
 <*.*>: package(llvm.scalar_opts)
 <*.*>: package(llvm.target)
+<*.*>: package(llvm.bitreader)

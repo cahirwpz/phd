@@ -4,11 +4,14 @@ all: spadil.native
 
 tests = $(wildcard tests/*.lisp)
 
-spadil.native:
+spadil.native: runtime.bc
 	ocamlbuild $(FLAGS) $@
 
-spadil.byte:
+spadil.byte: runtime.bc
 	ocamlbuild $(FLAGS) -lflag -g -cflag -g $@
+
+runtime.bc: runtime.c
+	clang -emit-llvm -o $@ -c $^
 
 test: spadil.native
 	@for test in $(tests); do echo "*** $${test}"; ./$^ $${test}; done

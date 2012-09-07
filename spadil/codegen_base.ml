@@ -8,6 +8,20 @@ module Icmp = Llvm.Icmp
 module Fcmp = Llvm.Fcmp
 module Jit = Llvm_executionengine.ExecutionEngine
 
+let the_context = Llvm.global_context ()
+
+let double_type = Llvm.double_type the_context
+let i1_type = Llvm.i1_type the_context
+let i8_type = Llvm.i8_type the_context
+let i32_type = Llvm.i32_type the_context
+let const_stringz = Llvm.const_stringz the_context
+let struct_type = Llvm.struct_type the_context
+let const_int = Llvm.const_int
+let const_float = Llvm.const_float
+
+let izero = const_int i32_type 0
+let fzero = const_float double_type 0.0
+
 let string_of_icmp = function
   | Icmp.Eq -> "eq"
   | Icmp.Ne -> "ne"
@@ -39,27 +53,13 @@ let string_of_fcmp = function
   | Fcmp.True -> "true"
 
 class code_builder pkg =
-  let ctx = pkg#get_context in
   object (self)
-    val builder = Llvm.builder ctx
+    val builder = Llvm.builder the_context
     val package = pkg
-    val context = ctx
     val locals = new variables
 
-    (* Basic types. *)
-    val double_type = Llvm.double_type ctx
-    val i1_type = Llvm.i1_type ctx
-    val i8_type = Llvm.i8_type ctx
-    val i32_type = Llvm.i32_type ctx
-    val const_stringz = Llvm.const_stringz ctx
-    val struct_type = Llvm.struct_type ctx
-
-    (* Type modifiers. *)
-    val const_int = Llvm.const_int
-    val const_float = Llvm.const_float
-
     method append_block name value =
-      Llvm.append_block context name value
+      Llvm.append_block the_context name value
     method insertion_block =
       Llvm.insertion_block builder
     method position_at_end block =
@@ -139,9 +139,9 @@ class code_builder pkg =
           var
   end;;
 
-class package name =
+class package llvm_module =
   object (self)
-    val package = Llvm.create_module (Llvm.global_context ()) name
+    val package = llvm_module
 
     method define_global name value =
       Llvm.define_global name value package
@@ -166,9 +166,6 @@ class package name =
     method iter_functions f =
       Llvm.iter_functions f package
  
-    method get_context =
-      Llvm.module_context package
-
     method get_module = package
 
     method new_builder =
@@ -177,6 +174,21 @@ class package name =
     method dump =
       Llvm.dump_module package
   end;;
+
+let create_package name =
+  new package (Llvm.create_module the_context name)
+
+let load_package filename =
+  let module MemBuf = Llvm.MemoryBuffer in
+  let membuf = MemBuf.of_file filename in
+  let pkg = (
+    try
+      Some (new package (Llvm_bitreader.get_module the_context membuf))
+    with Llvm_bitreader.Error msg ->
+      printf "Could not load '%s' file: %s.\n" filename msg;
+      None) in
+  MemBuf.dispose membuf;
+  pkg
 
 (* JIT Interpreter. *)
 class execution_engine pkg =
@@ -192,6 +204,9 @@ class execution_engine pkg =
 
     method run_function fn args =
       Jit.run_function fn args jit
+
+    method find_function name =
+      Jit.find_function name jit
 
     method dispose = 
       Jit.dispose jit
@@ -227,16 +242,3 @@ class function_pass_manager pkg =
     method finalize =
       Llvm.PassManager.finalize fpm
   end;;
-
-let ctx = Llvm.global_context ()
-let double_type = Llvm.double_type ctx
-let i1_type = Llvm.i1_type ctx
-let i8_type = Llvm.i8_type ctx
-let i32_type = Llvm.i32_type ctx
-let const_stringz = Llvm.const_stringz ctx
-let struct_type = Llvm.struct_type ctx
-let const_int = Llvm.const_int
-let const_float = Llvm.const_float
-
-let izero = const_int i32_type 0
-let fzero = const_float double_type 0.0
