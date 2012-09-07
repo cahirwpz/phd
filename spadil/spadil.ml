@@ -21,7 +21,14 @@ let parse lexbuf =
   in List.iter print trees
 
 let execute pkg = 
+  let fpm = new Codegen_base.function_pass_manager pkg in
   let jit = new Codegen_base.execution_engine pkg in
+  let td = jit#target_data in
+  fpm#set_target_data td;
+  ignore (fpm#initialize);
+  pkg#iter_functions (fun fn -> ignore (fpm#run_function fn));
+  ignore (fpm#finalize);
+  pkg#dump;
   let result = jit#run_function (pkg#lookup_function "main") [||] in
   let result = Llvm_executionengine.GenericValue.as_int32 result in
   printf "Evaluated to %d\n" (Int32.to_int result);
@@ -38,11 +45,6 @@ let main () =
       parse (open_named_lexbuf file filename);
       close_in file;
       (* Print out all the generated code. *)
-      let fpm = new Codegen_base.function_pass_manager pkg in
-      ignore (fpm#initialize);
-      pkg#iter_functions (fun fn -> ignore (fpm#run_function fn));
-      ignore (fpm#finalize);
-      pkg#dump;
       execute pkg
     done
   else parse (open_named_lexbuf stdin "<stdin>")

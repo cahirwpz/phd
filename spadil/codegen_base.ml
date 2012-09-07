@@ -180,6 +180,10 @@ class package name =
 
 (* JIT Interpreter. *)
 class execution_engine pkg =
+  (* We have to call it, otherwise you can expect strage behaviour of generated
+   * code (ie. problems with endianness of global / stack variables). *)
+  let _ = Llvm_executionengine.initialize_native_target () in
+
   object (self)
     val jit = Jit.create pkg#get_module
 
@@ -201,6 +205,8 @@ class function_pass_manager pkg =
     val fpm = Llvm.PassManager.create_function pkg#get_module
 
     method initialize =
+      (* Promote allocas to registers - without that while loops don't work. *)
+      Llvm_scalar_opts.add_memory_to_register_promotion fpm;
       (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
       Llvm_scalar_opts.add_instruction_combination fpm;
       (* reassociate expressions. *)
@@ -211,6 +217,9 @@ class function_pass_manager pkg =
       Llvm_scalar_opts.add_cfg_simplification fpm;
       (* Finally... initialize it! *)
       Llvm.PassManager.initialize fpm
+
+    method set_target_data target_data =
+      Llvm_target.TargetData.add target_data fpm
 
     method run_function fn =
       Llvm.PassManager.run_function fn fpm
