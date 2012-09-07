@@ -57,7 +57,7 @@ and codegen_block builder vars exps =
 and codegen_unary_op builder op exp =
   match op with
   | "-" -> builder#build_neg exp
-  | "NOT" -> builder#build_not exp
+  | "NOT" -> builder#build_not (cast_to_bool builder exp)
   | _ -> raise (NameError (sprintf "Unknown operator '%s'." op))
 
 and codegen_binary_op builder op lhs rhs =
