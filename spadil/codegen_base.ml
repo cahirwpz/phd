@@ -139,79 +139,6 @@ class code_builder pkg =
           var
   end;;
 
-class package llvm_module =
-  object (self)
-    val package = llvm_module
-
-    method define_global name value =
-      Llvm.define_global name value package
-
-    method declare_global var_type name =
-      Llvm.declare_global var_type name package
-
-    method lookup_global name =
-      Llvm.lookup_global name package
-
-    method declare_function name fn_type =
-      Llvm.declare_function name fn_type package
-
-    method lookup_function name =
-      match Llvm.lookup_function name package with
-      | None ->
-          let msg = sprintf "Unknown function '%s'." name in
-          raise (NameError msg)
-      | Some var ->
-          var
-
-    method iter_functions f =
-      Llvm.iter_functions f package
- 
-    method get_module = package
-
-    method new_builder =
-      new code_builder self 
-
-    method dump =
-      Llvm.dump_module package
-  end;;
-
-let create_package name =
-  new package (Llvm.create_module the_context name)
-
-let load_package filename =
-  let module MemBuf = Llvm.MemoryBuffer in
-  let membuf = MemBuf.of_file filename in
-  let pkg = (
-    try
-      Some (new package (Llvm_bitreader.get_module the_context membuf))
-    with Llvm_bitreader.Error msg ->
-      printf "Could not load '%s' file: %s.\n" filename msg;
-      None) in
-  MemBuf.dispose membuf;
-  pkg
-
-(* JIT Interpreter. *)
-class execution_engine pkg =
-  (* We have to call it, otherwise you can expect strage behaviour of generated
-   * code (ie. problems with endianness of global / stack variables). *)
-  let _ = Llvm_executionengine.initialize_native_target () in
-
-  object (self)
-    val jit = Jit.create pkg#get_module
-
-    method target_data =
-      Jit.target_data jit
-
-    method run_function fn args =
-      Jit.run_function fn args jit
-
-    method find_function name =
-      Jit.find_function name jit
-
-    method dispose = 
-      Jit.dispose jit
-  end;;
-
 (* function-by-function pass pipeline over the package [pkg]. It does not take
  * ownership of [pkg]. This type of pipeline is suitable for code generation and
  * JIT compilation tasks. *)
@@ -241,4 +168,104 @@ class function_pass_manager pkg =
 
     method finalize =
       Llvm.PassManager.finalize fpm
+  end;;
+
+class package llvm_module =
+  object (self)
+    val package = llvm_module
+
+    method define_global name value =
+      Llvm.define_global name value package
+
+    method declare_global var_type name =
+      Llvm.declare_global var_type name package
+
+    method lookup_global name =
+      Llvm.lookup_global name package
+
+    method declare_function name fn_type =
+      Llvm.declare_function name fn_type package
+
+    method lookup_function name =
+      match Llvm.lookup_function name package with
+      | None ->
+          let msg = sprintf "Unknown function '%s'." name in
+          raise (NameError msg)
+      | Some var ->
+          var
+
+    method iter_functions fn =
+      Llvm.iter_functions fn package
+ 
+    method get_module = package
+
+    method new_builder =
+      new code_builder self 
+
+    method dump =
+      Llvm.dump_module package
+
+    method optimize td =
+      let fpm = new function_pass_manager self in
+      fpm#set_target_data td;
+      ignore (fpm#initialize);
+      self#iter_functions (fun fn -> ignore (fpm#run_function fn));
+      ignore (fpm#finalize)
+  end;;
+
+(* JIT Interpreter. *)
+class execution_engine =
+  (* We have to call it, otherwise you can expect strage behaviour of generated
+   * code (ie. problems with endianness of global / stack variables). *)
+  let _ = Llvm_executionengine.initialize_native_target () in
+
+  object (self)
+    val map : (string, package) Hashtbl.t = Hashtbl.create 10
+    val jit = Jit.create (Llvm.create_module the_context "empty")
+
+    method target_data =
+      Jit.target_data jit
+
+    method run_function fn args =
+      Jit.run_function fn args jit
+
+    method lookup_function name =
+      match Jit.find_function name jit with
+      | None ->
+          let msg = sprintf "Unknown function '%s'." name in
+          raise (NameError msg)
+      | Some var ->
+          var
+
+    method dispose = 
+      Jit.dispose jit
+
+    method add_package name =
+      let pkg = new package (Llvm.create_module the_context name) in
+      Hashtbl.add map name pkg;
+      Jit.add_module pkg#get_module jit;
+      pkg
+
+    method load_package filename =
+      let module MemBuf = Llvm.MemoryBuffer in
+      let membuf = MemBuf.of_file filename in
+      let pkg = (
+        try
+          Some (new package (Llvm_bitreader.get_module the_context membuf))
+        with Llvm_bitreader.Error msg ->
+          printf "Could not load '%s' file: %s.\n" filename msg;
+          None) in
+      MemBuf.dispose membuf;
+      (match pkg with
+      | Some pkg' ->
+          Hashtbl.add map (Filename.chop_extension filename) pkg';
+          Jit.add_module pkg'#get_module jit
+      | None -> ());
+      pkg
+
+    method iter_packages fn =
+      Hashtbl.iter (fun _ pkg -> fn pkg) map
+
+    method optimize =
+      self#iter_packages (fun pkg -> pkg#optimize self#target_data)
   end;;
