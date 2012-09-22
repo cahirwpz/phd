@@ -168,6 +168,9 @@ class function_pass_manager pkg =
 
     method finalize =
       Llvm.PassManager.finalize fpm
+
+    method dispose = 
+      Llvm.PassManager.dispose fpm
   end;;
 
 class package llvm_module =
@@ -210,7 +213,8 @@ class package llvm_module =
       fpm#set_target_data td;
       ignore (fpm#initialize);
       self#iter_functions (fun fn -> ignore (fpm#run_function fn));
-      ignore (fpm#finalize)
+      ignore (fpm#finalize);
+      fpm#dispose
   end;;
 
 (* JIT Interpreter. *)
@@ -248,24 +252,20 @@ class execution_engine =
 
     method load_package filename =
       let module MemBuf = Llvm.MemoryBuffer in
+      let module BitReader = Llvm_bitreader in
       let membuf = MemBuf.of_file filename in
-      let pkg = (
+      let maybe_pkg = (
         try
-          Some (new package (Llvm_bitreader.get_module the_context membuf))
-        with Llvm_bitreader.Error msg ->
+          let pkg = new package (BitReader.parse_bitcode the_context membuf) in
+          Hashtbl.add map (Filename.chop_extension filename) pkg;
+          Jit.add_module pkg#get_module jit;
+          Some pkg
+        with BitReader.Error msg ->
           printf "Could not load '%s' file: %s.\n" filename msg;
           None) in
       MemBuf.dispose membuf;
-      (match pkg with
-      | Some pkg' ->
-          Hashtbl.add map (Filename.chop_extension filename) pkg';
-          Jit.add_module pkg'#get_module jit
-      | None -> ());
-      pkg
+      maybe_pkg
 
     method iter_packages fn =
       Hashtbl.iter (fun _ pkg -> fn pkg) map
-
-    method optimize =
-      self#iter_packages (fun pkg -> pkg#optimize self#target_data)
   end;;

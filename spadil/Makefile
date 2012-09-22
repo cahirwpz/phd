@@ -11,7 +11,7 @@ spadil.byte: runtime.bc
 	ocamlbuild $(FLAGS) -lflag -g -cflag -g $@
 
 runtime.bc: runtime.c
-	clang -emit-llvm -o $@ -c $^
+	clang -emit-llvm -O2 -o $@ -c $^
 
 test: spadil.native
 	@for test in $(tests); do echo "*** $${test}"; ./$^ $${test}; done
@@ -19,6 +19,7 @@ test: spadil.native
 clean:
 	ocamlbuild -clean spadil.{byte,native}
 	@find . -follow -iname '*~' | xargs rm
+	@rm -vf "runtime.bc"
 
 .PHONY: spadil.byte spadil.native test clean
 
