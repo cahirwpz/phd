@@ -173,9 +173,10 @@ class function_pass_manager pkg =
       Llvm.PassManager.dispose fpm
   end;;
 
-class package llvm_module =
+class package a_module a_jit =
   object (self)
-    val package = llvm_module
+    val package = a_module
+    val jit = a_jit
 
     method define_global name value =
       Llvm.define_global name value package
@@ -191,11 +192,14 @@ class package llvm_module =
 
     method lookup_function name =
       match Llvm.lookup_function name package with
-      | None ->
-          let msg = sprintf "Unknown function '%s'." name in
-          raise (NameError msg)
-      | Some var ->
-          var
+      | None -> 
+        let fn = jit#lookup_function name in
+        let name = Llvm.value_name fn in
+        let fn_type = Llvm.element_type (Llvm.type_of fn) in
+        let fn_decl = self#declare_function name fn_type in
+        jit#add_global_mapping fn_decl fn;
+        fn_decl
+      | Some fn -> fn
 
     method iter_functions fn =
       Llvm.iter_functions fn package
@@ -241,11 +245,14 @@ class execution_engine =
       | Some var ->
           var
 
+    method add_global_mapping decl_value def_value =
+      Jit.add_global_mapping decl_value def_value jit
+
     method dispose = 
       Jit.dispose jit
 
     method add_package name =
-      let pkg = new package (Llvm.create_module the_context name) in
+      let pkg = new package (Llvm.create_module the_context name) self in
       Hashtbl.add map name pkg;
       Jit.add_module pkg#get_module jit;
       pkg
@@ -256,7 +263,8 @@ class execution_engine =
       let membuf = MemBuf.of_file filename in
       let maybe_pkg = (
         try
-          let pkg = new package (BitReader.parse_bitcode the_context membuf) in
+          let from_file = BitReader.parse_bitcode the_context membuf in
+          let pkg = new package from_file self in
           Hashtbl.add map (Filename.chop_extension filename) pkg;
           Jit.add_module pkg#get_module jit;
           Some pkg
