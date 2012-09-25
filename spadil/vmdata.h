@@ -15,41 +15,49 @@ const GEN key_key;
 const GEN vector_1d_key;
 const GEN string_key;
 const GEN symbol_key;
+const GEN integer_key;
 const GEN bigint_key;
-const GEN defloat_key;
+const GEN dfloat_key;
+const GEN cons_key;
 
-struct vector_1d {
+typedef struct vector_1d {
   KEY descriptor;
   LONG size;
   GEN data[1];
-};
+} vector_1d_t;
 
-struct string {
+typedef struct string {
   KEY descriptor;
   LONG size;
   CHAR data[1];
-};
+} string_t;
 
-struct symbol {
+typedef struct symbol {
   KEY descriptor;
   GEN name;
   GEN properties;
-};
+} symbol_t;
 
-struct cons {
-  GEN first;
-  GEN next;
-};
-
-struct dfloat {
+typedef struct dfloat {
   KEY descriptor;
   double dval;
-};
+} dfloat_t;
 
-struct bigint {
+typedef struct integer {
+  KEY descriptor;
+  LONG ival;
+} integer_t;
+
+typedef struct bigint {
   KEY descriptor;
   LONG size;
   LONG data[1];
-};
+} bigint_t;
+
+typedef struct cons {
+  KEY descriptor;
+  GEN fst;
+  GEN snd;
+} cons_t;
 
 #endif

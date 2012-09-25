@@ -1,17 +1,24 @@
-FLAGS = -use-ocamlfind
+CC	 = clang
+CPPFLAGS = -I/opt/local/include
+CFLAGS	 = -fno-inline -O2
+
+FLAGS	= -use-ocamlfind -cflag -g -lflag -g
 
 all: spadil.native
 
 tests = $(wildcard tests/*.lisp)
 
-spadil.native: runtime.bc
+spadil.native: runtime.bc vmdata.bc
 	ocamlbuild $(FLAGS) $@
 
-spadil.byte: runtime.bc
-	ocamlbuild $(FLAGS) -lflag -g -cflag -g $@
+spadil.byte: runtime.bc vmdata.bc
+	ocamlbuild $(FLAGS) $@
 
-runtime.bc: runtime.c
-	clang -emit-llvm -O2 -o $@ -c $^
+%.bc: %.c
+	$(CC) $(CPPFLAGS) -emit-llvm $(CFLAGS) -o $@ -c $^
+
+%.ll: %.bc
+	llvm-dis $^
 
 test: spadil.native
 	@for test in $(tests); do echo "*** $${test}"; ./$^ $${test}; done
@@ -19,7 +26,7 @@ test: spadil.native
 clean:
 	ocamlbuild -clean spadil.{byte,native}
 	@find . -follow -iname '*~' | xargs rm
-	@rm -vf "runtime.bc"
+	@rm -vf *.bc *.ll
 
 .PHONY: spadil.byte spadil.native test clean
 

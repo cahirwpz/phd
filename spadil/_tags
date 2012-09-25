@@ -5,3 +5,4 @@
 <*.*>: package(llvm.scalar_opts)
 <*.*>: package(llvm.target)
 <*.*>: package(llvm.bitreader)
+<*.*>: use_gc

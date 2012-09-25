@@ -3,6 +3,14 @@ open Codegen_base
 open Printf 
 open Utils
 
+let gen_type = Llvm.pointer_type i8_type
+
+let box_i32 builder v =
+  builder#build_call "box_i32" [| v |]
+
+let unbox_i32 builder v =
+  builder#build_call "unbox_i32" [| v |]
+
 let cast_to_bool builder cond =
   match Llvm.type_of cond with
   | t when t = i32_type ->
@@ -22,7 +30,7 @@ let rec codegen builder exp =
   | Ast.Float n ->
       const_float double_type n
   | Ast.Int n ->
-      const_int i32_type n
+      box_i32 builder (const_int i32_type n)
   | Ast.String s ->
       const_stringz s
   | Ast.Value name ->
@@ -48,7 +56,7 @@ let rec codegen builder exp =
 
 and codegen_block builder vars exps =
   let codegen = codegen builder in
-  let create_local_var name = ignore (builder#var_intro i32_type name) in
+  let create_local_var name = ignore (builder#var_intro gen_type name) in
   List.iter create_local_var vars;
   let last = Utils.last (List.map codegen exps) in
   List.iter builder#var_forget vars;
@@ -61,10 +69,13 @@ and codegen_unary_op builder op exp =
   | _ -> raise (NameError (sprintf "Unknown operator '%s'." op))
 
 and codegen_binary_op builder op lhs rhs =
+  let lhs = unbox_i32 builder lhs in
+  let rhs = unbox_i32 builder rhs in
+  let box = box_i32 builder in
   let cast_to_bool = cast_to_bool builder in
   match op with
-  | "+" -> builder#build_add lhs rhs
-  | "-" -> builder#build_sub lhs rhs
+  | "+" -> box (builder#build_add lhs rhs)
+  | "-" -> box (builder#build_sub lhs rhs)
   | "*" -> builder#build_mul lhs rhs
   | "/" -> builder#build_sdiv lhs rhs
   | "REM" -> builder#build_srem rhs lhs
@@ -160,10 +171,11 @@ let rec codegen_toplevel pkg tree =
   try
     match tree with
     | Ast.Global (name, None) ->
-        Some (pkg#declare_global i32_type name)
+        Some (pkg#declare_global gen_type name)
     | Ast.Global (name, Some value) ->
         let bdr = pkg#new_builder in
-        Some (pkg#define_global name (codegen bdr value))
+        let value' = codegen bdr value in
+        Some (pkg#define_global name value')
     | Ast.Assign (name, Ast.Lambda (args, body)) ->
         let name = Ast.literal_symbol name
         and args = Array.of_list args in
@@ -188,8 +200,8 @@ let rec codegen_toplevel pkg tree =
 
 and codegen_function_decl pkg name args =
   (* Declare function type. *)
-  let args_t = Array.make (Array.length args) i32_type
-  and return_t = i32_type in
+  let args_t = Array.make (Array.length args) gen_type
+  and return_t = gen_type in
   let fn_type = Llvm.function_type return_t args_t in
   (* Create the function declaration and add it to the module. *)
   let fn = pkg#declare_function name fn_type in
@@ -209,7 +221,7 @@ and codegen_function_def builder fn args body =
     let name = args.(i) in
 
     (* Create an alloca for this variable. *)
-    ignore(builder#var_intro i32_type name);
+    ignore(builder#var_intro gen_type name);
 
     (* Store the initial value into the alloca. *)
     ignore(builder#build_store value name);

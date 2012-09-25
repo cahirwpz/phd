@@ -20,6 +20,9 @@ and parse_unit pkg input =
   | None -> exit 1
 
 let load_runtime jit =
+  (match jit#load_package "vmdata.bc" with
+  | Some pkg -> pkg#dump;
+  | None -> ());
   (match jit#load_package "runtime.bc" with
   | Some pkg -> pkg#dump;
   | None -> ());
@@ -43,7 +46,8 @@ let load_packages jit = function
 
 let execute jit = 
   let main_fn = jit#lookup_function "main" in
-  let result = jit#run_function main_fn [||] in
+  let unbox_i32 = jit#lookup_function "unbox_i32" in
+  let result = jit#run_function unbox_i32 [| (jit#run_function main_fn [||]) |] in
   let result' = Llvm_executionengine.GenericValue.as_int32 result in
   printf "@.; Evaluate main function@.";
   printf "@.Evaluated to %d.@." (Int32.to_int result')
