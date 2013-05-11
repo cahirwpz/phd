@@ -1,1 +1,2 @@
 <common>: include
+<spad.*>: package(str)

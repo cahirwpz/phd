@@ -1,10 +1,12 @@
+FLAGS = -use-ocamlfind
+
 all: spad.native
 
 spad.native:
-	ocamlbuild $@
+	ocamlbuild $(FLAGS) $@
 
 spad.byte:
-	ocamlbuild -lflag -g -cflag -g $@
+	ocamlbuild $(FLAGS) -lflag -g -cflag -g $@
 
 clean:
 	ocamlbuild -clean spad.{byte,native}

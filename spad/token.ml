@@ -1,7 +1,10 @@
+type kind = [`space | `separator | `string | `symbol | `keyword | `operator |
+             `number | `comment | `reserved | `builtin]
+
 type token =
   (* Indentation and formatting. Lc = line continuation ('_\n'). *)
   | Indent of int | Eol | Eof | Lc
- 
+
   (* Comment that begins with '--' or '++'. *)
   | Comment of string
 
@@ -49,7 +52,7 @@ type token =
   | Comma | Semicolon
 
   (* Arithmetic operators '+', '-', '*', '/', '^' *)
-  | Plus | Minus | Times | By | Pow
+  | Plus | Minus | Times | Div | Pow
 
   (* Extra arithmetic operators 'quo', 'exquo', 'rem' *)
   | Quo | Exquo | Rem
@@ -90,70 +93,83 @@ type token =
   | Has
 
 let as_string = function
-  | Indent n -> String.make n ' '
-  | Eol -> "\n"
-  | Lc -> "_\n"
-  | Eof | Comment _ -> ""
-  | Name name | TypeName name -> name
-  | Float f -> string_of_float f
-  | Int i -> string_of_int i
-  | String str -> "\"" ^ str ^ "\""
-  | LParen -> "("
-  | RParen -> ")"
-  | LBracket -> "["
-  | RBracket -> "]"
-  | OfType -> ":"
+  | Add -> "add"
+  | And -> "and"
   | Arrow -> "->"
-  | ToType -> "::"
-  | UsesType -> "$"
-  | ReturnsType -> "@"
-  | Pretend -> "pretend"
-  | HasType -> "case"
   | Assign -> ":="
+  | Bar -> "|"
   | Bind -> "=="
-  | Macro -> "==>"
-  | Lambda -> "+->"
-  | Ellipsis -> ".."
+  | Break -> "break"
   | Comma -> ","
-  | Semicolon -> ";"
-  | Plus -> "+"
-  | Minus -> "-"
-  | Times -> "*"
-  | By -> "/"
-  | Pow -> "^"
-  | Quo -> "quo"
-  | Exquo -> "exquo"
-  | Rem -> "rem"
-  | Lt -> "<"
-  | Le -> "<="
+  | Comment s -> s
+  | Continue -> "iterate"
+  | Div -> "/"
+  | Dot -> "."
+  | Ellipsis -> ".."
+  | Else -> "else"
+  | Eof -> ""
+  | Eol -> "\n"
   | Eq -> "="
-  | Ne -> "~="
+  | Error -> "error"
+  | Exquo -> "exquo"
+  | Float f -> string_of_float f
+  | For -> "for"
   | Ge -> ">=" 
   | Gt -> ">"
-  | And -> "and"
-  | Or -> "or"
-  | Not -> "not"
-  | Dot -> "."
-  | Length -> "#"
-  | Quote -> "'"
-  | Bar -> "|"
-  | Add -> "add"
-  | With -> "with"
-  | Import -> "import"
-  | Where -> "where"
-  | If -> "if"
-  | Then -> "then"
-  | Else -> "else"
-  | When -> "=>"
-  | Return -> "return"
-  | Error -> "error"
-  | For -> "for"
-  | In -> "in"
-  | Repeat -> "repeat"
-  | Step -> "by"
-  | Break -> "break"
-  | Continue -> "iterate"
   | Has -> "has"
+  | HasType -> "case"
+  | If -> "if"
+  | Import -> "import"
+  | In -> "in"
+  | Indent n -> String.make n ' '
+  | Int i -> string_of_int i
+  | LBracket -> "["
+  | LParen -> "("
+  | Lambda -> "+->"
+  | Lc -> "_\n"
+  | Le -> "<="
+  | Length -> "#"
+  | Lt -> "<"
+  | Macro -> "==>"
+  | Minus -> "-"
+  | Name name | TypeName name -> name
+  | Ne -> "~="
+  | Not -> "not"
+  | OfType -> ":"
+  | Or -> "or"
+  | Plus -> "+"
+  | Pow -> "^"
+  | Pretend -> "pretend"
+  | Quo -> "quo"
+  | Quote -> "'"
+  | RBracket -> "]"
+  | RParen -> ")"
+  | Rem -> "rem"
+  | Repeat -> "repeat"
+  | Return -> "return"
+  | ReturnsType -> "@"
+  | Semicolon -> ";"
+  | Step -> "by"
+  | String str -> "\"" ^ str ^ "\""
+  | Then -> "then"
+  | Times -> "*"
+  | ToType -> "::"
+  | UsesType -> "$"
+  | When -> "=>"
+  | Where -> "where"
+  | With -> "with"
 
-let print tokens =
-  List.iter (fun token -> print_string (as_string token)) tokens
+let token_kind = function
+  | Indent _ | Eol | Lc | Eof -> `space
+  | Comment _ -> `comment
+  | Name _ | TypeName _ -> `symbol
+  | Float _ | Int _ -> `number
+  | String _ -> `string
+  | LParen | RParen | LBracket | RBracket | Comma | Semicolon -> `separator
+  | Assign | Bind | Macro | Ellipsis
+  | Plus | Minus | Times | Pow | Div | Lt | Le | Eq | Ne | Ge | Gt
+  | Dot | Length | Quote | Bar | When | OfType | Arrow | ToType
+  | UsesType | ReturnsType | Lambda -> `operator
+  | If | Then | Else | For | In | Repeat | Break | Return | Step | Where | And
+  | Or | Not | Quo | Rem | Exquo | Add | With | Import | Pretend | HasType | Has
+  | Error | Continue -> `keyword
