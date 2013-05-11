@@ -9,3 +9,9 @@ class strbuf =
     method gets =
       Buffer.contents buffer
   end
+
+class strbuf_with str =
+  object (self)
+    inherit strbuf
+    initializer self#puts str
+  end
