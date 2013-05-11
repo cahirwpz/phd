@@ -55,7 +55,6 @@ let print_tokens tokens =
   List.iter (fun x -> print_string (highlight x)) tokens 
 
 let main () =
-  Std.print builtins;
   if Array.length Sys.argv > 1 then
    for i = 1 to Array.length Sys.argv - 1 do
      let filename = Sys.argv.(i) in

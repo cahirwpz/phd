@@ -21,9 +21,10 @@ let alpha = ['a'-'z' 'A'-'Z']
 let extra = ['!' '?' '\'' '_']
 let graph = ['&' '*' '(' ')' ':' '-' '>' '<' '%' '$' '"' ' ' '_' '=' '^' '{' '}'
              '^' '\\' '[' ']' '!' '#' '`' '.' '/' '~' '|' '?' ',' ';' '+' '\''
-             '@' 'a' 'o' 'e' 'p']
+             '@']
 let escaped = '_' (graph | digit)
-let symbol = (escaped | alpha | '%' | '$' | '?') (alpha | digit | extra | escaped)*
+let symbol =
+  (alpha | escaped | '_' | '%' | '$' | '?') (alpha | digit | extra | escaped)*
 let comment = [^ '\n']+
 
 let integer = digit+
