@@ -1,0 +1,4 @@
+true false nil atom
+append cons first rest null
+list car cdr copy reverse size
+function apply

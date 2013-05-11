@@ -1,0 +1,2 @@
+<common>: include
+<boot.*>: package(num), package(extlib), package(str)
