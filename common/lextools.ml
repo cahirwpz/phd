@@ -1,26 +1,20 @@
 open Lexing
 
 (* Word position within a file. *)
-class wordpos filename line column size =
+class wordpos filename line column =
   object (self)
     val filename : string = filename
     val line : int = line
     val column : int = column
-    val size : int = size
     method as_string =
-      Printf.sprintf "%s:%d:%d (#%d)" filename line (column + 1) size
-    method get_size = size
+      Printf.sprintf "%s:%d:%d" filename line (column + 1)
   end
 
 exception LexerError of wordpos * string
 
 let wordpos_from_lexbuf lexbuf =
   let p = lexeme_start_p lexbuf in
-  let fname = p.pos_fname
-  and lnum = p.pos_lnum 
-  and cnum = p.pos_cnum - p.pos_bol
-  and size = lexeme_end lexbuf - lexeme_start lexbuf
-  in new wordpos fname lnum cnum size
+  new wordpos p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol)
 
 let open_named_lexbuf input fname =
   let lexbuf = from_channel input in
@@ -39,12 +33,12 @@ class strbuf =
       Buffer.contents buffer
   end
 
-class strbuf_with str =
-  object (self)
-    inherit strbuf
-    initializer self#puts str
-  end
+let strbuf_from_str str =
+  let buf = new strbuf in
+  buf#puts str;
+  buf
 
+(* Useful for counting indentations. *)
 let count_spaces spaces =
   let l = ref 0 in
   let counter c = 

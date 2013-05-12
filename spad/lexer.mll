@@ -63,11 +63,11 @@ rule token = parse
 
   (* Ambiguous tokens that begin with plus character - '+', '++', '+->'. *)
   | "+->" { Lambda }
-  | "++" as p { lex_comment (new strbuf_with p) lexbuf }
+  | "++" as p { lex_comment (strbuf_from_str p) lexbuf }
   | '+' { Plus }
 
   (* Ambiguous tokens that begin with minus character - '-', '->', '--'. *)
-  | "--" as p { lex_comment (new strbuf_with p) lexbuf }
+  | "--" as p { lex_comment (strbuf_from_str p) lexbuf }
   | "->" { Arrow }
   | "-" { Minus }
 

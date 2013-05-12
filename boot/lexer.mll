@@ -31,7 +31,7 @@ rule token = parse
   | '"' { lex_string (new strbuf) lexbuf }
 
   (* Multiline comments. *)
-  | ")if false" as p { lex_mlcomment (new strbuf_with p) lexbuf }
+  | ")if false" as p { lex_mlcomment (strbuf_from_str p) lexbuf }
 
   (* Directives. *)
   | ")package" { Package }
@@ -60,11 +60,11 @@ rule token = parse
   | '=' { Eq }
 
   (* '+', '++' *)
-  | "++" as p { lex_comment (new strbuf_with p) lexbuf }
+  | "++" as p { lex_comment (strbuf_from_str p) lexbuf }
   | '+' { Plus }
 
   (* '-', '--' *)
-  | "--" as p { lex_comment (new strbuf_with p) lexbuf }
+  | "--" as p { lex_comment (strbuf_from_str p) lexbuf }
   | "-" { Minus }
 
   (* '.', '..' *)
