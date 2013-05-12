@@ -1,24 +1,25 @@
-type kind = [`space | `separator | `string | `symbol | `keyword | `operator |
-             `number | `comment | `reserved | `builtin | `typename]
+type token_kind = [
+  `space | `separator | `string | `symbol | `keyword | `operator | `number |
+  `comment | `reserved | `builtin | `typename ]
 
-type token =
+type token_type =
   (* Indentation and formatting. Lc = line continuation ('_\n'). *)
-  | Indent of int | Eol | Eof | Lc
+  | Indent | Eol | Eof | Lc
 
   (* Comment that begins with '--' or '++'. *)
-  | Comment of string
+  | Comment
 
   (* Name that begins with capital letter or is '%'. *)
-  | TypeName of string
+  | TypeName
 
-  (* Name that begins with small letter, may end with [!?']. *)
-  | Name of string
+  (* Symbol that begins with small letter, may end with [!?']. *)
+  | Symbol
 
   (* Directives. *)
   | Abbrev
 
   (* Basic types. *)
-  | Float of float | Int of int | String of string
+  | Float | Int | String
 
   (* Expression grouping, etc. *)
   | LParen | RParen
@@ -95,83 +96,17 @@ type token =
   (* Type handling related: 'has'. *)
   | Has
 
-let as_string = function
-  | Abbrev -> ")abbrev"
-  | Add -> "add"
-  | And -> "and"
-  | Arrow -> "->"
-  | Assign -> ":="
-  | Bar -> "|"
-  | Bind -> "=="
-  | Break -> "break"
-  | Comma -> ","
-  | Comment s -> s
-  | Continue -> "iterate"
-  | Div -> "/"
-  | Dot -> "."
-  | Ellipsis -> ".."
-  | Else -> "else"
-  | Eof -> ""
-  | Eol -> "\n"
-  | Eq -> "="
-  | Error -> "error"
-  | Exquo -> "exquo"
-  | Float f -> string_of_float f
-  | For -> "for"
-  | Ge -> ">=" 
-  | Gt -> ">"
-  | Has -> "has"
-  | HasType -> "case"
-  | If -> "if"
-  | Import -> "import"
-  | In -> "in"
-  | Indent n -> String.make n ' '
-  | Int i -> string_of_int i
-  | LBracket -> "["
-  | LParen -> "("
-  | Lambda -> "+->"
-  | Lc -> "_\n"
-  | Le -> "<="
-  | Length -> "#"
-  | Lt -> "<"
-  | Macro -> "==>"
-  | Minus -> "-"
-  | Name name | TypeName name -> name
-  | Ne -> "~="
-  | Not -> "not"
-  | OfType -> ":"
-  | Or -> "or"
-  | Plus -> "+"
-  | Pow -> "^"
-  | Pretend -> "pretend"
-  | Quo -> "quo"
-  | Quote -> "'"
-  | RBracket -> "]"
-  | RParen -> ")"
-  | Rem -> "rem"
-  | Repeat -> "repeat"
-  | Return -> "return"
-  | ReturnsType -> "@"
-  | Semicolon -> ";"
-  | Step -> "by"
-  | String str -> "\"" ^ str ^ "\""
-  | Then -> "then"
-  | Times -> "*"
-  | ToType -> "::"
-  | UsesType -> "$"
-  | When -> "=>"
-  | Where -> "where"
-  | With -> "with"
+type token = { typ : token_type; token : Lextools.token; }
 
-let token_kind = function
-  | Indent _ | Eol | Lc | Eof -> `space
-  | Comment _ -> `comment
+let kind_of_token t =
+  match t.typ with
+  | Indent | Eol | Lc | Eof -> `space
+  | Comment -> `comment
   | Abbrev -> `reserved
-  | Name _ -> `symbol
-  | TypeName "%" -> `reserved
-  | TypeName _ -> `typename
-  | Float _ | Int _ -> `number
-  | String _ -> `string
+  | Symbol -> `symbol
+  | TypeName -> `typename
+  | Float | Int -> `number
+  | String -> `string
   | LParen | RParen | LBracket | RBracket | Comma | Semicolon -> `separator
   | Assign | Bind | Macro | Ellipsis
   | Plus | Minus | Times | Pow | Div | Lt | Le | Eq | Ne | Ge | Gt

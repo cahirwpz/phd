@@ -1,14 +1,10 @@
-class wordpos : string -> int -> int ->
-  object
-    val column : int
-    val filename : string
-    val line : int
-    method as_string : string
-  end
+type token = { text : string; source : string; line : int; column : int; }
 
-exception LexerError of wordpos * string
+val token_to_string : token -> string
+val token_from_lexbuf : Lexing.lexbuf -> token
 
-val wordpos_from_lexbuf : Lexing.lexbuf -> wordpos
+exception LexerError of token * string
+
 val open_named_lexbuf : in_channel -> string -> Lexing.lexbuf
 
 class strbuf :

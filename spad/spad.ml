@@ -5,19 +5,19 @@ open Colors
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with LexerError (pos, msg) ->
-    Printf.printf "%s %s\n" pos#as_string msg; exit 0
+  with LexerError (tok, msg) ->
+    Printf.printf "%s %s\n" (token_to_string tok) msg; exit 0
 
 and tokenize' lexbuf tokens =
   match Lexer.token lexbuf with
-  | Token.Eof -> List.rev tokens
+  | {typ=Token.Eof} -> List.rev tokens
   | token -> tokenize' lexbuf (token::tokens)
 
 let nochange = fun x -> x
 let unescape = Str.global_replace (Str.regexp "_") ""
 
 let highlight t =
-  let k = token_kind t in
+  let k = kind_of_token t in
   (match k with
   | `comment -> cyan 
   | `string -> magenta
@@ -27,7 +27,7 @@ let highlight t =
   | `keyword -> yellow
   | `separator -> white
   | `typename -> underline
-  | _ -> nochange) (as_string t)
+  | _ -> nochange) (t.token.text)
 
 let print_tokens tokens =
   List.iter (fun x -> print_string (highlight x)) tokens 

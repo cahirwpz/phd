@@ -1,20 +1,18 @@
 open Lexing
 
-(* Word position within a file. *)
-class wordpos filename line column =
-  object (self)
-    val filename : string = filename
-    val line : int = line
-    val column : int = column
-    method as_string =
-      Printf.sprintf "%s:%d:%d" filename line (column + 1)
-  end
+type token = { text : string; source : string; line : int; column : int; }
 
-exception LexerError of wordpos * string
+let token_to_string t =
+  Printf.sprintf "%s:%d:%d {%s}" t.source t.line (t.column + 1) t.text
 
-let wordpos_from_lexbuf lexbuf =
+exception LexerError of token * string
+
+let token_from_lexbuf lexbuf =
   let p = lexeme_start_p lexbuf in
-  new wordpos p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol)
+  let fname = p.pos_fname
+  and lnum = p.pos_lnum
+  and cnum = p.pos_cnum - p.pos_bol in
+  {text=lexeme lexbuf; source=fname; line=lnum; column=cnum}
 
 let open_named_lexbuf input fname =
   let lexbuf = from_channel input in
