@@ -7,7 +7,7 @@ module StringSet = Set.Make(String)
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with Lexer.Failure (pos, msg) ->
+  with LexerError (pos, msg) ->
     Printf.printf "%s %s\n" pos#as_string msg; exit 0
 
 and tokenize' lexbuf tokens =

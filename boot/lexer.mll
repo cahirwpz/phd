@@ -1,18 +1,8 @@
 {
   open Lexing
   open Lextools
-  open Strbuf
   open Token
-  open Wordpos
   open Num
-
-  let count_spaces spaces =
-    let l = ref 0 in
-    let counter c = 
-      l := !l + (if c = '\t' then 8 else 1)
-    in String.iter counter spaces; !l
-
-  exception Failure of wordpos * string
 }
 
 let digit = ['0'-'9']
@@ -42,6 +32,8 @@ rule token = parse
 
   (* Multiline comments. *)
   | ")if false" as p { lex_mlcomment (new strbuf_with p) lexbuf }
+
+  (* Directives. *)
   | ")package" { Package }
 
   (* One character tokens: '()[]*,;^#|' *)
@@ -126,7 +118,7 @@ rule token = parse
 
   | _ as c { let pos = wordpos_from_lexbuf lexbuf
              and msg = Printf.sprintf "Unrecognized character '%c'" c
-             in raise (Failure (pos, msg)) }
+             in raise (LexerError (pos, msg)) }
 
 and lex_comment buf = parse
   | [^'\n']* as s { buf#puts s; Comment buf#gets }

@@ -1,5 +1,5 @@
 type kind = [`space | `separator | `string | `symbol | `keyword | `operator |
-             `number | `comment | `reserved | `builtin]
+             `number | `comment | `reserved | `builtin | `typename]
 
 type token =
   (* Indentation and formatting. Lc = line continuation ('_\n'). *)
@@ -13,6 +13,9 @@ type token =
 
   (* Name that begins with small letter, may end with [!?']. *)
   | Name of string
+
+  (* Directives. *)
+  | Abbrev
 
   (* Basic types. *)
   | Float of float | Int of int | String of string
@@ -93,6 +96,7 @@ type token =
   | Has
 
 let as_string = function
+  | Abbrev -> ")abbrev"
   | Add -> "add"
   | And -> "and"
   | Arrow -> "->"
@@ -162,7 +166,10 @@ let as_string = function
 let token_kind = function
   | Indent _ | Eol | Lc | Eof -> `space
   | Comment _ -> `comment
-  | Name _ | TypeName _ -> `symbol
+  | Abbrev -> `reserved
+  | Name _ -> `symbol
+  | TypeName "%" -> `reserved
+  | TypeName _ -> `typename
   | Float _ | Int _ -> `number
   | String _ -> `string
   | LParen | RParen | LBracket | RBracket | Comma | Semicolon -> `separator

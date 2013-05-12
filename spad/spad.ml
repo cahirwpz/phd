@@ -5,7 +5,7 @@ open Colors
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with Lexer.Failure (pos, msg) ->
+  with LexerError (pos, msg) ->
     Printf.printf "%s %s\n" pos#as_string msg; exit 0
 
 and tokenize' lexbuf tokens =
@@ -26,6 +26,7 @@ let highlight t =
   | `number -> red
   | `keyword -> yellow
   | `separator -> white
+  | `typename -> underline
   | _ -> nochange) (as_string t)
 
 let print_tokens tokens =

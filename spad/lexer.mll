@@ -1,17 +1,7 @@
 {
   open Lexing
   open Lextools
-  open Strbuf
   open Token
-  open Wordpos
-
-  let count_spaces spaces =
-    let l = ref 0 in
-    let counter c = 
-      l := !l + (if c = '\t' then 8 else 1)
-    in String.iter counter spaces; !l
-
-  exception Failure of wordpos * string
 }
 
 let digit = ['0'-'9']
@@ -23,7 +13,7 @@ let graph = ['&' '*' '(' ')' ':' '-' '>' '<' '%' '$' '"' ' ' '_' '=' '^' '{' '}'
              '@']
 let escaped = '_' (graph | digit)
 let symbol =
-  (alpha | escaped | '_') (alpha | digit | extra | escaped)*
+  (alpha | escaped | '_' | '%') (alpha | digit | extra | escaped)*
 let comment = [^ '\n']+
 
 let integer = digit+
@@ -38,6 +28,9 @@ rule token = parse
   
   (* Strings (the contents will unescaped). *)
   | '"' { lex_string (new strbuf) lexbuf }
+
+  (* Directives. *)
+  | ")abbrev" { Abbrev }
 
   (* One character tokens: '()[]$@*,;^' *)
   | '(' { LParen }
@@ -124,6 +117,7 @@ rule token = parse
     | "pretend"   -> Pretend
     | "quo"       -> Quo
     | "rem"       -> Rem
+    | "repeat"    -> Repeat
     | "return"    -> Return
     | "then"      -> Then
     | "when"      -> When
@@ -132,7 +126,7 @@ rule token = parse
     | _ ->
         begin
           match name.[0] with
-          | 'a'..'z' ->
+          | 'a'..'z' | '%' ->
               Name name
           | _ ->
               TypeName name
@@ -145,7 +139,7 @@ rule token = parse
 
   | _ as c { let pos = wordpos_from_lexbuf lexbuf
              and msg = Printf.sprintf "Unrecognized character '%c'" c
-             in raise (Failure (pos, msg)) }
+             in raise (LexerError (pos, msg)) }
 
 and lex_comment buf = parse
   | [^'\n']* as s { buf#puts s; Comment buf#gets }
