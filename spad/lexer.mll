@@ -3,8 +3,7 @@
   open Lextools
   open Token
 
-  let mk_tok typ lexbuf =
-    { typ = typ; token = token_from_lexbuf lexbuf; }
+  let mk_tok = token_from_lexbuf
 }
 
 let digit = ['0'-'9']
@@ -141,6 +140,6 @@ rule token = parse
   | '\n' { new_line lexbuf; mk_tok Eol lexbuf }
   | eof { mk_tok Eof lexbuf }
 
-  | _ as c { let tok = token_from_lexbuf lexbuf
+  | _ as c { let pos = tokpos_from_lexbuf lexbuf
              and msg = Printf.sprintf "Unrecognized character '%c'" c
-             in raise (LexerError (tok, msg)) }
+             in raise (LexerError (pos, msg)) }

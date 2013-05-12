@@ -1,19 +1,14 @@
-type token = { text : string; source : string; line : int; column : int; }
+type tokpos = { source : string; line : int; column : int; }
 
-val token_to_string : token -> string
-val token_from_lexbuf : Lexing.lexbuf -> token
+val tokpos_to_string : tokpos -> string
+val tokpos_from_lexbuf : Lexing.lexbuf -> tokpos
 
-exception LexerError of token * string
+exception LexerError of tokpos * string
+
+type 'a token = { typ : 'a; text : string; pos : tokpos; }
+
+val token_from_lexbuf : 'a -> Lexing.lexbuf -> 'a token
 
 val open_named_lexbuf : in_channel -> string -> Lexing.lexbuf
-
-class strbuf :
-  object
-    method gets : string
-    method putc : char -> unit
-    method puts : string -> unit
-  end
-
-val strbuf_from_str : string -> strbuf
 
 val count_spaces: string -> int

@@ -1,3 +1,5 @@
+open Lextools
+
 type token_kind = [
   `space | `separator | `string | `symbol | `keyword | `operator | `number |
   `comment | `reserved | `builtin | `typename ]
@@ -96,7 +98,7 @@ type token_type =
   (* Type handling related: 'has'. *)
   | Has
 
-type token = { typ : token_type; token : Lextools.token; }
+type spad_token = token_type token
 
 let kind_of_token t =
   match t.typ with

@@ -7,8 +7,8 @@ module StringSet = Set.Make(String)
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with LexerError (tok, msg) ->
-    Printf.printf "%s %s\n" (token_to_string tok) msg; exit 0
+  with LexerError (pos, msg) ->
+    Printf.printf "%s %s\n" (tokpos_to_string pos) msg; exit 0
 
 and tokenize' lexbuf tokens =
   match Lexer.token lexbuf with
@@ -28,8 +28,7 @@ let nochange = fun x -> x
 let unescape = Str.global_replace (Str.regexp "_") ""
 
 let highlight t =
-  let kind = kind_of_token t
-  and text = t.token.text in
+  let kind = kind_of_token t in
   (match kind with
   | `comment -> cyan 
   | `string -> magenta
@@ -41,16 +40,16 @@ let highlight t =
   | `symbol ->
       (match t.typ with
       | Symbol ->
-          if StringSet.mem text builtins then
+          if StringSet.mem t.text builtins then
             blue
-          else if StringSet.mem (unescape text) lisp then
+          else if StringSet.mem (unescape t.text) lisp then
             inverse
-          else if text.[0] == '$' then
+          else if t.text.[0] == '$' then
             underline
           else
             nochange
       | _ -> nochange)
-  | _ -> nochange) text
+  | _ -> nochange) t.text
 
 let print_tokens tokens =
   List.iter (fun x -> print_string (highlight x)) tokens 

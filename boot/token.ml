@@ -1,3 +1,5 @@
+open Lextools
+
 type token_kind = [
   `space | `separator | `string | `symbol | `keyword | `operator | `number |
   `comment | `reserved | `builtin]
@@ -70,7 +72,7 @@ type token_type =
   (* Other keywords. *)
   | Case | Is | IsNot | Of | Where | Local
 
-type token = { typ : token_type; token : Lextools.token; }
+type boot_token = token_type Lextools.token
 
 let kind_of_token t =
   match t.typ with

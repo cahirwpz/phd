@@ -5,8 +5,8 @@ open Token
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with LexerError (tok, msg) ->
-    Printf.printf "%s %s\n" (token_to_string tok) msg; exit 0
+  with LexerError (pos, msg) ->
+    Printf.printf "%s %s\n" (tokpos_to_string pos) msg; exit 0
 
 and tokenize' lexbuf tokens =
   match Lexer.token lexbuf with
@@ -17,8 +17,7 @@ let nochange = fun x -> x
 let unescape = Str.global_replace (Str.regexp "_") ""
 
 let highlight t =
-  let k = kind_of_token t
-  and text = t.token.text in
+  let k = kind_of_token t in
   (match k with
   | `comment -> cyan 
   | `string -> magenta
@@ -28,7 +27,7 @@ let highlight t =
   | `keyword -> yellow
   | `separator -> white
   | `typename -> underline
-  | _ -> nochange) text
+  | _ -> nochange) t.text
 
 let print_tokens tokens =
   List.iter (fun x -> print_string (highlight x)) tokens 
