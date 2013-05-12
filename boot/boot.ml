@@ -1,5 +1,5 @@
-open Lextools
 open Colors
+open Lextools
 open Token
 
 module StringSet = Set.Make(String)
@@ -7,12 +7,12 @@ module StringSet = Set.Make(String)
 let rec tokenize lexbuf =
   try
     tokenize' lexbuf []
-  with LexerError (pos, msg) ->
-    Printf.printf "%s %s\n" pos#as_string msg; exit 0
+  with LexerError (tok, msg) ->
+    Printf.printf "%s %s\n" (token_to_string tok) msg; exit 0
 
 and tokenize' lexbuf tokens =
   match Lexer.token lexbuf with
-  | Token.Eof -> List.rev tokens
+  | {typ=Token.Eof} -> List.rev tokens
   | token -> tokenize' lexbuf (token::tokens)
 
 let read_symbols path =
@@ -28,8 +28,9 @@ let nochange = fun x -> x
 let unescape = Str.global_replace (Str.regexp "_") ""
 
 let highlight t =
-  let k = token_kind t in
-  (match k with
+  let kind = kind_of_token t
+  and text = t.token.text in
+  (match kind with
   | `comment -> cyan 
   | `string -> magenta
   | `operator -> green
@@ -38,18 +39,18 @@ let highlight t =
   | `keyword -> yellow
   | `separator -> white
   | `symbol ->
-      (match t with
-      | Name n ->
-          if StringSet.mem n builtins then
+      (match t.typ with
+      | Symbol ->
+          if StringSet.mem text builtins then
             blue
-          else if StringSet.mem (unescape n) lisp then
+          else if StringSet.mem (unescape text) lisp then
             inverse
-          else if String.get n 0 == '$' then
+          else if text.[0] == '$' then
             underline
           else
             nochange
       | _ -> nochange)
-  | _ -> nochange) (as_string t)
+  | _ -> nochange) text
 
 let print_tokens tokens =
   List.iter (fun x -> print_string (highlight x)) tokens 

@@ -1,20 +1,19 @@
-open Num
+type token_kind = [
+  `space | `separator | `string | `symbol | `keyword | `operator | `number |
+  `comment | `reserved | `builtin]
 
-type kind = [`space | `separator | `string | `symbol | `keyword | `operator |
-             `number | `comment | `reserved | `builtin]
-
-type token =
+type token_type =
   (* Indentation and formatting. Lc = line continuation ('_\n'). *)
-  | Indent of int | Eol | Eof | Lc
+  | Indent | Eol | Eof | Lc
 
   (* Comment that begins with '--' or '++'. *)
-  | Comment of string
+  | Comment
 
   (* Name that begins with small letter, may end with [!?']. *)
-  | Name of string
+  | Symbol
 
   (* Basic types. *)
-  | Float of float | Num of num | String of string
+  | Float | Int | String
 
   (* Expression grouping, etc. *)
   | LParen | RParen
@@ -71,71 +70,15 @@ type token =
   (* Other keywords. *)
   | Case | Is | IsNot | Of | Where | Local
 
-let as_string = function
-  | And -> "and"
-  | Assign -> ":="
-  | Bar -> "|"
-  | Bind -> "=="
-  | Break -> "break"
-  | Case -> "case"
-  | Colon -> ":"
-  | Comma -> ","
-  | Comment text -> text
-  | Div -> "/"
-  | Dot -> "."
-  | Ellipsis -> ".."
-  | Else -> "else"
-  | Eof -> ""
-  | Eol -> "\n"
-  | Eq -> "="
-  | Float f -> string_of_float f
-  | For -> "for"
-  | Ge -> ">=" 
-  | Gt -> ">"
-  | If -> "if"
-  | In -> "in"
-  | Indent n -> String.make n ' '
-  | Is -> "is"
-  | IsNot -> "isnt"
-  | LBracket -> "["
-  | LParen -> "("
-  | Lc -> "_\n"
-  | Le -> "<="
-  | Length -> "#"
-  | Local -> "local"
-  | Lt -> "<"
-  | Macro -> "==>"
-  | Minus -> "-"
-  | Name name -> name
-  | Ne -> "~="
-  | Not -> "not"
-  | Num i -> string_of_num i
-  | Of -> "of"
-  | Or -> "or"
-  | Package -> ")package"
-  | Plus -> "+"
-  | Pow -> "^"
-  | Quote -> "'"
-  | RBracket -> "]"
-  | RParen -> ")"
-  | Repeat -> "repeat"
-  | Return -> "return"
-  | Semicolon -> ";"
-  | Step -> "by"
-  | String str -> "\"" ^ str ^ "\""
-  | Then -> "then"
-  | Times -> "*"
-  | Until -> "until"
-  | When -> "=>"
-  | Where -> "where"
-  | While -> "while"
+type token = { typ : token_type; token : Lextools.token; }
 
-let token_kind = function
-  | Indent _ | Eol | Lc | Eof -> `space
-  | Comment _ -> `comment
-  | Name _ -> `symbol
-  | Float _ | Num _ -> `number
-  | String _ -> `string
+let kind_of_token t =
+  match t.typ with
+  | Indent | Eol | Lc | Eof -> `space
+  | Comment -> `comment
+  | Symbol -> `symbol
+  | Float | Int -> `number
+  | String -> `string
   | LParen | RParen | LBracket | RBracket | Comma | Semicolon -> `separator
   | Colon | Assign | Bind | Macro | Ellipsis
   | Plus | Minus | Times | Pow | Div | Lt | Le | Eq | Ne | Ge | Gt

@@ -30,7 +30,7 @@ rule token = parse
   (* Escaping delimeter. *)
   | '_' '\n' { new_line lexbuf; mk_tok Lc lexbuf }
   
-  (* Strings (the contents will unescaped). *)
+  (* Strings (the contents will be unescaped). *)
   | str { mk_tok String lexbuf }
 
   (* Directives. *)

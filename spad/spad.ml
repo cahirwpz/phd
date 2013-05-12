@@ -1,6 +1,6 @@
+open Colors
 open Lextools
 open Token
-open Colors
 
 let rec tokenize lexbuf =
   try
@@ -17,7 +17,8 @@ let nochange = fun x -> x
 let unescape = Str.global_replace (Str.regexp "_") ""
 
 let highlight t =
-  let k = kind_of_token t in
+  let k = kind_of_token t
+  and text = t.token.text in
   (match k with
   | `comment -> cyan 
   | `string -> magenta
@@ -27,7 +28,7 @@ let highlight t =
   | `keyword -> yellow
   | `separator -> white
   | `typename -> underline
-  | _ -> nochange) (t.token.text)
+  | _ -> nochange) text
 
 let print_tokens tokens =
   List.iter (fun x -> print_string (highlight x)) tokens 
