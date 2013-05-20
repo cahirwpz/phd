@@ -125,6 +125,7 @@ rule token = parse
     | "then"      -> mk_tok Then lexbuf
     | "when"      -> mk_tok When lexbuf
     | "where"     -> mk_tok Where lexbuf
+    | "while"     -> mk_tok While lexbuf
     | "with"      -> mk_tok With lexbuf
     | _ ->
         begin

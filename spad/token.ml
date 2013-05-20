@@ -92,8 +92,8 @@ type token_type =
   (* Control flow: 'if', 'then', 'else', '=>', 'return', 'error'. *)
   | If | Then | Else | When | Return | Error
 
-  (* Control flow - loops: 'for', 'in', 'by', 'repeat', 'break', 'iterate'. *)
-  | For | In | Repeat | Step | Break | Continue
+  (* Loops: 'for', 'in', 'by', 'repeat', 'break', 'iterate', 'while'. *)
+  | For | In | Repeat | Step | Break | Continue | While
 
   (* Type handling related: 'has'. *)
   | Has
@@ -116,4 +116,4 @@ let kind_of_token t =
   | UsesType | ReturnsType | Lambda -> `operator
   | If | Then | Else | For | In | Repeat | Break | Return | Step | Where | And
   | Or | Not | Quo | Rem | Exquo | Add | With | Import | Pretend | HasType | Has
-  | Error | Continue -> `keyword
+  | Error | Continue | While -> `keyword
