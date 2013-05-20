@@ -1,15 +1,26 @@
 {
   open Parser
   open Lexing
-  open Strbuf
-  open Wordpos
+  open Lextools
 
   let unknown_char lexbuf c = 
-    let s = (wordpos_from_lexbuf lexbuf)#as_string in
+    let s = tokpos_to_string (tokpos_from_lexbuf lexbuf) in
     Printf.printf "%s Unrecognized character '%c'\n" s c
 
   (* convert digit character to number *)
   let int_of_digit d = Char.code d - Char.code '0'
+
+  (* String buffer class - a simple wrapper for stdlib's Buffer. *)
+  class strbuf =
+    object (self)
+      val buffer = Buffer.create 1
+                method putc c =
+                  Buffer.add_char buffer c
+      method puts s = 
+        Buffer.add_string buffer s
+      method gets =
+        Buffer.contents buffer
+    end
 }
 
 let digit = ['0'-'9']

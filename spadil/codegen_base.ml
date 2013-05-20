@@ -160,8 +160,10 @@ class function_pass_manager pkg =
       (* Finally... initialize it! *)
       Llvm.PassManager.initialize fpm
 
+    (*
     method set_target_data target_data =
       Llvm_target.TargetData.add target_data fpm
+    *)
 
     method run_function fn =
       Llvm.PassManager.run_function fn fpm
@@ -212,9 +214,9 @@ class package a_module a_jit =
     method dump =
       Llvm.dump_module package
 
-    method optimize td =
+    method optimize (*td*) =
       let fpm = new function_pass_manager self in
-      fpm#set_target_data td;
+      (* fpm#set_target_data td; *)
       ignore (fpm#initialize);
       self#iter_functions (fun fn -> ignore (fpm#run_function fn));
       ignore (fpm#finalize);

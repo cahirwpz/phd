@@ -39,7 +39,7 @@ let load_packages jit = function
       let file = open_in filename in
       printf "; Source = '%s'@." filename; 
       parse_file pkg (open_named_lexbuf file filename);
-      pkg#optimize jit#target_data;
+      pkg#optimize; (* jit#target_data; *)
       pkg#dump;
       close_in file
     in List.iter load_package args

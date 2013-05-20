@@ -76,9 +76,9 @@ and codegen_binary_op builder op lhs rhs =
   match op with
   | "+" -> box (builder#build_add lhs rhs)
   | "-" -> box (builder#build_sub lhs rhs)
-  | "*" -> builder#build_mul lhs rhs
-  | "/" -> builder#build_sdiv lhs rhs
-  | "REM" -> builder#build_srem rhs lhs
+  | "*" -> box (builder#build_mul lhs rhs)
+  | "/" -> box (builder#build_sdiv lhs rhs)
+  | "REM" -> box (builder#build_srem rhs lhs)
   | "AND" -> builder#build_and (cast_to_bool lhs) (cast_to_bool rhs)
   | "OR" -> builder#build_or (cast_to_bool lhs) (cast_to_bool rhs)
   | ">" -> builder#build_icmp Icmp.Sgt lhs rhs
