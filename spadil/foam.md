@@ -25,9 +25,9 @@ Imported from Common Lisp
 
 #### Operators
 
-* Arithmetic: [+] (add), [-] (sub, neg), [*] (mul), [/] (div)
+* Arithmetic: [+], [-], [*], [/]
 * Logic: [OR], [AND], [NOT]
-* Compare: [<] (lt), [>] (gt), [<=] (ge), [>=] (le), [=] (eq)
+* Compare: [<], [>], [<=], [>=], [=]
 
 [+]: http://clhs.lisp.se/Body/f_pl.htm
 [-]: http://clhs.lisp.se/Body/f__.htm
@@ -44,7 +44,10 @@ Imported from Common Lisp
 
 #### Lists
 
-[CAR], [CDR], [CONS], [LIST], [LENGTH], [NULL]
+* [CAR], [CDR]: head and tail
+* [CONS], [LIST]: list constructors
+* [LENGTH]: list length
+* [NULL]: is the list empty?
 
 [CAR]: http://clhs.lisp.se/Body/f_car_c.htm#car
 [CDR]: http://clhs.lisp.se/Body/f_car_c.htm#cdr
@@ -65,11 +68,15 @@ Imported from Common Lisp
 List of FOAM instructions
 ---
 
+Some of the forms described below are defined in [primitive.lisp](https://github.com/cahirwpz/fricas/blob/master/src/lisp/primitives.lisp).
+
 ### `LETT`: variable assignment
 
-	(LETT Name Value DebugInfo?)
+Variable assignment is an expression, i.e. it returns the `Value`.
+
+	(LETT Name Value DebugInfo)
 	
-Transformed to [SETQ], which is an expression.
+Simply transformed to [SETQ].
 
 	(SETQ Name Value)
 
@@ -86,27 +93,37 @@ Transformed to [SETQ], which is an expression.
 
 ### `PROG` & `SPROG`: local variables introduction
 
-**Q:** Is variable shadowing allowed?
-
-[PROG] implicitly establishes a block named `nil`.
+[PROG] implicitly establishes a block named `nil` and declares variables as with [LET].
 
 [PROG]: http://clhs.lisp.se/Body/m_prog_.htm#prog
+[LET]: http://clhs.lisp.se/Body/s_let_l.htm#let
 
-##### Typed version:
-
-`SPROG` is a macro introduced to handle introduction of typed variables.
+`SPROG` macro was added in order to handle the introduction of typed variables.
 
 	(SPROG ((Var1 VarType1) (Var2 VarType2) … (VarN VarTypeN))
 	  BODY)
 
 Is transformed to:
 
-	?
+	(BLOCK NIL
+	  (LET (Var1 Var2 … VarN)
+	      (DECLARE (TYPE VarType1 Var1))
+	      (DECLARE (TYPE VarType2 Var2))
+	      … 
+	      (DECLARE (TYPE VarTypeN VarN))
+	    BODY))
 
-##### Untyped version:
+`PROG` is similar to `SPROG` but does not contain any information about the types of variables introduced.
 
 	(PROG (Var1 Var2 … VarN)
 	  BODY)
+
+Is simply transformed to:
+
+	(BLOCK NIL
+	  (LET (Var1 Var2 … VarN)
+	    BODY))
+
 
 ### `RETURN`: leave `nil` block
 
@@ -211,14 +228,24 @@ Declares `|$global|` named variable to be in *dynamic variables* space.
 
 [DEFUN]: http://clhs.lisp.se/Body/m_defun.htm#defun
 
-Definition of `FunName: Type1 => Type2 => … => ResultType` function:
-
+Definition of `FunName: Type1 => Type2 => … => ResultType` function looks as follows:
 
 	(SDEFUN FunName ((Arg1 Type1)
 	                 (Arg2 Type2)
 	                  …
-	                 (Result ResultType))
+	                 ($ ResultType))
 	  BODY)
+
+Is translated to:
+
+	(DEFUN FunName (Arg1 Arg2 … ArgN)
+	    (DECLARE (TYPE ArgType1 Arg1))
+	    (DECLARE (TYPE ArgType2 Arg2))
+	     … 
+	    (DECLARE (TYPE ArgTypeN ArgN))
+	  (THE
+	    (TYPE ResultType
+	      (PROGN BODY))))
 
 ### Dynamic function resolution
 
