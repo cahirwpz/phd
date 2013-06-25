@@ -127,7 +127,7 @@ Is simply transformed to:
 
 ### `RETURN`: leave `nil` block
 
-[RETURN] leaves the nearest block established by [PROG], [PROG1] or [PROG2] with certain value.
+[RETURN] leaves (with given `Value`) the nearest [BLOCK] established by [PROG]. 
 
 	(RETURN Value)
 
@@ -176,14 +176,16 @@ Transformed to:
 
 `SEQ` implicitly establishes a block named `seq`. 
 
-Moreover `SEQ` is defined with [TAGBODY], so labels are allowed in its body. So far only `G190` and `G191` labels were discovered. Code uses [GO] to jump to these labels. This is primarily used to encode different kind of loops.
+Moreover `SEQ` is defined with [TAGBODY], so labels are allowed in its body. So far only `G190` and `G191` labels were discovered. [GO] is used to jump to these labels. `SEQ` with labels is primarily used to encode different kind of looping constructs.
 
 [TAGBODY]: http://clhs.lisp.se/Body/s_tagbod.htm#tagbody
 [GO]: http://clhs.lisp.se/Body/s_go.htm#go
 
 ### `EXIT`: leave sequence
 
-`(EXIT Value)` leaves the innermost `SEQ` block.
+`EXIT` leaves the innermost `seq` block with `Value`.
+
+	(EXIT Value)
 
 Translates to:
 
@@ -192,7 +194,7 @@ Translates to:
 
 ### `PROG1` & `PROG2`: special purpose blocks
 
-[PROG1] and [PROG2] evaluate all forms within their body, but their value is determined by first of second form respectively.
+[PROG1] and [PROG2] evaluate all forms within their body, but their value is determined by the first of second form respectively.
 
 [PROG1]: http://clhs.lisp.se/Body/m_prog1c.htm#prog1
 [PROG2]: http://clhs.lisp.se/Body/m_prog1c.htm#prog2
