@@ -11,7 +11,7 @@ LLVM type system is described [here][LLVM types].
 
 ## Type representation
 
-### Type descriptor (*Type*)
+### Type descriptor (Type)
 
 ```
 struct type {
@@ -24,13 +24,13 @@ const type_s type_t = { &type_t, "type" };
 typedef (type_s *) Type;
 ```
 
-### Generic value (*Any*)
+### Generic value (Any)
 
 ```
 typedef (Type *) Any;
 ```
 
-### Machine integer (*Integer*)
+### Machine integer (Integer)
 
 ```
 typedef struct {
@@ -43,7 +43,7 @@ const type_s integer_t = { &type_t, "integer" };
 typedef (integer_s *) Integer;
 ```
 
-### Machine float (*Float*)
+### Machine float (Float)
 
 ```
 typedef struct {
@@ -56,7 +56,7 @@ const type_s float_t = { &type_t, "float" };
 typedef (float_s *) Float;
 ```
 
-### *String*
+### String
 
 ```
 typedef struct {
@@ -70,7 +70,7 @@ const type_s string_t = { &type_t, "string" };
 typedef (string_s *) String;
 ```
 
-### *Symbol*
+### Symbol
 
 ```
 typedef struct symbol {
@@ -85,7 +85,7 @@ typedef (symbol_s *) Symbol;
 ```
 
 
-### List and pairs (*Cons*)
+### List and pairs (Cons)
 
 ```
 typedef struct cons {
@@ -99,7 +99,7 @@ const type_s cons_t = { &type_t, "cons" };
 typedef (cons_s *) Cons;
 ```
 
-### Empty list value (*Nil*)
+### Empty list value (Nil)
 
 ```
 const cons_s nil_v = { &cons_t, (Any)&nil, (Any)&nil };
@@ -107,7 +107,7 @@ const cons_s nil_v = { &cons_t, (Any)&nil, (Any)&nil };
 const Cons Nil = &nil_v;
 ```
 
-### Linear array (*Vector*)
+### Linear array (Vector)
 
 ```
 typedef struct vector {
@@ -120,7 +120,6 @@ const type_s vector_t = { &type_t, "vector" };
 
 typedef (vector_s *) Vector;
 ```
-
 
 ## Builtin runtime functions
 
