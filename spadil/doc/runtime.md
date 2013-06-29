@@ -1,4 +1,4 @@
-# Virtual Machine runtime description
+# Runtime built-in types and functions
 
 It is crucial here to distinguish between:
 
@@ -9,7 +9,7 @@ LLVM type system is described [here][LLVM types].
 
 [LLVM types]: http://llvm.org/docs/LangRef.html#type-system
 
-## Type representation
+## Built-in types
 
 ### Type descriptor (Type)
 
@@ -84,8 +84,7 @@ const type_s symbol_t = { &type_t, "symbol" };
 typedef (symbol_s *) Symbol;
 ```
 
-
-### List and pairs (Cons)
+### List (Cons)
 
 ```c
 typedef struct cons {
@@ -121,7 +120,7 @@ const type_s vector_t = { &type_t, "vector" };
 typedef (vector_s *) Vector;
 ```
 
-## Builtin runtime functions
+## Built-in functions
 
 ### Error handling
 
