@@ -52,7 +52,6 @@ typedef struct {
   size_t   size;
   char     data[0];
 } string_s;
-
 ```
 
 #### Symbol
@@ -91,65 +90,82 @@ typedef struct {
 
 ## Builtin runtime functions
 
+It is crucial here to distinguish between:
+
+* **runtime types** : `Integer`, `Float`, `String`, `Cons`, `Any`, etc. 
+* **LLVM types** : `void`, `i1`, `i8 *`, `i32`, `double`, etc.
+
+LLVM type system is described [here][LLVM types].
+
+[LLVM types]: http://llvm.org/docs/LangRef.html#type-system
+
 ### Error handling
 
 ```
-error(str): String => ()
-
+error(str : <i8 *>) : void
 ```
+
+This function does not return.
 
 ### Printing
 
 ```
-print(obj): Any => ()
+print(obj : Any) : void
 ```
 
 ### Type handling
 
 ```
-type_of(obj): Any => Type
+type_of(obj : Any) : Type
+```
 
-is_cons?(a): Any => Bool
-is_int?(a): Any => Bool
-is_float?(a): Any => Bool
+```
+is_cons?(obj : Any) : i1
+is_integer?(obj : Any) : i1
+is_float?(obj : Any) : i1
+is_string?(obj : Any) : i1
+is_symbol?(obj : Any) : i1
 ```
 
 ### Type conversion
 
 ```	
-int_to_bool(i): Int => Bool
-int_to_float(i): Int => Float
-float_to_bool(f): Float => Bool
-float_to_int(f): Float => Int
+integer_to_bool(n : i32) : i1
+integer_to_float(n : i32) : double
+```
+
+```
+float_to_bool(f : double) : i1
+float_to_integer(f : double) : i32
 ```
 
 ### Boxing and unboxing
 
 ```
-box_bool(b): Bool => Any
-box_int(i): Int => Any 
-box_float(f): Float => Any
+box_bool(b : i1) : Bool
+box_int(n : i32) : Integer 
+box_float(f : double) : Float
 ```
 
 ```
-unbox_bool(a): Any => Bool
-unbox_int(a): Any => Int
-unbox_float(a): Any => Float
+unbox_bool(obj : Bool) : i1
+unbox_int(obj : Integer) : i32
+unbox_float(obj : Float) : double
 ```
 
 ### Lists
 
 ```
-null(l): Any => Bool
-cons(a,b): Any => Any => Any
-first(l): Any => Any
-rest(l): Any => Any
+null(list : Cons) : i1
+cons(a : Any, b : Any) : Cons
+first(list : Cons) : Any
+rest(list : Cons) : Any
 ```
 
 ### Arrays
 
 ```
-vector(n): Int => Any
-getelt(arr, n): Any => Int => Any
-setelt(arr, n, obj): Any => Int => Any => Any
+vector(n : i32) : Vector
+getelt(vec : Vector, n : i32) : Any
+setelt(vec : Vector, n : i32, obj : Any) : void
 ```
