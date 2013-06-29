@@ -1,4 +1,4 @@
-# Runtime built-in types and functions
+# Runtime built-in types, operators and functions
 
 It is crucial here to distinguish between:
 
@@ -119,6 +119,32 @@ const type_s vector_t = { &type_t, "vector" };
 
 typedef (vector_s *) Vector;
 ```
+
+## Built-in operators
+
+### Unary (prefix)
+
+Valid for `Integer` and `Float`:
+* `-` (inverse)
+* `NOT` (logical negation)
+
+### Binary (infix)
+
+Valid for `Integer` and `Float`:
+* `+` (add)
+* `-` (substract)
+* `*` (multiply)
+* `/` (divide)
+* `<` (less than)
+* `>` (greater than)
+* `<=` (less or equal to)
+* `>=` (greater or equal to)
+* `=` (equal)
+* `/=` (not equal)
+
+Valid for `Bool`:
+* `OR` (logical disjunction)
+* `AND` (logical conjuction)
 
 ## Built-in functions
 
