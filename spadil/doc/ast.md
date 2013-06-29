@@ -1,10 +1,40 @@
+
+# Types and data structures
+
+## Type representation
+
+ * `data_type`: representation of builtin types
+
+		data_type = ['Bool, 'Int, 'Float, 'String, 'Any]
+
+	**Note:** Strings are immutable!
+
+ * `fun_type`: function type
+ 
+		type fun_type = { ft_args: data_type list,
+		                  ft_result: data_type option }
+
+    If the function returns `Void` type second element of pair is `None` (look at [Option] type in OCaml library).
+
+[Option]: http://ocaml-lib.sourceforge.net/doc/Option.html
+
+ * `the_type`:
+ 
+		the_type = FunType of fun_type
+		         | DataType of data_type
+		         | UnknownType
+ 
+ * `symbol`:
+
+		symbol = { s_name : string, s_type : the_type }
+		
+	Eventually, we'll need to add symbol attributes here like `inline`, `global`, etc.
+ 
+### Environment
+
+	(symbol list) stack
+
 # Abstract Syntax Trees
-
-## Basic Types
-
- * `symbol`: string representing the name of symbol
- * `spad_type`: ?
- * `VarSet.t`: equivalent to `Set(String)`
 
 ## Constants
 
