@@ -126,6 +126,8 @@ typedef (vector_s *) Vector;
 
 Valid for `Integer` and `Float`:
 * `-` (inverse)
+
+Valid for `Bool`:
 * `NOT` (logical negation)
 
 ### Binary (infix)
