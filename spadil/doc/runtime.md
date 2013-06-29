@@ -13,7 +13,7 @@ LLVM type system is described [here][LLVM types].
 
 ### Type descriptor (Type)
 
-```
+```c
 struct type {
   (struct type *) type;
   (i8 *) name;
@@ -26,13 +26,13 @@ typedef (type_s *) Type;
 
 ### Generic value (Any)
 
-```
+```c
 typedef (Type *) Any;
 ```
 
 ### Machine integer (Integer)
 
-```
+```c
 typedef struct {
   Type type;
   i32  value;
@@ -45,7 +45,7 @@ typedef (integer_s *) Integer;
 
 ### Machine float (Float)
 
-```
+```c
 typedef struct {
   Type   type;
   double value;
@@ -58,7 +58,7 @@ typedef (float_s *) Float;
 
 ### String
 
-```
+```c
 typedef struct {
   Type type;
   i32  size;
@@ -72,7 +72,7 @@ typedef (string_s *) String;
 
 ### Symbol
 
-```
+```c
 typedef struct symbol {
   Type type;
   i8*  name;
@@ -87,7 +87,7 @@ typedef (symbol_s *) Symbol;
 
 ### List and pairs (Cons)
 
-```
+```c
 typedef struct cons {
   Type type;
   Any  fst;
@@ -101,7 +101,7 @@ typedef (cons_s *) Cons;
 
 ### Empty list value (Nil)
 
-```
+```c
 const cons_s nil_v = { &cons_t, (Any)&nil, (Any)&nil };
 
 const Cons Nil = &nil_v;
@@ -109,7 +109,7 @@ const Cons Nil = &nil_v;
 
 ### Linear array (Vector)
 
-```
+```c
 typedef struct vector {
   Type type;
   i32  size;
