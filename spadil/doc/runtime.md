@@ -1,103 +1,128 @@
 # Virtual Machine runtime description
 
-## Type representation
-
-### Type descriptor
-
-```
-typedef (void *) ANY;
-typedef (struct Type) TYPE;
-
-struct Type {
-  (TYPE *) type;
-  (char *) name;
-};
-
-const TYPE type_t = { &type_t, "type" };
-```
-
-#### Cons
-
-```
-const TYPE cons_t = { &type_t, "cons" };
-
-typedef struct {
-  (TYPE *) type;
-  ANY      fst;
-  ANY      snd;
-} cons_s;
-
-const cons_s nil = { &cons_t, (ANY)&nil, (ANY)&nil };
-```
-
-#### Vector
-
-```
-const TYPE vector_t = { &type_t, "vector" };
-
-typedef struct {
-  (TYPE *) type;
-  size_t   size;
-  ANY      data[0];
-} vector_s;
-```
-
-#### String
-
-```
-const TYPE string_t = { &type_t, "string" };
-
-typedef struct {
-  (TYPE *) type;
-  size_t   size;
-  char     data[0];
-} string_s;
-```
-
-#### Symbol
-
-```
-const TYPE symbol_t  = { &type_t, "symbol" };
-
-typedef struct symbol {
-  (TYPE *) type;
-  ANY      properties;
-  char     name[0];
-} symbol_t;
-```
-
-#### Float
-
-```
-const TYPE float_t = { &type_t, "float" };
-
-typedef struct {
-  (TYPE *) type;
-  double   value;
-} float_s;
-```
-
-#### Integer
-
-```
-const TYPE integer_t = { &type_t, "integer" };
-
-typedef struct {
-  (TYPE *) type;
-  long     value;
-} integer_s;
-```
-
-## Builtin runtime functions
-
 It is crucial here to distinguish between:
 
-* **runtime types** : `Integer`, `Float`, `String`, `Cons`, `Any`, etc. 
-* **LLVM types** : `void`, `i1`, `i8 *`, `i32`, `double`, etc.
+* **runtime types** : `Type`, `Any`, `Integer`, `Float`, `String`, `Symbol`, `Cons`, `Nil`, `Vector`. 
+* **LLVM types** : `void`, `i1` (aka `bool`), `i8 *` (aka `char *`), `i32` (aka `int`), `double`, etc.
 
 LLVM type system is described [here][LLVM types].
 
 [LLVM types]: http://llvm.org/docs/LangRef.html#type-system
+
+## Type representation
+
+### Type descriptor (*Type*)
+
+```
+struct type {
+  (struct type *) type;
+  (i8 *) name;
+} type_s;
+
+const type_s type_t = { &type_t, "type" };
+
+typedef (type_s *) Type;
+```
+
+### Generic value (*Any*)
+
+```
+typedef (Type *) Any;
+```
+
+### Machine integer (*Integer*)
+
+```
+typedef struct {
+  Type type;
+  i32  value;
+} integer_s;
+
+const type_s integer_t = { &type_t, "integer" };
+
+typedef (integer_s *) Integer;
+```
+
+### Machine float (*Float*)
+
+```
+typedef struct {
+  Type   type;
+  double value;
+} float_s;
+
+const type_s float_t = { &type_t, "float" };
+
+typedef (float_s *) Float;
+```
+
+### *String*
+
+```
+typedef struct {
+  Type type;
+  i32  size;
+  i8   data[0];
+} string_s;
+
+const type_s string_t = { &type_t, "string" };
+
+typedef (string_s *) String;
+```
+
+### *Symbol*
+
+```
+typedef struct symbol {
+  Type type;
+  i8*  name;
+  Cons properties;
+} symbol_s;
+
+const type_s symbol_t = { &type_t, "symbol" };
+
+typedef (symbol_s *) Symbol;
+```
+
+
+### List and pairs (*Cons*)
+
+```
+typedef struct cons {
+  Type type;
+  Any  fst;
+  Any  snd;
+} cons_s;
+
+const type_s cons_t = { &type_t, "cons" };
+
+typedef (cons_s *) Cons;
+```
+
+### Empty list value (*Nil*)
+
+```
+const cons_s nil_v = { &cons_t, (Any)&nil, (Any)&nil };
+
+const Cons Nil = &nil_v;
+```
+
+### Linear array (*Vector*)
+
+```
+typedef struct vector {
+  Type type;
+  i32  size;
+  Any  data[0];
+} vector_s;
+
+const type_s vector_t = { &type_t, "vector" };
+
+typedef (vector_s *) Vector;
+```
+
+
+## Builtin runtime functions
 
 ### Error handling
 
@@ -105,7 +130,9 @@ LLVM type system is described [here][LLVM types].
 error(str : <i8 *>) : void
 ```
 
-This function does not return.
+This function prints out a messages and calls `exit()`, i.e. it does not return.
+
+There's no exception handling right now.
 
 ### Printing
 
@@ -117,15 +144,10 @@ print(obj : Any) : void
 
 ```
 type_of(obj : Any) : Type
+cast(obj : Any, type : Type) : type
 ```
 
-```
-is_cons?(obj : Any) : i1
-is_integer?(obj : Any) : i1
-is_float?(obj : Any) : i1
-is_string?(obj : Any) : i1
-is_symbol?(obj : Any) : i1
-```
+`cast` check if an object matches the type, if not it calls `error`.
 
 ### Type conversion
 
@@ -141,28 +163,32 @@ float_to_integer(f : double) : i32
 
 ### Boxing and unboxing
 
+The compiler can automatically promote the type of a value in both directions.
+
 ```
 box_bool(b : i1) : Bool
-box_int(n : i32) : Integer 
+box_integer(n : i32) : Integer 
 box_float(f : double) : Float
 ```
 
 ```
 unbox_bool(obj : Bool) : i1
-unbox_int(obj : Integer) : i32
+unbox_integer(obj : Integer) : i32
 unbox_float(obj : Float) : double
 ```
 
 ### Lists
 
 ```
-null(list : Cons) : i1
 cons(a : Any, b : Any) : Cons
+null(list : Cons) : i1
 first(list : Cons) : Any
 rest(list : Cons) : Any
 ```
 
 ### Arrays
+
+**Q**: What about bounds checking? Should it crash exactly the same way as `cast`?
 
 ```
 vector(n : i32) : Vector
