@@ -2,10 +2,10 @@
 
 It is crucial here to distinguish between:
 
-* **runtime types** : `Type`, `Any`, `Char`, `Integer`, `Float`, `Bytes`, `Symbol`, `Cons`, `Nil`, `Vector`. 
+* **runtime types** : `Type`, `Any`, `Char`, `Integer`, `Float`, `Symbol`, `Bytes`, `Cons`, `Vector`.
 * **LLVM types** : `void`, `i1` (aka `bool`), `i8 *` (aka `char *`), `i32` (aka `int`), `double`, etc.
 
-Strings are represented as `Vector(Char)`, where a character is represented as `wchar_t` (`i16` on *Windows* and `i32` on *Linux* or *MacOS X*).
+Strings are represented as `Vector(Char)` type.
 
 LLVM type system is described [here][LLVM types].
 
@@ -33,6 +33,8 @@ typedef (Type *) Any;
 ```
 
 ### Wide characters (Char)
+
+A character is represented as `wchar_t` (`i16` on **Windows** and `i32` on **Linux** or **MacOS X**).
 
 ```c
 typedef struct {
@@ -113,7 +115,7 @@ const type_s cons_t = { &type_t, "cons" };
 typedef (cons_s *) Cons;
 ```
 
-### Empty list value (Nil)
+### Value: Empty list (Nil)
 
 ```c
 const cons_s nil_v = { &cons_t, (Any)&nil, (Any)&nil };
@@ -168,7 +170,7 @@ Valid for `Bool`:
 ### Error handling
 
 ```
-error(str : <i8 *>) : void
+error(str : i8*) : void
 ```
 
 This function prints out a messages and calls `exit()`, i.e. it does not return.
@@ -195,11 +197,26 @@ cast(obj : Any, type : Type) : type
 ```	
 integer_to_bool(n : i32) : i1
 integer_to_float(n : i32) : double
+integer_to_string(n : i32) : i8*
 ```
 
 ```
 float_to_bool(f : double) : i1
 float_to_integer(f : double) : i32
+float_to_string(f : double) : i8*
+```
+
+```
+string_to_bool(s : i8*) : i1
+string_to_integer(s : i8*) : i32
+string_to_float(s : i8*) : double
+```
+
+### Characters
+
+```
+ord(c : Char) : Integer
+chr(n : Integer) : Char
 ```
 
 ### Boxing and unboxing
@@ -210,12 +227,14 @@ The compiler can automatically promote the type of a value in both directions.
 box_bool(b : i1) : Bool
 box_integer(n : i32) : Integer 
 box_float(f : double) : Float
+box_binary(s : {i8 *, i32}) : Binary
 ```
 
 ```
 unbox_bool(obj : Bool) : i1
 unbox_integer(obj : Integer) : i32
 unbox_float(obj : Float) : double
+unbox_binary(obj : Binary) : {i8 *, i32}
 ```
 
 ### Lists
@@ -227,12 +246,24 @@ first(list : Cons) : Any
 rest(list : Cons) : Any
 ```
 
+### Binaries
+
+### Strings
+
+Conversion:
+
+```
+string_to_binary(v : Vector(Char)) : Binary
+binary_to_string(b : Binary) : Vector
+```
+
 ### Arrays
 
 **Q**: What about bounds checking? Should it crash exactly the same way as `cast`?
 
 ```
 vector(n : i32) : Vector
+veclen(vec : Vector) : Integer
 getelt(vec : Vector, n : i32) : Any
 setelt(vec : Vector, n : i32, obj : Any) : void
 ```
