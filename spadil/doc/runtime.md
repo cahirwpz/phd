@@ -2,8 +2,10 @@
 
 It is crucial here to distinguish between:
 
-* **runtime types** : `Type`, `Any`, `Integer`, `Float`, `String`, `Symbol`, `Cons`, `Nil`, `Vector`. 
+* **runtime types** : `Type`, `Any`, `Char`, `Integer`, `Float`, `Bytes`, `Symbol`, `Cons`, `Nil`, `Vector`. 
 * **LLVM types** : `void`, `i1` (aka `bool`), `i8 *` (aka `char *`), `i32` (aka `int`), `double`, etc.
+
+Strings are represented as `Vector(Char)`, where a character is represented as `wchar_t` (`i16` on *Windows* and `i32` on *Linux* or *MacOS X*).
 
 LLVM type system is described [here][LLVM types].
 
@@ -30,6 +32,19 @@ typedef (type_s *) Type;
 typedef (Type *) Any;
 ```
 
+### Wide characters (Char)
+
+```c
+typedef struct {
+  Type    type;
+  wchar_t value;
+} integer_s;
+
+const type_s integer_t = { &type_t, "Char" };
+
+typedef (integer_s *) Integer;
+```
+
 ### Machine integer (Integer)
 
 ```c
@@ -38,7 +53,7 @@ typedef struct {
   i32  value;
 } integer_s;
 
-const type_s integer_t = { &type_t, "integer" };
+const type_s integer_t = { &type_t, "Integer" };
 
 typedef (integer_s *) Integer;
 ```
@@ -51,23 +66,23 @@ typedef struct {
   double value;
 } float_s;
 
-const type_s float_t = { &type_t, "float" };
+const type_s float_t = { &type_t, "Float" };
 
 typedef (float_s *) Float;
 ```
 
-### String
+### Binary
 
 ```c
 typedef struct {
   Type type;
   i32  size;
   i8   data[0];
-} string_s;
+} binary_s;
 
-const type_s string_t = { &type_t, "string" };
+const type_s binary_t = { &type_t, "Binary" };
 
-typedef (string_s *) String;
+typedef (binary_s *) Binary;
 ```
 
 ### Symbol
