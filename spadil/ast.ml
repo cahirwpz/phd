@@ -1,12 +1,16 @@
 open Format
-open List
+open ExtList
 open Utils
+
+type spadtype = SI | DF | Cons | Boolean | Generic
 
 type tree =
   | Apply of tree * tree list
   | Call of string * tree list
   | Assign of string * tree
-  | Block of VarSet.t * tree list
+  | UnaryOp of string * tree
+  | BinaryOp of string * tree * tree
+  | Block of (string * spadtype) list * tree list
   | Char of char
   | Cons of tree * tree
   | Float of float
@@ -15,6 +19,7 @@ type tree =
   | Global of string * tree option
   | Int of int
   | Lambda of string list * tree
+  | TypedLambda of (string * spadtype) list * spadtype * tree
   | Return of tree
   | String of string
   | Symbol of string
@@ -34,12 +39,17 @@ exception UnknownForm of string;;
 
 let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 
-let unary = ["-"; "NOT"]
+(* all operators defined in pritimitives.lisp *)
+let unary = [ "|minus_SI|"; "|minus_DF"; "|abs_DF|"; "NOT" ]
 let binary = [
-  "+"; "-"; "="; "*"; "/"; "REM"; "QUO"; 
-  "<"; ">"; ">="; "<=";
-  "EQUAL"; "EQ"; "EQL";
-  "OR"; "AND"]
+  (* SingleInteger *)
+  "|add_SI|"; "|sub_SI|"; "|mul_SI|"; "|div_SI|";
+  "|eql_SI|"; "|less_SI|"; "|greater_SI|";
+  (* DoubleFloat *)
+  "|add_DF|"; "|sub_DF|"; "|mul_DF|"; "|div_DF|";
+  "|eql_DF|"; "|less_DF|"; "|greater_DF|";
+  (* Boolean *)
+  "AND"; "OR" ]
 
 let graph = [
   '-'; '.'; ','; '&'; ':'; ';'; '*'; '%'; '}'; '{'; ']'; '['; '!'; '^'; '@';
@@ -47,7 +57,7 @@ let graph = [
 
 let is_simple_symbol s =
   let contains = String.contains s in
-  not (exists contains graph)
+  not (List.exists contains graph)
 
 let literal_symbol s =
   let l = String.length s in
@@ -56,11 +66,17 @@ let literal_symbol s =
   else s
 
 let translate_op = function
-  | "OR" -> "||"
-  | "AND" -> "&&"
-  | "EQ" | "EQL" | "EQUAL" -> "="
-  | "NOT" -> "!"
-  | "REM" -> "%"
+  | "AND" -> "and"
+  | "OR" -> "or"
+  | "NOT" -> "not"
+  | "abs_DF" -> "abs"
+  | "add_SI" | "add_DF" -> "+"
+  | "sub_SI" | "sub_DF" -> "-"
+  | "mul_SI" | "mul_DF" -> "*"
+  | "div_SI" | "div_DF" -> "/"
+  | "eql_SI" | "eql_DF" -> "="
+  | "less_SI" | "less_DF" -> "<"
+  | "greater_SI" | "greater_DF" -> ">"
   | _ as x -> x
 
 let rec convert exp =
@@ -72,7 +88,7 @@ let rec convert exp =
       | Sexpr.Int n -> Int n
       | Sexpr.Quote (Sexpr.Group g) ->
           let reduce = fun a b -> Cons (convert a, b) 
-          in fold_right reduce g (Symbol "nil")
+          in List.fold_right reduce g (Symbol "nil")
       | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
       | Sexpr.String s -> String s
       | Sexpr.Symbol s -> Value s
@@ -83,22 +99,18 @@ let rec convert exp =
     Symbol "*invalid*"
 
 and convert_group = function
-  | (Sexpr.Symbol op)::body when mem op binary && length body > 1 ->
-      convert_bin_op op body
+  | [Sexpr.Symbol op; arg] when List.mem op unary ->
+      UnaryOp (literal_symbol op, convert arg)
+  | [Sexpr.Symbol op; arg1; arg2] when List.mem op binary ->
+      BinaryOp (literal_symbol op, convert arg1, convert arg2)
   | (Sexpr.Symbol name)::body -> (
       try
         convert_spec_form name body
       with UnknownForm _ ->
-        Call (name, map convert body))
+        Call (name, List.map convert body))
   | (Sexpr.Group func)::body ->
-      Apply (convert_group func, map convert body)
+      Apply (convert_group func, List.map convert body)
   | e -> error "Malformed group" e
-
-and convert_bin_op op = function
-  | head::tail ->
-      let reduce = fun a b -> Call (op, [a; convert b])
-      in fold_left reduce (convert head) tail
-  | e -> error "BinOp requires at least 2 args" e
 
 and convert_spec_form = function
   | "BLOCK" -> convert_block
@@ -106,10 +118,12 @@ and convert_spec_form = function
   | "DEFPARAMETER"
   | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
+  | "SDEFUN" -> convert_typed_fun_decl
   | "IF" -> convert_if
   | "LAMBDA" -> convert_lambda
   | "LET" -> convert_let
   | "LOOP" -> convert_loop
+  | "SPROG" -> convert_sprog
   | "PROGN" -> convert_progn
   | "RETURN" -> convert_return
   | "SETQ" -> convert_setq
@@ -118,7 +132,7 @@ and convert_spec_form = function
 
 and convert_block = function
   | (Sexpr.Symbol label)::rest ->
-      Block (VarSet.empty, map convert rest)
+      Block ([], List.map convert rest)
   | e -> error "Malformed block s-form" e
 
 and convert_char = function
@@ -145,10 +159,17 @@ and convert_fun_decl = function
       Assign (name, Lambda (convert_symbol_list args, convert body))
   | e -> error "Malformed defun s-form" e
 
+and convert_typed_fun_decl = function
+  | [Sexpr.Symbol name; Sexpr.Group args; body] ->
+      let targs = List.map convert_typed_symbol args in
+      let (rsym, rtype) = List.last targs in
+      Assign (name, TypedLambda ((but_last targs) @ [(rsym, Generic)], rtype, convert body))
+  | e -> error "Malformed sdefun s-form" e
+
 and convert_let = function
   | (Sexpr.Group symbols)::body ->
       let symbols = convert_symbol_list symbols in
-      Block (VarSet.from_list symbols, map convert body)
+      Block (List.map (fun (s) -> (s, Generic)) symbols, List.map convert body)
   | e -> error "Malformed let s-form" e
 
 and convert_return = function
@@ -162,7 +183,22 @@ and convert_setq = function
   | e -> error "Malformed setq s-form" e
 
 and convert_progn body =
-  Block (VarSet.empty, map convert body)
+  Block ([], List.map convert body)
+
+and extract_sprog_tvar = function
+  | Sexpr.Group [Sexpr.Symbol name; maybe_type] ->
+      (match maybe_type with 
+      | Sexpr.Group (Sexpr.Symbol atype::_) ->
+         (name, convert_type atype)
+      | _ ->
+          (name, Generic)
+      )
+  | e -> error "Malformed sprog tvar s-from" [e]
+
+and convert_sprog = function
+  | (Sexpr.Group vars::exprs) ->
+      Block (List.map extract_sprog_tvar vars, List.map convert exprs)
+  | e -> error "Malformed sprog s-form" e
 
 and convert_if = function
   | pred::if_true::[] ->
@@ -181,6 +217,24 @@ and convert_symbol_list = function
   | [] -> []
   | e -> error "Expected a list of symbols" e
 
+and convert_typed_symbol = function
+  | Sexpr.Group (Sexpr.Symbol symbol::maybe_type) ->
+      (match maybe_type with
+      | (Sexpr.Symbol atype::_) ->
+          (symbol, convert_type atype)
+      | _ ->
+          (symbol, Generic)
+      )
+  | e -> error "Expected a type symbol" [e]
+
+and convert_type atype =
+  match literal_symbol atype with
+  | "SingleInteger" -> SI
+  | "DoubleFloat" -> DF
+  | "Boolean" -> Boolean
+  | "List" -> Cons
+  | _ -> Generic
+
 (* stringification *)
 let rec print = function
   | Apply (func, args) ->
@@ -195,9 +249,10 @@ let rec print = function
       print_symbol name; printf " := "; print value
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
-  | Call (op, [x]) when mem op unary ->
-      printf "@[<hov>"; print_string (translate_op op); print x; printf "@]"
-  | Call (op, [x; y]) when mem op binary ->
+  | UnaryOp (op, x) ->
+      printf "@[<hov>"; print_string (translate_op op); printf "("; print x;
+      printf ")@]"
+  | BinaryOp (op, x, y) ->
       printf "@[<hov>("; print x; printf "@ %s@ " (translate_op op); print y;
       printf ")@]"
   | Call (name, args) ->
@@ -214,7 +269,7 @@ let rec print = function
       print_float n
   | IfThen (pred, if_true) ->
       printf "@[<v>";
-      printf "@[<v 2>if*@,"; print_inline pred; printf "@]@,";
+      printf "@[<v 2>if@,"; print_inline pred; printf "@]@,";
       printf "@[<v 2>then@,"; print_inline if_true; printf "@]@,endif@]"
   | IfThenElse (pred, if_true, if_false) ->
       printf "@[<v>";
@@ -232,10 +287,16 @@ let rec print = function
   | Lambda (args, body) ->
       printf "@[<v>fn (@[<hov>"; print_symbols args; printf "@]) -> @,";
       print_fun_body body; printf "@] "
+  | TypedLambda (targs, rtype, body) ->
+      printf "@[<v>fn (@[<hov>"; print_typed_symbols targs; printf "@]) : ";
+      print_spadtype rtype; printf " -> @,";
+      print_fun_body body; printf "@] "
   | Return tree ->
       printf "return "; print tree
   | String str ->
       printf "\"%s\"" (String.escaped str)
+  | Symbol "NIL" -> print_string "false"
+  | Symbol "T" -> print_string "true"
   | Symbol name ->
       print_char '\''; print_symbol name
   | Value name ->
@@ -262,9 +323,16 @@ and print_fun_body = function
       printf "@[<v 2>begin@,"; print body; printf "@]@,end"
 
 and print_block vars exps =
-  if not (VarSet.is_empty vars) then
-    (printf "var @["; print_symbols (VarSet.elements vars); printf "@]@,");
+  if vars != [] then
+    (printf "var @["; print_typed_symbols vars; printf "@]@,");
   iter_join (fun t -> print t) (fun () -> printf "@,") exps
+
+and print_spadtype = function
+  | SI -> print_string "SingleInteger"
+  | DF -> print_string "DoubleFloat"
+  | Boolean -> print_string "Boolean"
+  | Cons -> print_string "List"
+  | Generic -> print_string "?"
 
 and print_symbol name = 
   let name = literal_symbol name in
@@ -272,5 +340,13 @@ and print_symbol name =
   then print_string name
   else printf "|%s|" name
 
+and print_typed_symbol (name, atype) =
+  print_symbol name;
+  printf " : ";
+  print_spadtype atype
+
 and print_symbols lst =
-  iter_join (fun s -> print_symbol s) (fun () -> printf ",@ ") lst
+  iter_join print_symbol (fun () -> printf ",@ ") lst
+
+and print_typed_symbols lst =
+  iter_join print_typed_symbol (fun () -> printf ",@ ") lst

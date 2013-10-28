@@ -1,3 +1,4 @@
+<common/*.*>: package(extlib)
 <common>: include
 <*.*>: package(llvm)
 <*.*>: package(llvm.analysis)
@@ -6,3 +7,5 @@
 <*.*>: package(llvm.target)
 <*.*>: package(llvm.bitreader)
 <*.*>: use_gc
+<*.*>: package(extlib)
+<cfg.*>: package(ocamlgraph), package(str)

@@ -60,4 +60,6 @@ typedef struct cons {
   GEN snd;
 } cons_t;
 
+const GEN vm_nil;
+
 #endif

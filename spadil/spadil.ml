@@ -9,7 +9,7 @@ let rec parse_file pkg lexbuf =
 and parse_unit pkg input =
   (* printf "@[<v 2>LISP (original)@,@,"; Sexpr.print input; printf "@]@.@."; *)
   let lisp_opt = Sexpr.simplify input in
-  (* printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.@."; *)
+  printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.@.";
   let il = Ast.convert lisp_opt in
   (* printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@."; *)
   let il_opt = Rewrite.simplify il in
@@ -44,13 +44,16 @@ let load_packages jit = function
       close_in file
     in List.iter load_package args
 
+let as_int32 = Llvm_executionengine.GenericValue.as_int32
+let as_pointer = Llvm_executionengine.GenericValue.as_pointer
+
 let execute jit = 
-  let main_fn = jit#lookup_function "main" in
-  let unbox_i32 = jit#lookup_function "unbox_i32" in
-  let result = jit#run_function unbox_i32 [| (jit#run_function main_fn [||]) |] in
-  let result' = Llvm_executionengine.GenericValue.as_int32 result in
-  printf "@.; Evaluate main function@.";
-  printf "@.Evaluated to %d.@." (Int32.to_int result')
+  let main_fn = jit#lookup_function "main"
+  and gc_start_fn = jit#lookup_function "gc_start" in
+  printf "@.; Initialize garbage collection@.";
+  ignore(jit#run_function gc_start_fn [||]);
+  printf "; Evaluate main function@.";
+  ignore(jit#run_function main_fn [||])
 
 let main () =
   let jit = new Codegen_base.execution_engine in
@@ -59,4 +62,6 @@ let main () =
   execute jit;
   jit#dispose
 
-let _ = Printexc.print main ()
+let _ =
+  Printexc.record_backtrace true;
+  Printexc.print main ()

@@ -1,3 +1,5 @@
+open ExtList
+
 (* Set of strings *)
 module VarSet =
   struct
@@ -32,13 +34,12 @@ and split_by' elem left = function
   | x::xs -> split_by' elem (x::left) xs
   | [] -> (List.rev left, [])
 
-(* Return last element of a list. *)
-let last lst =
-  List.nth lst (List.length lst - 1)
-
 let rec but_last = function
   | x::[] -> []
   | x::xs -> x::(but_last xs)
   | _ -> failwith "Expected list of at least one element."
 
-let split_at_last xs = (but_last xs, last xs)
+let split_at_last xs = (but_last xs, List.last xs)
+
+let rec unzip tuplst =
+  List.fold_right (fun (x, y) (flst, slst) -> (x::flst, y::slst)) tuplst ([], [])

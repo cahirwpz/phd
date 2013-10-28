@@ -1,5 +1,5 @@
 open Format
-open List
+open ExtList
 open Utils
 
 type sexpr =
@@ -38,12 +38,15 @@ and print_form_sep n sep lst =
   printf "@]"
 
 and print_group = function
+  | Symbol "SDEFUN"::_ 
   | Symbol "DEFUN"::_ as g -> print_form_sep 3 "@ " g
   | Symbol "LAMBDA"::_
   | Symbol "LET"::_
   | Symbol "BLOCK"::_
+  | Symbol "SPROG"::_
   | Symbol "PROG"::_ as g -> print_form_sep 2 "@ " g
   | Symbol "LOOP"::_
+  | Symbol "WHILE"::_
   | Symbol "PROGN"::_
   | Symbol "RETURN"::_
   | Symbol "OR"::_
@@ -60,7 +63,7 @@ let slots = Array.create 20 (Group [])
 
 (* Handle subtree substitutions *)
 let rec reduce_tree_subst = function
-  | Group g -> Group (map reduce_tree_subst g)
+  | Group g -> Group (List.map reduce_tree_subst g)
   | Quote q -> Quote (reduce_tree_subst q)
   | TreeDecl (n, expr) ->
       let reduced = reduce_tree_subst expr
@@ -75,8 +78,8 @@ let rec reduce_tree_subst = function
  *)
 let rec unquote = function
   | Quote (Group lst) ->
-      let unquoted = map (fun a -> Quote a) lst in
-      Group (Symbol "LIST"::(map unquote unquoted))
+      let unquoted = List.map (fun a -> Quote a) lst in
+      Group (Symbol "LIST"::(List.map unquote unquoted))
   | Quote ((Int x) as value) ->
       value
   | Quote ((Float x) as value) ->
@@ -86,9 +89,9 @@ let rec unquote = function
   | Group [a; Symbol "."; b] when not (is_compound a || is_compound b) ->
       Group [Symbol "CONS"; unquote (Quote a); unquote (Quote b)]
   | Group [a; Symbol "."; Group b] ->
-      Group ((unquote a)::(map unquote b))
+      Group ((unquote a)::(List.map unquote b))
   | Group lst ->
-      Group (map unquote lst)
+      Group (List.map unquote lst)
   | x -> x
 
 (* Rewrite rule tools *)
@@ -168,11 +171,11 @@ and rewrite_special vs body = function
   | Group (Symbol "SPECIAL"::vs2) ->
       let to_symbol = fun x -> Symbol x in
       let vs' = get_symbols [] vs and vs2' = get_symbols [] vs2 in
-      let diffs = map to_symbol (VarSet.elements (VarSet.diff vs' vs2')) in
-      let temps = map (fun _ -> symgen#get) vs2 in
-      let temps' = map to_symbol temps in
-      let saves = map2 make_setq temps vs2
-      and restores = map2 make_setq (VarSet.elements vs2') temps' in
+      let diffs = List.map to_symbol (VarSet.elements (VarSet.diff vs' vs2')) in
+      let temps = List.map (fun _ -> symgen#get) vs2 in
+      let temps' = List.map to_symbol temps in
+      let saves = List.map2 make_setq temps vs2
+      and restores = List.map2 make_setq (VarSet.elements vs2') temps' in
       [Group (temps' @ diffs); 
        make_progn saves; make_progn body; make_progn restores]
   | _ -> failwith "Expected special."
@@ -190,20 +193,52 @@ let lett_to_setq = function
 
 (* Rewrite seq as block seq *)
 let rec seq_to_block = function
-  | Symbol "SEQ"::body ->
-      make_block "SEQ" (seq_to_block' body)
+  | Symbol "SEQ"::Symbol "G190"::rest ->
+      let (body, epilogue) = split_by (Symbol "NIL") rest in
+      let (cond, loop) = extract_loop body in
+      fail_if_not_loop_epilogue epilogue;
+      make_block "SEQ" [Group [Symbol "WHILE"; cond; loop]]
+  | Symbol "SEQ"::rest ->
+      make_block "SEQ" rest
   | _ -> raise NoMatch
-and seq_to_block' = function
-  | Symbol label::rest ->
-      let (exps, rest) = split_by (Symbol "G191") rest in
-      [make_block label exps] @ rest
-  | x::xs -> x::(seq_to_block' xs)
-  | [] -> []
+
+and extract_loop = function
+  | [Group [Symbol "COND";
+            Group [Group [Symbol "NULL"; cond];
+                   Group [Symbol "GO"; Symbol "G191"]]];
+     loop] ->
+       (cond, loop)
+  | _ -> raise NoMatch
+
+and fail_if_not_loop_epilogue = function
+  | [Group [Symbol "GO"; Symbol "G190"];
+     Symbol "G191";
+     Group [Symbol "EXIT"; Symbol "NIL"]] -> ()
+  | _ -> raise NoMatch
+
+let reduce_trivial_exit = function
+  | Symbol "BLOCK"::Symbol "SEQ"::rest ->
+      (match List.last rest with
+      | Group [Symbol "EXIT"; value] ->
+          make_block "SEQ" ((Utils.but_last rest) @ [value])
+      | _ ->
+          raise NoMatch)
+  | _ -> raise NoMatch
 
 (* Reduce progn block that contains single item *)
 let reduce_progn = function
   | [Symbol "PROGN"; expr] ->
       expr
+  | _ -> raise NoMatch
+
+let reduce_trivial_if = function
+  | [Symbol "IF"; expr; Quote (Symbol "NIL"); Quote (Symbol "T")] ->
+      Group [Symbol "NOT"; expr]
+  | _ -> raise NoMatch
+
+let simplify_exit = function
+  | [Symbol "EXIT"; Group [Symbol "SETQ"; name; expr]] ->
+      make_progn [Group [Symbol "SETQ"; name; expr]; Group [Symbol "EXIT"; name]]
   | _ -> raise NoMatch
 
 let rec transform_loops = function
@@ -218,7 +253,7 @@ and is_return_nil = function
 and transform_while p body =
   match p with
   | Group [Symbol "OR"; Group [Symbol "ATOM"; x] as p'; Group snd]
-    when last snd = Symbol "NIL" ->
+    when List.last snd = Symbol "NIL" ->
       p'::(Group (but_last snd))::body
   | _ -> p::body
 
@@ -230,7 +265,7 @@ let rec rewrite func = function
   | e -> e
 and rewrite_rec func = function
   | Group lst ->
-      Group (map (rewrite func) lst)
+      Group (List.map (rewrite func) lst)
   | e -> e
 
 let rec rewrite_n fs exp =
@@ -241,12 +276,13 @@ let rec rewrite_n fs exp =
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
   seq_to_block;
+  reduce_trivial_exit;
   lett_to_setq;
   cond_to_if;
   globals_shadowing;
   prog_to_let;
   reduce_progn;
-  transform_loops;
+  reduce_trivial_if
   ]
 
 let reader_pass exp =

@@ -33,8 +33,8 @@ let rec rewrite_n ruleset exp =
 (* Reduce a block that contains only one expression. *)
 let reduce_block = function
   | Block (vars1, [Block (vars2, exps)]) ->
-      Block (VarSet.union vars1 vars2, exps)
-  | Block (vars, [exp]) when VarSet.is_empty vars ->
+      Block (vars1 @ vars2, exps)
+  | Block ([], [exp]) ->
       exp
   | _ -> raise NoMatch
 
@@ -42,14 +42,14 @@ let reduce_block = function
 let rec flatten_block = function
   | Block (vars, body) ->
       let body = map flatten_block body in
-      let vars = VarSet.union vars (collect_vars body) in
+      let vars = vars @ (collect_vars body) in
       Block (vars, collect_exps body)
   | x -> x
 
 and collect_vars = function
-  | (Block (vs, _))::xs -> VarSet.union vs (collect_vars xs)
+  | (Block (vs, _))::xs -> vs @ (collect_vars xs)
   | x::xs -> collect_vars xs
-  | [] -> VarSet.empty
+  | [] -> []
       
 and collect_exps = function
   | (Block (_, x))::xs -> x @ (collect_exps xs)
@@ -61,7 +61,7 @@ let rec reduce_lambda exp =
   match exp with
   | Apply (Lambda (vs, body), args) when length vs = length args ->
       let assigns = map2 (fun n v -> Assign (n, v)) vs args in
-      Block (VarSet.from_list vs, assigns @ [body])
+      Block (List.map (fun (v) -> (v, Ast.Generic)) vs, assigns @ [body])
   | _ -> raise NoMatch
 
 (* push assign deeper into the structure *)
@@ -70,11 +70,11 @@ let rec rewrite_assign = function
       let t = rewrite_assign (Assign (var, t))
       and f = rewrite_assign (Assign (var, f))
       in IfThenElse (pred, t, f)
-  | Assign (var, Block (vars, exps)) when not (VarSet.mem var vars) ->
+  | Assign (var, Block (vars, exps)) when not (List.mem_assoc var vars) ->
       let (xs, x) = split_at_last exps
       in Block (vars, xs @ [rewrite_assign (Assign (var, x))])
   | Assign (var1, Assign (var2, exp)) ->
-      Block (VarSet.empty, [Assign (var2, exp); Assign (var1, Symbol var2)])
+      Block ([], [Assign (var2, exp); Assign (var1, Symbol var2)])
   | x -> x
 
 (* push return deeper into the structure *)

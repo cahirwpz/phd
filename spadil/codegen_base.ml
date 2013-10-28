@@ -1,8 +1,10 @@
 open Codegen_dt
+open ExtString
 open Printf
 
 exception NameError of string
 exception TypeError of string
+exception CoerceError of Llvm.llvalue * string
 
 module Icmp = Llvm.Icmp
 module Fcmp = Llvm.Fcmp
@@ -10,7 +12,19 @@ module Jit = Llvm_executionengine.ExecutionEngine
 
 let the_context = Llvm.global_context ()
 
+let dump_type_of v =
+  print_string @@ Llvm.value_name v;
+  print_string " : ";
+  print_string @@ Llvm.string_of_lltype @@ Llvm.type_of v;
+  print_newline (); flush_all ()
+
+let dump_type t =
+  print_string @@ Llvm.string_of_lltype t; print_newline (); flush_all ()
+
+let dump_value = Llvm.dump_value
+
 let double_type = Llvm.double_type the_context
+let void_type = Llvm.void_type the_context
 let i1_type = Llvm.i1_type the_context
 let i8_type = Llvm.i8_type the_context
 let i32_type = Llvm.i32_type the_context
@@ -18,6 +32,9 @@ let const_stringz = Llvm.const_stringz the_context
 let struct_type = Llvm.struct_type the_context
 let const_int = Llvm.const_int
 let const_float = Llvm.const_float
+let gen_type = Llvm.pointer_type i8_type
+let const_null = Llvm.const_null gen_type
+let const_pointer_null = Llvm.const_pointer_null gen_type
 
 let izero = const_int i32_type 0
 let fzero = const_float double_type 0.0
@@ -67,7 +84,10 @@ class code_builder pkg =
 
     (* Control flow. *)
     method build_call (name : string) args =
-      Llvm.build_call (package#lookup_function name) args "call_tmp" builder
+      let fn = package#lookup_function name in
+      let res_type = Llvm.return_type @@ Llvm.get_function_type fn in
+      let res_name = (if res_type = void_type then "" else "call_tmp") in
+      Llvm.build_call fn args res_name builder
     method build_phi incoming =
       Llvm.build_phi incoming "if_tmp" builder
     method build_cond_br cond then_bb else_bb =
@@ -83,7 +103,7 @@ class code_builder pkg =
     method build_store src name =
       Llvm.build_store src (self#lookup_var name) builder
 
-    (* Arithmetic instructions. *)
+    (* Arithmetic instructions on integers. *)
     method build_add lhs rhs = 
       Llvm.build_add lhs rhs "add_tmp" builder
     method build_sub lhs rhs =
@@ -96,6 +116,18 @@ class code_builder pkg =
       Llvm.build_srem rhs lhs "srem_tmp" builder
     method build_neg exp = 
       Llvm.build_sub (const_int i32_type 0) exp "neg_tmp" builder
+
+    (* Arithmetic instructions on floating point numbers. *)
+    method build_fadd lhs rhs = 
+      Llvm.build_fadd lhs rhs "fadd_tmp" builder
+    method build_fsub lhs rhs =
+      Llvm.build_fsub lhs rhs "fsub_tmp" builder
+    method build_fmul lhs rhs =
+      Llvm.build_fmul lhs rhs "fmul_tmp" builder
+    method build_fdiv lhs rhs =
+      Llvm.build_fdiv lhs rhs "fdiv_tmp" builder
+    method build_fneg exp = 
+      Llvm.build_sub (const_int double_type 0) exp "fneg_tmp" builder
 
     (* Logic instructions. *)
     method build_and lhs rhs = 
@@ -124,6 +156,9 @@ class code_builder pkg =
       locals#rem name
 
     (* Resolving names. *)
+    method lookup_function name =
+      package#lookup_function name
+
     method lookup_var name =
       match locals#get name with
       | None ->
@@ -157,6 +192,8 @@ class function_pass_manager pkg =
       Llvm_scalar_opts.add_gvn fpm;
       (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
       Llvm_scalar_opts.add_cfg_simplification fpm;
+      (* Remove tail recursion *)
+      Llvm_scalar_opts.add_tail_call_elimination fpm;
       (* Finally... initialize it! *)
       Llvm.PassManager.initialize fpm
 
@@ -193,15 +230,27 @@ class package a_module a_jit =
       Llvm.declare_function name fn_type package
 
     method lookup_function name =
-      match Llvm.lookup_function name package with
-      | None -> 
-        let fn = jit#lookup_function name in
-        let name = Llvm.value_name fn in
-        let fn_type = Llvm.element_type (Llvm.type_of fn) in
-        let fn_decl = self#declare_function name fn_type in
-        jit#add_global_mapping fn_decl fn;
-        fn_decl
-      | Some fn -> fn
+      if String.starts_with name "llvm." then
+        begin
+          match name with
+          | "llvm.fabs.f64" ->
+              let fn_type = Llvm.function_type double_type [| double_type |] in
+              self#declare_function name fn_type
+          | _ ->
+            raise (NameError (sprintf "Unknown LLVM intrinsic: '%s'" name))
+        end
+      else
+        begin
+          match Llvm.lookup_function name package with
+          | None -> 
+            let fn = jit#lookup_function name in
+            let name = Llvm.value_name fn in
+            let fn_type = Llvm.element_type (Llvm.type_of fn) in
+            let fn_decl = self#declare_function name fn_type in
+            jit#add_global_mapping fn_decl fn;
+            fn_decl
+          | Some fn -> fn
+        end
 
     method iter_functions fn =
       Llvm.iter_functions fn package
