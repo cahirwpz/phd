@@ -60,7 +60,7 @@ and collect_exps = function
 let rec reduce_lambda exp =
   match exp with
   | Apply (Lambda (vs, body), args) when length vs = length args ->
-      let assigns = map2 (fun n v -> Assign (n, v)) vs args in
+      let assigns = map2 (fun n v -> Assign (Ast.Symbol n, v)) vs args in
       Block (List.map (fun (v) -> (v, Ast.Generic)) vs, assigns @ [body])
   | _ -> raise NoMatch
 
@@ -70,11 +70,11 @@ let rec rewrite_assign = function
       let t = rewrite_assign (Assign (var, t))
       and f = rewrite_assign (Assign (var, f))
       in IfThenElse (pred, t, f)
-  | Assign (var, Block (vars, exps)) when not (List.mem_assoc var vars) ->
+  | Assign (Symbol var, Block (vars, exps)) when not (List.mem_assoc var vars) ->
       let (xs, x) = split_at_last exps
-      in Block (vars, xs @ [rewrite_assign (Assign (var, x))])
+      in Block (vars, xs @ [rewrite_assign (Assign (Symbol var, x))])
   | Assign (var1, Assign (var2, exp)) ->
-      Block ([], [Assign (var2, exp); Assign (var1, Symbol var2)])
+      Block ([], [Assign (var2, exp); Assign (var1, var2)])
   | x -> x
 
 (* push return deeper into the structure *)

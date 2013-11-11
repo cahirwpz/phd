@@ -59,7 +59,8 @@ let translate_type = function
   | Ast.Boolean -> i1_type
   | Ast.DF -> double_type
   | Ast.SI -> i32_type
-  | Ast.Cons
+  | Ast.Array _
+  | Ast.Cons _
   | Ast.Generic -> gen_type
 
 (* Code generation starts here *)
@@ -74,9 +75,9 @@ let rec codegen builder exp =
       const_int i32_type n
   | Ast.String s ->
       const_stringz s
-  | Ast.Value name when name = "NIL" ->
+  | Ast.Var name when name = "NIL" ->
       const_pointer_null
-  | Ast.Value name ->
+  | Ast.Var name ->
       builder#build_load name
   | Ast.Block (vars, exps) ->
       codegen_block builder vars exps
@@ -97,7 +98,7 @@ let rec codegen builder exp =
       codegen_if_then_else builder (codegen cond) t f
   | Ast.While (cond, body) ->
       codegen_while builder cond body
-  | Ast.Assign (name, value) ->
+  | Ast.Assign (Ast.Var name, value) ->
       builder#build_store (codegen value) name;
       builder#build_load name
   | _ ->
@@ -129,7 +130,8 @@ and codegen_binary_op builder op lhs rhs =
   | "add_SI" -> builder#build_add (cast_SI lhs) (cast_SI rhs)
   | "sub_SI" -> builder#build_sub (cast_SI lhs) (cast_SI rhs)
   | "mul_SI" -> builder#build_mul (cast_SI lhs) (cast_SI rhs)
-  | "div_SI" -> builder#build_sdiv (cast_SI lhs) (cast_SI rhs)
+  | "quo_SI" -> builder#build_sdiv (cast_SI lhs) (cast_SI rhs)
+  | "rem_SI" -> builder#build_srem (cast_SI lhs) (cast_SI rhs)
   | "greater_SI" -> builder#build_icmp Icmp.Sgt (cast_SI lhs) (cast_SI rhs)
   | "less_SI" -> builder#build_icmp Icmp.Slt (cast_SI lhs) (cast_SI rhs)
   | "eql_SI" -> builder#build_icmp Icmp.Eq (cast_SI lhs) (cast_SI rhs)
@@ -185,7 +187,7 @@ and codegen_if_then_else builder cond t f =
   builder#position_at_end merge_bb;
   let incoming = [(then_val, new_then_bb); (else_val, new_else_bb)] in
   (* FIXME: check if type_of(then_val) equals to type_of(else_val) *)
-  dump_value then_val; dump_value else_val;
+  (* dump_value then_val; dump_value else_val; *)
   let phi = builder#build_phi incoming in
 
   (* Return to the start block to add the conditional branch. *)
@@ -235,7 +237,7 @@ let rec codegen_toplevel pkg tree =
         let bdr = pkg#new_builder in
         let value' = codegen bdr value in
         Some (pkg#define_global name value')
-    | Ast.Assign (name, Ast.Lambda (args, body)) ->
+    | Ast.Assign (Ast.Var name, Ast.Lambda (args, body)) ->
         let name = Ast.literal_symbol name
         and args = Array.of_list args in
         let (fn, fn_type) = codegen_function_decl pkg name args in
@@ -245,7 +247,7 @@ let rec codegen_toplevel pkg tree =
           with e ->
             Llvm.delete_function fn; raise e
         end
-    | Ast.Assign (name, Ast.TypedLambda (targs, rtype, body)) ->
+    | Ast.Assign (Ast.Var name, Ast.TypedLambda (targs, rtype, body)) ->
         let name = Ast.literal_symbol name in
         let (alst, tlst) = unzip targs in
         let args = Array.of_list alst in
@@ -326,7 +328,7 @@ and codegen_function_def builder fn fn_type args body =
     (if ret_type = gen_type then
       cast_GEN builder body_val_bare else body_val_bare) in
 
-  dump_type_of body_val; dump_type ret_type;
+  (* dump_type_of body_val; dump_type ret_type; *)
 
   if (Llvm.type_of body_val) != ret_type then
     failwith "Value and return type don't match.";

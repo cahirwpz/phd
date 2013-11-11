@@ -26,6 +26,9 @@ let load_runtime jit =
   (match jit#load_package "runtime.bc" with
   | Some pkg -> pkg#dump;
   | None -> ());
+  (match jit#load_package "benchmark.bc" with
+  | Some pkg -> pkg#dump;
+  | None -> ());
   printf "@."
 
 let load_packages jit = function
@@ -45,15 +48,23 @@ let load_packages jit = function
     in List.iter load_package args
 
 let as_int32 = Llvm_executionengine.GenericValue.as_int32
+let as_int64 = Llvm_executionengine.GenericValue.as_int64
 let as_pointer = Llvm_executionengine.GenericValue.as_pointer
 
 let execute jit = 
   let main_fn = jit#lookup_function "main"
+  and time_start_fn = jit#lookup_function "time_start"
+  and time_stop_fn = jit#lookup_function "time_stop"
+  and time_diff_fn = jit#lookup_function "time_diff"
   and gc_start_fn = jit#lookup_function "gc_start" in
   printf "@.; Initialize garbage collection@.";
   ignore(jit#run_function gc_start_fn [||]);
   printf "; Evaluate main function@.";
-  ignore(jit#run_function main_fn [||])
+  ignore(jit#run_function time_start_fn [||]);
+  ignore(jit#run_function main_fn [||]);
+  ignore(jit#run_function time_stop_fn [||]);
+  let diff = Int64.to_int(as_int64(jit#run_function time_diff_fn [||])) in
+  ignore(printf "; Took %d us@." diff)
 
 let main () =
   let jit = new Codegen_base.execution_engine in

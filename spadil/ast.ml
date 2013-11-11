@@ -2,32 +2,35 @@ open Format
 open ExtList
 open Utils
 
-type spadtype = SI | DF | Cons | Boolean | Generic
+type spadtype =
+  | Array of spadtype | Cons of spadtype
+  | SI | DF | Boolean | Generic
 
 type tree =
   | Apply of tree * tree list
-  | Call of string * tree list
-  | Assign of string * tree
-  | UnaryOp of string * tree
+  | ArrayRef of tree * tree
+  | Assign of tree * tree
   | BinaryOp of string * tree * tree
   | Block of (string * spadtype) list * tree list
+  | Call of string * tree list
   | Char of char
   | Cons of tree * tree
   | Float of float
+  | Global of string * tree option
   | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
-  | Global of string * tree option
   | Int of int
   | Lambda of string list * tree
-  | TypedLambda of (string * spadtype) list * spadtype * tree
   | Return of tree
   | String of string
   | Symbol of string
-  | Value of string
+  | TypedLambda of (string * spadtype) list * spadtype * tree
+  | UnaryOp of string * tree
+  | Var of string
   | While of tree * tree
 
 let is_compound = function
-  | Char _ | Float _ | Int _ | String _ | Symbol _ | Global _ | Value _ ->
+  | Char _ | Float _ | Int _ | String _ | Symbol _ | Global _ | Var _ ->
       false
   | _ ->
       true
@@ -43,7 +46,7 @@ let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 let unary = [ "|minus_SI|"; "|minus_DF"; "|abs_DF|"; "NOT" ]
 let binary = [
   (* SingleInteger *)
-  "|add_SI|"; "|sub_SI|"; "|mul_SI|"; "|div_SI|";
+  "|add_SI|"; "|sub_SI|"; "|mul_SI|"; "|quo_SI|"; "|rem_SI|";
   "|eql_SI|"; "|less_SI|"; "|greater_SI|";
   (* DoubleFloat *)
   "|add_DF|"; "|sub_DF|"; "|mul_DF|"; "|div_DF|";
@@ -73,7 +76,8 @@ let translate_op = function
   | "add_SI" | "add_DF" -> "+"
   | "sub_SI" | "sub_DF" -> "-"
   | "mul_SI" | "mul_DF" -> "*"
-  | "div_SI" | "div_DF" -> "/"
+  | "quo_SI" | "div_DF" -> "/"
+  | "rem_SI" -> "%"
   | "eql_SI" | "eql_DF" -> "="
   | "less_SI" | "less_DF" -> "<"
   | "greater_SI" | "greater_DF" -> ">"
@@ -91,7 +95,7 @@ let rec convert exp =
           in List.fold_right reduce g (Symbol "nil")
       | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
       | Sexpr.String s -> String s
-      | Sexpr.Symbol s -> Value s
+      | Sexpr.Symbol s -> Var s
       | e -> raise (SyntaxError ("Unknown s-expression", e))
     end
   with SyntaxError (s, exp) ->
@@ -114,20 +118,21 @@ and convert_group = function
 
 and convert_spec_form = function
   | "BLOCK" -> convert_block
-  | "char" -> convert_char
-  | "DEFPARAMETER"
-  | "DEFVAR" -> convert_defvar
+  | "DEFPARAMETER" | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
-  | "SDEFUN" -> convert_typed_fun_decl
   | "IF" -> convert_if
   | "LAMBDA" -> convert_lambda
   | "LET" -> convert_let
   | "LOOP" -> convert_loop
-  | "SPROG" -> convert_sprog
   | "PROGN" -> convert_progn
+  | "QAREF1" -> convert_aref
+  | "QSETAREF1" -> convert_setaref
   | "RETURN" -> convert_return
+  | "SDEFUN" -> convert_typed_fun_decl
   | "SETQ" -> convert_setq
+  | "SPROG" -> convert_sprog
   | "WHILE" -> convert_while
+  | "char" -> convert_char
   | e -> raise (UnknownForm e)
 
 and convert_block = function
@@ -156,14 +161,14 @@ and convert_defvar = function
 
 and convert_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
-      Assign (name, Lambda (convert_symbol_list args, convert body))
+      Assign (Var name, Lambda (convert_symbol_list args, convert body))
   | e -> error "Malformed defun s-form" e
 
 and convert_typed_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
       let targs = List.map convert_typed_symbol args in
       let (rsym, rtype) = List.last targs in
-      Assign (name, TypedLambda ((but_last targs) @ [(rsym, Generic)], rtype, convert body))
+      Assign (Var name, TypedLambda ((but_last targs) @ [(rsym, Generic)], rtype, convert body))
   | e -> error "Malformed sdefun s-form" e
 
 and convert_let = function
@@ -179,20 +184,17 @@ and convert_return = function
 
 and convert_setq = function
   | [Sexpr.Symbol name; value] ->
-      Assign (name, convert value)
+      Assign (Var name, convert value)
   | e -> error "Malformed setq s-form" e
 
 and convert_progn body =
   Block ([], List.map convert body)
 
 and extract_sprog_tvar = function
-  | Sexpr.Group [Sexpr.Symbol name; maybe_type] ->
-      (match maybe_type with 
-      | Sexpr.Group (Sexpr.Symbol atype::_) ->
-         (name, convert_type atype)
-      | _ ->
-          (name, Generic)
-      )
+  | Sexpr.Group [Sexpr.Symbol name; Sexpr.Group maybe_type] ->
+      (name, convert_type maybe_type)
+  | Sexpr.Group [Sexpr.Symbol name; Sexpr.Symbol "NIL"] ->
+      (name, Generic)
   | e -> error "Malformed sprog tvar s-from" [e]
 
 and convert_sprog = function
@@ -219,21 +221,34 @@ and convert_symbol_list = function
 
 and convert_typed_symbol = function
   | Sexpr.Group (Sexpr.Symbol symbol::maybe_type) ->
-      (match maybe_type with
-      | (Sexpr.Symbol atype::_) ->
-          (symbol, convert_type atype)
-      | _ ->
-          (symbol, Generic)
-      )
+      (symbol, convert_type maybe_type)
   | e -> error "Expected a type symbol" [e]
 
-and convert_type atype =
-  match literal_symbol atype with
-  | "SingleInteger" -> SI
-  | "DoubleFloat" -> DF
-  | "Boolean" -> Boolean
-  | "List" -> Cons
-  | _ -> Generic
+and convert_type = function
+  | [Sexpr.Symbol atype] ->
+      (match literal_symbol atype with
+      | "SingleInteger" -> SI
+      | "DoubleFloat" -> DF
+      | "Boolean" -> Boolean
+      | "List" -> Cons Generic
+      | _ -> Generic)
+  | [Sexpr.Symbol atype; Sexpr.Group maybe_type]
+    when literal_symbol atype = "List" ->
+      Cons (convert_type maybe_type)
+  | [Sexpr.Symbol atype; Sexpr.Group maybe_type]
+    when literal_symbol atype = "PrimitiveArray" ->
+      Array (convert_type maybe_type)
+  | e -> error "Cannot parse type" e
+
+and convert_aref = function
+  | [Sexpr.Symbol aname; index] ->
+      ArrayRef (Var aname, convert index)
+  | e -> error "Malformed qaref1 s-form" e
+
+and convert_setaref = function
+  | [Sexpr.Symbol aname; index; value] ->
+      Assign (ArrayRef (Var aname, convert index), convert value)
+  | e -> error "Malformed qsetaref1 s-form" e
 
 (* stringification *)
 let rec print = function
@@ -241,12 +256,18 @@ let rec print = function
       print func; print_char '(';
       iter_join print (fun () -> printf ", ") args;
       print_char ')'
+  | ArrayRef (name, index) ->
+      print name; print_char '['; print index; print_char ']'
   | Assign (name, Lambda (args, body)) ->
-      printf "@[<v>def "; print_symbol name;
+      printf "@[<v>def "; print name;
       printf "(@[<hov>"; print_symbols args; printf "@])@,";
       print_fun_body body; printf "@]"
+  | Assign (name, TypedLambda (targs, rtype, body)) ->
+      printf "@[<v>def "; print name;
+      printf "(@[<hov>"; print_typed_symbols targs; printf "@]) : ";
+      print_spadtype rtype; printf "@,"; print_fun_body body; printf "@]"
   | Assign (name, value) ->
-      print_symbol name; printf " := "; print value
+      print name; printf " := "; print value
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
   | UnaryOp (op, x) ->
@@ -299,7 +320,7 @@ let rec print = function
   | Symbol "T" -> print_string "true"
   | Symbol name ->
       print_char '\''; print_symbol name
-  | Value name ->
+  | Var name ->
       print_symbol name
   | While (pred, body) ->
       printf "@[<v>@[<v 2>while@,"; print_inline pred;
@@ -328,10 +349,13 @@ and print_block vars exps =
   iter_join (fun t -> print t) (fun () -> printf "@,") exps
 
 and print_spadtype = function
+  | Array atype ->
+      print_string "PrimitiveArray("; print_spadtype atype; print_char ')'
   | SI -> print_string "SingleInteger"
   | DF -> print_string "DoubleFloat"
   | Boolean -> print_string "Boolean"
-  | Cons -> print_string "List"
+  | Cons atype ->
+      print_string "List("; print_spadtype atype; print_char ')'
   | Generic -> print_string "?"
 
 and print_symbol name = 

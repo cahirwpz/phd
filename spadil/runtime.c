@@ -28,6 +28,25 @@ GEN box_SI(int32_t a) {
   return (GEN)val;
 }
 
+GEN box_DF(double a) {
+  dfloat_t *val = GC_malloc(sizeof(dfloat_t));
+
+  val->descriptor = dfloat_key;
+  val->dval = a;
+
+  return (GEN)val;
+}
+
+GEN CONS(GEN fst, GEN snd) {
+  cons_t *val = GC_malloc(sizeof(cons_t));
+
+  val->descriptor = cons_key;
+  val->fst = fst;
+  val->snd = snd;
+
+  return (GEN)val;
+}
+
 bool NULL(GEN ptr) {
   return ptr == vm_nil;
 }
