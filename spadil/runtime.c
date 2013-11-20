@@ -1,3 +1,4 @@
+#define NDEBUG
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -65,6 +66,22 @@ GEN CDR(GEN ptr) {
   assert(val->descriptor == cons_key);
 
   return val->snd;
+}
+
+GEN *QVREF(GEN ptr) {
+  vector_1d_t *val = (vector_1d_t *)ptr;
+
+  assert(val->descriptor == vector_1d_key);
+
+  return val->data;
+}
+
+int32_t QVSIZE(GEN ptr) {
+  vector_1d_t *val = (vector_1d_t *)ptr;
+
+  assert(val->descriptor == vector_1d_key);
+
+  return val->size;
 }
 
 GEN SPADfirst(GEN ptr) {

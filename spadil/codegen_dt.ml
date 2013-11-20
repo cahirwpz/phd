@@ -1,8 +1,9 @@
 open Printf
 
-class variables =
+class symbolmap =
   object (self)
-    val map : (string, Llvm.llvalue Stack.t) Hashtbl.t = Hashtbl.create 10
+    val map : (string, (Ast.spadtype * Llvm.llvalue) Stack.t) Hashtbl.t =
+      Hashtbl.create 10
     method private get_stack name =
       try
         Hashtbl.find map name
@@ -17,7 +18,8 @@ class variables =
       ignore (Stack.pop stack)
     method get name =
       let stack = self#get_stack name in
-      if Stack.is_empty stack
-      then None
-      else Some (Stack.top stack)
+      if Stack.is_empty stack then
+        None
+      else 
+        Some (Stack.top stack)
   end

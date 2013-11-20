@@ -16,7 +16,7 @@ let rec rewrite rule e =
   | Cons (fst, snd) -> Cons (r fst, r snd)
   | IfThen (pred, t) -> IfThen (r pred, r t)
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
-  | Lambda (args, exp) -> Lambda (args, r exp)
+  | Lambda (args, types, exp) -> Lambda (args, types, r exp)
   | Return exp -> Return (r exp)
   | While (pred, exp) -> While (r pred, r exp)
   | e -> e
@@ -57,12 +57,14 @@ and collect_exps = function
   | [] -> []
 
 (* Reduce one-time lambda invocations *)
+(*
 let rec reduce_lambda exp =
   match exp with
   | Apply (Lambda (vs, body), args) when length vs = length args ->
       let assigns = map2 (fun n v -> Assign (Ast.Symbol n, v)) vs args in
       Block (List.map (fun (v) -> (v, Ast.Generic)) vs, assigns @ [body])
   | _ -> raise NoMatch
+*)
 
 (* push assign deeper into the structure *)
 let rec rewrite_assign = function
@@ -98,7 +100,7 @@ let rec rewrite_logic_abbrev = function
   | _ -> raise NoMatch
 
 let rules = [
-  reduce_lambda;
+  (* reduce_lambda; *)
   rewrite_return;
   rewrite_logic_abbrev;
   rewrite_assign;

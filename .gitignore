@@ -4,3 +4,4 @@
 *.bc
 *.native
 _build
+spadil/primitives.lisp

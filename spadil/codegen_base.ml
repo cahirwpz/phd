@@ -1,4 +1,5 @@
 open Codegen_dt
+open ExtHashtbl
 open ExtString
 open Printf
 
@@ -13,15 +14,13 @@ module Jit = Llvm_executionengine.ExecutionEngine
 let the_context = Llvm.global_context ()
 
 let dump_type_of v =
-  print_string @@ Llvm.value_name v;
-  print_string " : ";
-  print_string @@ Llvm.string_of_lltype @@ Llvm.type_of v;
-  print_newline (); flush_all ()
+  printf "%s : %s" (Llvm.value_name v) (Llvm.string_of_lltype @@ Llvm.type_of v)
 
 let dump_type t =
-  print_string @@ Llvm.string_of_lltype t; print_newline (); flush_all ()
+  print_string @@ Llvm.string_of_lltype t
 
-let dump_value = Llvm.dump_value
+let dump_value v =
+  print_string @@ Llvm.string_of_llvalue v
 
 let double_type = Llvm.double_type the_context
 let void_type = Llvm.void_type the_context
@@ -35,6 +34,10 @@ let const_float = Llvm.const_float
 let gen_type = Llvm.pointer_type i8_type
 let const_null = Llvm.const_null gen_type
 let const_pointer_null = Llvm.const_pointer_null gen_type
+
+let mdstring = Llvm.mdstring the_context
+let mdnode = Llvm.mdnode the_context
+let mdkind_id = Llvm.mdkind_id the_context
 
 let izero = const_int i32_type 0
 let fzero = const_float double_type 0.0
@@ -73,7 +76,7 @@ class code_builder pkg =
   object (self)
     val builder = Llvm.builder the_context
     val package = pkg
-    val locals = new variables
+    val localvars = new symbolmap
 
     method append_block name value =
       Llvm.append_block the_context name value
@@ -83,11 +86,15 @@ class code_builder pkg =
       Llvm.position_at_end block builder
 
     (* Control flow. *)
-    method build_call (name : string) args =
-      let fn = package#lookup_function name in
+    method build_call_raw fn args =
       let res_type = Llvm.return_type @@ Llvm.get_function_type fn in
       let res_name = (if res_type = void_type then "" else "call_tmp") in
       Llvm.build_call fn args res_name builder
+    method build_call (name : string) args =
+      self#build_call_raw (package#lookup_function name) args
+    method build_call_builtin (name : string) args =
+      self#build_call_raw (package#lookup_builtin_function name) args
+
     method build_phi incoming =
       Llvm.build_phi incoming "if_tmp" builder
     method build_cond_br cond then_bb else_bb =
@@ -100,8 +107,16 @@ class code_builder pkg =
     (* Memory access instructions. *)
     method build_load name = 
       Llvm.build_load (self#lookup_var name) name builder
+    method build_load_direct src = 
+      Llvm.build_load src "load_tmp" builder
     method build_store src name =
       Llvm.build_store src (self#lookup_var name) builder
+    method build_store_direct src dst =
+      Llvm.build_store src dst builder
+
+    (* Aggregate access instruction. *)
+    method build_gep vector index =
+      Llvm.build_gep vector [| index |] "gep_tmp" builder
 
     (* Arithmetic instructions on integers. *)
     method build_add lhs rhs = 
@@ -148,30 +163,37 @@ class code_builder pkg =
       Llvm.build_fcmp cmp lhs rhs name builder
 
     (* Handling local variables. *)
-    method var_intro var_type var_name =
-      let alloca = Llvm.build_alloca var_type var_name builder in
-      locals#add var_name alloca;
+    method var_intro name var_type var_lltype =
+      let alloca = Llvm.build_alloca var_lltype name builder in
+      localvars#add name (var_type, alloca);
       alloca
+
     method var_forget name =
-      locals#rem name
+      localvars#rem name
 
     (* Resolving names. *)
     method lookup_function name =
       package#lookup_function name
 
     method lookup_var name =
-      match locals#get name with
+      match localvars#get name with
       | None ->
           begin
             match package#lookup_global name with
             | None ->
-                let msg = sprintf "Unknown variable '%s'." name in
-                raise (NameError msg)
+                raise @@ NameError (sprintf "Unknown variable '%s'." name)
             | Some var ->
                 var
           end
       | Some var ->
-          var
+          snd var
+
+    method lookup_var_type name =
+      match localvars#get name with
+      | Some var ->
+          fst var
+      | None ->
+          Ast.Generic
   end;;
 
 (* function-by-function pass pipeline over the package [pkg]. It does not take
@@ -194,13 +216,10 @@ class function_pass_manager pkg =
       Llvm_scalar_opts.add_cfg_simplification fpm;
       (* Remove tail recursion *)
       Llvm_scalar_opts.add_tail_call_elimination fpm;
+      let pmbuilder = Llvm_passmgr_builder.create () in
+      Llvm_passmgr_builder.populate_function_pass_manager fpm pmbuilder;
       (* Finally... initialize it! *)
       Llvm.PassManager.initialize fpm
-
-    (*
-    method set_target_data target_data =
-      Llvm_target.TargetData.add target_data fpm
-    *)
 
     method run_function fn =
       Llvm.PassManager.run_function fn fpm
@@ -212,10 +231,30 @@ class function_pass_manager pkg =
       Llvm.PassManager.dispose fpm
   end;;
 
+(* Whole-module pass pipeline. This type of pipeline is suitable for link-time
+ * optimization and whole-module transformations. *)
+class module_pass_manager =
+  object (self)
+    val mpm = Llvm.PassManager.create ()
+
+    method initialize =
+      let pmbuilder = Llvm_passmgr_builder.create () in
+      (* Llvm_ipo.add_function_inlining mpm; *)
+      (* Llvm_ipo.add_always_inliner mpm; *)
+      Llvm_passmgr_builder.populate_module_pass_manager mpm pmbuilder
+
+    method run_module pkg =
+      Llvm.PassManager.run_module pkg mpm
+
+    method dispose =
+      Llvm.PassManager.dispose mpm
+  end;;
+
 class package a_module a_jit =
   object (self)
     val package = a_module
     val jit = a_jit
+    val localfuns : (string, Ast.spadtype) Hashtbl.t = Hashtbl.create 10
 
     method define_global name value =
       Llvm.define_global name value package
@@ -226,31 +265,36 @@ class package a_module a_jit =
     method lookup_global name =
       Llvm.lookup_global name package
 
-    method declare_function name fn_type =
-      Llvm.declare_function name fn_type package
+    method declare_function name fn_type fn_lltype =
+      Hashtbl.add localfuns name fn_type;
+      Llvm.declare_function name fn_lltype package
+
+    method lookup_builtin_function name =
+      match name with
+      | "llvm.fabs.f64" ->
+          let fn_type = (Ast.Mapping [Ast.DF; Ast.DF])
+          and fn_lltype = Llvm.function_type double_type [| double_type |] in
+          self#declare_function name fn_type fn_lltype 
+      | _ ->
+          raise @@ NameError (sprintf "Unknown LLVM intrinsic: '%s'" name)
 
     method lookup_function name =
-      if String.starts_with name "llvm." then
-        begin
-          match name with
-          | "llvm.fabs.f64" ->
-              let fn_type = Llvm.function_type double_type [| double_type |] in
-              self#declare_function name fn_type
-          | _ ->
-            raise (NameError (sprintf "Unknown LLVM intrinsic: '%s'" name))
-        end
-      else
-        begin
-          match Llvm.lookup_function name package with
-          | None -> 
-            let fn = jit#lookup_function name in
-            let name = Llvm.value_name fn in
-            let fn_type = Llvm.element_type (Llvm.type_of fn) in
-            let fn_decl = self#declare_function name fn_type in
-            jit#add_global_mapping fn_decl fn;
-            fn_decl
-          | Some fn -> fn
-        end
+      match Llvm.lookup_function name package with
+      | Some fn -> fn
+      | None -> 
+          let fn = jit#lookup_function name in
+          let name = Llvm.value_name fn in
+          let fn_type = Llvm.element_type (Llvm.type_of fn) in
+          let fn_decl = Llvm.declare_function name fn_type package in
+          jit#add_global_mapping fn_decl fn;
+          fn_decl
+
+    method lookup_function_type name =
+      match Hashtbl.find_option localfuns name with
+      | None ->
+          raise @@ NameError (sprintf "Unknown function '%s'." name)
+      | Some atype ->
+          atype
 
     method iter_functions fn =
       Llvm.iter_functions fn package
@@ -261,15 +305,18 @@ class package a_module a_jit =
       new code_builder self 
 
     method dump =
-      Llvm.dump_module package
+      print_string @@ Llvm.string_of_llmodule package
 
-    method optimize (*td*) =
-      let fpm = new function_pass_manager self in
-      (* fpm#set_target_data td; *)
+    method optimize =
+      let fpm = new function_pass_manager self
+      and mpm = new module_pass_manager in
       ignore (fpm#initialize);
+      ignore (mpm#initialize);
       self#iter_functions (fun fn -> ignore (fpm#run_function fn));
+      ignore (mpm#run_module self#get_module);
       ignore (fpm#finalize);
-      fpm#dispose
+      fpm#dispose;
+      mpm#dispose
   end;;
 
 (* JIT Interpreter. *)
@@ -291,8 +338,7 @@ class execution_engine =
     method lookup_function name =
       match Jit.find_function name jit with
       | None ->
-          let msg = sprintf "Unknown function '%s'." name in
-          raise (NameError msg)
+          raise @@ NameError (sprintf "Unknown function '%s'." name)
       | Some var ->
           var
 
@@ -303,7 +349,11 @@ class execution_engine =
       Jit.dispose jit
 
     method add_package name =
-      let pkg = new package (Llvm.create_module the_context name) self in
+      (* http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-September/042966.html *)
+      let runtime = (Hashtbl.find map "runtime")#get_module in
+      let pkg = new package (Llvm_utils.clone_module runtime) self in
+      pkg#iter_functions (fun (f) ->
+        Llvm.add_function_attr f Llvm.Attribute.Alwaysinline);
       Hashtbl.add map name pkg;
       Jit.add_module pkg#get_module jit;
       pkg

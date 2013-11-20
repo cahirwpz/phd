@@ -43,6 +43,7 @@ and print_group = function
   | Symbol "LAMBDA"::_
   | Symbol "LET"::_
   | Symbol "BLOCK"::_
+  | Symbol "LABEL"::_
   | Symbol "SPROG"::_
   | Symbol "PROG"::_ as g -> print_form_sep 2 "@ " g
   | Symbol "LOOP"::_
@@ -53,6 +54,7 @@ and print_group = function
   | Symbol "AND"::_
   | Symbol "IF"::_
   | Symbol "SEQ"::_
+  | Symbol "EXIT"::_
   | Symbol "UNWIND-PROTECT"::_
   | Symbol "COND"::_ as g -> print_form_sep 1 "@," g
   | _ as e -> print_list_sep " " e
@@ -96,7 +98,10 @@ let rec unquote = function
 
 (* Rewrite rule tools *)
 let make_progn body =
-  Group (Symbol "PROGN"::body)
+  if List.length body > 1 then
+    Group (Symbol "PROGN"::body)
+  else
+    List.hd body
 let make_if pred if_true = 
   Group [Symbol "IF"; pred; if_true]
 let make_if_else pred if_true if_false = 
@@ -105,8 +110,16 @@ let make_let vars body =
   Group (Symbol "LET"::vars::body)
 let make_setq name value =
   Group [Symbol "SETQ"; Symbol name; value]
+let make_return value =
+  Group [Symbol "RETURN"; value]
 let make_block label body =
   Group ((Symbol "BLOCK")::(Symbol label)::body)
+let make_label label body =
+  Group ((Symbol "LABEL")::(Symbol label)::body)
+let make_while pred body = 
+  Group ((Symbol "WHILE")::pred::body)
+let make_seq body =
+  Group ((Symbol "SEQ")::body)
 let make_cons left right =
   Group [Symbol "CONS"; left; right]
 let make_loop body =
@@ -127,6 +140,23 @@ let rec substitute oldTerm newTerm lst =
 exception NoMatch;;
 
 let symgen = new Symbol.gen "|:T%d|"
+
+(* s-expr rewrite engine *)
+let rec rewrite func = function
+  | Group lst ->
+      let exp = (try (func lst) with NoMatch -> Group lst)
+      in rewrite_rec func exp
+  | e -> e
+and rewrite_rec func = function
+  | Group lst ->
+      Group (List.map (rewrite func) lst)
+  | e -> e
+
+let rec rewrite_n fs exp =
+  match fs with
+  | f::fs -> rewrite_n fs (rewrite f exp)
+  | [] -> exp
+
  
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
@@ -191,44 +221,66 @@ let lett_to_setq = function
       make_setq var value
   | _ -> raise NoMatch
 
+let not_nil_symbol = function
+  | Symbol "NIL" -> false
+  | _ -> true
+
+let not_symbol = function
+  | Symbol _ -> false
+  | _ -> true
+
 (* Rewrite seq as block seq *)
-let rec seq_to_block = function
-  | Symbol "SEQ"::Symbol "G190"::rest ->
-      let (body, epilogue) = split_by (Symbol "NIL") rest in
-      let (cond, loop) = extract_loop body in
-      fail_if_not_loop_epilogue epilogue;
-      make_block "SEQ" [Group [Symbol "WHILE"; cond; loop]]
-  | Symbol "SEQ"::rest ->
-      make_block "SEQ" rest
+let rec seq_simplify = function
+  | Symbol "SEQ"::body ->
+      make_seq (seq_to_blocks (List.filter not_nil_symbol body))
   | _ -> raise NoMatch
 
-and extract_loop = function
-  | [Group [Symbol "COND";
-            Group [Group [Symbol "NULL"; cond];
-                   Group [Symbol "GO"; Symbol "G191"]]];
-     loop] ->
-       (cond, loop)
-  | _ -> raise NoMatch
-
-and fail_if_not_loop_epilogue = function
-  | [Group [Symbol "GO"; Symbol "G190"];
-     Symbol "G191";
-     Group [Symbol "EXIT"; Symbol "NIL"]] -> ()
-  | _ -> raise NoMatch
+and seq_to_blocks = function
+  | Symbol label::body ->
+      let rest = List.dropwhile not_symbol body
+      and body = List.takewhile not_symbol body in
+      (make_label label body)::(seq_to_blocks rest)
+  | (x::xs) as body ->
+      let rest = List.dropwhile not_symbol body
+      and body = List.takewhile not_symbol body in
+      body @ (seq_to_blocks rest)
+  | [] -> []
 
 let reduce_trivial_exit = function
-  | Symbol "BLOCK"::Symbol "SEQ"::rest ->
+  | Symbol "SEQ"::rest ->
+      let body = Utils.but_last rest in
       (match List.last rest with
+      | Group [Symbol "EXIT"; Symbol "NIL"] ->
+          make_seq body
       | Group [Symbol "EXIT"; value] ->
-          make_block "SEQ" ((Utils.but_last rest) @ [value])
+            make_seq (body @ [value])
       | _ ->
           raise NoMatch)
   | _ -> raise NoMatch
 
-(* Reduce progn block that contains single item *)
-let reduce_progn = function
-  | [Symbol "PROGN"; expr] ->
-      expr
+let lift_seq = function
+  | Symbol "SEQ"::body ->
+      make_progn body
+  | _ -> raise NoMatch
+
+let identify_loops = function
+  | Symbol "LABEL"::Symbol "G190"::rest ->
+      (match List.last rest with
+      | Group [Symbol "GO"; Symbol "G190"] ->
+          make_loop (Utils.but_last rest)
+      | _ -> raise NoMatch)
+  | _ -> raise NoMatch
+
+let merge_loop_cond = function
+  | Symbol "LOOP"::(Group [Symbol "IF";
+                           Group [Symbol "NULL"; cond];
+                           Group [Symbol "GO"; Symbol "G191"]])::body ->
+       make_while cond body
+  | _ -> raise NoMatch
+
+let expand_loop_exit = function
+  | [Symbol "SEQ"; loop; Group [Symbol "LABEL"; Symbol "G191"; exit]] ->
+      make_seq [loop; exit]
   | _ -> raise NoMatch
 
 let reduce_trivial_if = function
@@ -257,32 +309,42 @@ and transform_while p body =
       p'::(Group (but_last snd))::body
   | _ -> p::body
 
-(* s-expr rewrite engine *)
-let rec rewrite func = function
-  | Group lst ->
-      let exp = (try (func lst) with NoMatch -> Group lst)
-      in rewrite_rec func exp
-  | e -> e
-and rewrite_rec func = function
-  | Group lst ->
-      Group (List.map (rewrite func) lst)
-  | e -> e
+let rec identify_return_stmt = function
+  | [Symbol "SDEFUN"; fn; args;
+     Group [Symbol "SPROG"; vars; 
+      Group [Symbol "SEQ";
+       Group [Symbol "EXIT"; body];
+       Group [Symbol "LABEL"; Symbol label;
+        Group [Symbol "EXIT"; Symbol var]]]]] ->
+      Group [Symbol "SDEFUN"; fn; args;
+       Group [Symbol "SPROG"; vars;
+        replace_return_stmt label var body]]
+  | _ -> raise NoMatch
 
-let rec rewrite_n fs exp =
-  match fs with
-  | f::fs -> rewrite_n fs (rewrite f exp)
-  | [] -> exp
+and replace_return_stmt label var fnbody =
+  let rewrite_return body = (match body with 
+    | [Symbol "PROGN";
+       Group [Symbol "SETQ"; Symbol var'; retval];
+       Group [Symbol "GO"; Symbol label']]
+      when var' = var && label' = label ->
+        make_return retval
+    | _ -> raise NoMatch) in
+  rewrite rewrite_return fnbody
 
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
-  seq_to_block;
-  reduce_trivial_exit;
-  lett_to_setq;
   cond_to_if;
+  lett_to_setq;
+  seq_simplify;
+  identify_loops;
+  expand_loop_exit;
+  merge_loop_cond;
+  reduce_trivial_if;
+  reduce_trivial_exit;
+  identify_return_stmt;
+  lift_seq;
   globals_shadowing;
   prog_to_let;
-  reduce_progn;
-  reduce_trivial_if
   ]
 
 let reader_pass exp =

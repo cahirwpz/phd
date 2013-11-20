@@ -40,6 +40,3 @@ let rec but_last = function
   | _ -> failwith "Expected list of at least one element."
 
 let split_at_last xs = (but_last xs, List.last xs)
-
-let rec unzip tuplst =
-  List.fold_right (fun (x, y) (flst, slst) -> (x::flst, y::slst)) tuplst ([], [])

@@ -1,10 +1,22 @@
 open Format
 open ExtList
+open ExtString
+open Option
 open Utils
 
 type spadtype =
   | Array of spadtype | Cons of spadtype
-  | SI | DF | Boolean | Generic
+  | SI | DF | Boolean | Void | Exit | Generic
+  | Mapping of spadtype list (* aka FunctionType *)
+  | UserType of string * (spadtype list)
+  (*
+   * Builtin types listed are in |$optimizableConstructorNames|.
+   *
+   * Symbol of string | String | Character
+   * U32Vector | U16Vector | U8Vector 
+   * Union of (string option * spadtype) list
+   * Record of (string * spadtype) list
+   *)
 
 type tree =
   | Apply of tree * tree list
@@ -20,11 +32,11 @@ type tree =
   | IfThen of tree * tree
   | IfThenElse of tree * tree * tree
   | Int of int
-  | Lambda of string list * tree
+  | Lambda of string list * spadtype * tree
+  | Loop of tree
   | Return of tree
   | String of string
   | Symbol of string
-  | TypedLambda of (string * spadtype) list * spadtype * tree
   | UnaryOp of string * tree
   | Var of string
   | While of tree * tree
@@ -146,11 +158,13 @@ and convert_char = function
 
 and convert_lambda = function
   | (Sexpr.Group args)::body ->
-      Lambda (convert_symbol_list args, convert_progn body)
+      let args = convert_symbol_list args in
+      let types = List.make (List.length args + 1) Generic in
+      Lambda (args, Mapping types, convert_progn body)
   | e -> error "Malformed lambda s-form" e
 
 and convert_loop body =
-  While (Symbol "T", convert_progn body)
+  Loop (convert_progn body)
 
 and convert_defvar = function
   | [Sexpr.Symbol name; value] ->
@@ -161,14 +175,17 @@ and convert_defvar = function
 
 and convert_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
-      Assign (Var name, Lambda (convert_symbol_list args, convert body))
+      let args = convert_symbol_list args in
+      let types = List.make (List.length args + 1) Generic in
+      Assign (Var name, Lambda (args, Mapping types, convert body))
   | e -> error "Malformed defun s-form" e
 
 and convert_typed_fun_decl = function
   | [Sexpr.Symbol name; Sexpr.Group args; body] ->
-      let targs = List.map convert_typed_symbol args in
-      let (rsym, rtype) = List.last targs in
-      Assign (Var name, TypedLambda ((but_last targs) @ [(rsym, Generic)], rtype, convert body))
+      let args, types = List.split @@ List.map convert_typed_symbol args in
+      let tl1, tl2 = List.split_nth (List.length types - 1) types in
+      let types = List.concat [tl1; [Generic]; tl2] in
+      Assign (Var name, Lambda (args, Mapping types, convert body))
   | e -> error "Malformed sdefun s-form" e
 
 and convert_let = function
@@ -230,6 +247,7 @@ and convert_type = function
       | "SingleInteger" -> SI
       | "DoubleFloat" -> DF
       | "Boolean" -> Boolean
+      | "Void" -> Void
       | "List" -> Cons Generic
       | _ -> Generic)
   | [Sexpr.Symbol atype; Sexpr.Group maybe_type]
@@ -258,11 +276,9 @@ let rec print = function
       print_char ')'
   | ArrayRef (name, index) ->
       print name; print_char '['; print index; print_char ']'
-  | Assign (name, Lambda (args, body)) ->
-      printf "@[<v>def "; print name;
-      printf "(@[<hov>"; print_symbols args; printf "@])@,";
-      print_fun_body body; printf "@]"
-  | Assign (name, TypedLambda (targs, rtype, body)) ->
+  | Assign (name, Lambda (args, Mapping types, body)) ->
+      let targs = List.combine args (but_last types)
+      and rtype = List.last types in
       printf "@[<v>def "; print name;
       printf "(@[<hov>"; print_typed_symbols targs; printf "@]) : ";
       print_spadtype rtype; printf "@,"; print_fun_body body; printf "@]"
@@ -301,14 +317,11 @@ let rec print = function
       print_int n
   | Global (name, value) ->
       printf "global %s" name;
-      begin match value with
-      | Some tree -> printf " := "; print tree
-      | None -> ()
-      end
-  | Lambda (args, body) ->
-      printf "@[<v>fn (@[<hov>"; print_symbols args; printf "@]) -> @,";
-      print_fun_body body; printf "@] "
-  | TypedLambda (targs, rtype, body) ->
+      if is_some value then
+        (printf " := "; print (get value))
+  | Lambda (args, Mapping types, body) ->
+      let targs = List.combine args (but_last types)
+      and rtype = List.last types in
       printf "@[<v>fn (@[<hov>"; print_typed_symbols targs; printf "@]) : ";
       print_spadtype rtype; printf " -> @,";
       print_fun_body body; printf "@] "
@@ -325,6 +338,10 @@ let rec print = function
   | While (pred, body) ->
       printf "@[<v>@[<v 2>while@,"; print_inline pred;
       printf "@]@,@[<v 2>do@,"; print_inline body; printf "@]@,endwhile@]"
+  | Loop body ->
+      printf "@[<v>@[<v 2>loop@,"; print_inline body; printf "@]@,endloop@]"
+  | _ ->
+      failwith "not handled"
 
 and print_inline = function
   | Block (vs, exps) -> print_block vs exps
@@ -348,15 +365,22 @@ and print_block vars exps =
     (printf "var @["; print_typed_symbols vars; printf "@]@,");
   iter_join (fun t -> print t) (fun () -> printf "@,") exps
 
-and print_spadtype = function
-  | Array atype ->
-      print_string "PrimitiveArray("; print_spadtype atype; print_char ')'
-  | SI -> print_string "SingleInteger"
-  | DF -> print_string "DoubleFloat"
-  | Boolean -> print_string "Boolean"
-  | Cons atype ->
-      print_string "List("; print_spadtype atype; print_char ')'
-  | Generic -> print_string "?"
+and string_of_spadtype = function
+  | Array atype -> sprintf "PrimitiveArray(%s)" (string_of_spadtype atype)
+  | SI -> "SingleInteger"
+  | DF -> "DoubleFloat"
+  | Boolean -> "Boolean"
+  | Cons atype -> sprintf "List(%s)" (string_of_spadtype atype)
+  | Generic -> "?"
+  | Exit -> "Exit"
+  | Void -> "Void"
+  | Mapping ts ->
+      String.join " -> " (List.map string_of_spadtype ts)
+  | UserType (name, []) -> name
+  | UserType (name, ts) ->
+      sprintf "%s(%s)" name (String.join ", " (List.map string_of_spadtype ts))
+
+and print_spadtype t = print_string @@ string_of_spadtype t
 
 and print_symbol name = 
   let name = literal_symbol name in

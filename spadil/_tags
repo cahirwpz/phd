@@ -2,10 +2,13 @@
 <common>: include
 <*.*>: package(llvm)
 <*.*>: package(llvm.analysis)
+<*.*>: package(llvm.bitreader)
 <*.*>: package(llvm.executionengine)
+<*.*>: package(llvm.ipo)
+<*.*>: package(llvm.passmgr_builder)
 <*.*>: package(llvm.scalar_opts)
 <*.*>: package(llvm.target)
-<*.*>: package(llvm.bitreader)
+<*.*>: package(llvm.utils)
 <*.*>: use_gc
 <*.*>: package(extlib)
 <cfg.*>: package(ocamlgraph), package(str)
