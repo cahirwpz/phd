@@ -72,11 +72,9 @@ let string_of_fcmp = function
   | Fcmp.Une -> "une"
   | Fcmp.True -> "true"
 
-class code_builder pkg =
+class code_builder =
   object (self)
     val builder = Llvm.builder the_context
-    val package = pkg
-    val localvars = new symbolmap
 
     method append_block name value =
       Llvm.append_block the_context name value
@@ -84,16 +82,14 @@ class code_builder pkg =
       Llvm.insertion_block builder
     method position_at_end block =
       Llvm.position_at_end block builder
+    method function_block =
+      Llvm.block_parent @@ Llvm.insertion_block builder
 
     (* Control flow. *)
-    method build_call_raw fn args =
+    method build_call fn args =
       let res_type = Llvm.return_type @@ Llvm.get_function_type fn in
       let res_name = (if res_type = void_type then "" else "call_tmp") in
       Llvm.build_call fn args res_name builder
-    method build_call (name : string) args =
-      self#build_call_raw (package#lookup_function name) args
-    method build_call_builtin (name : string) args =
-      self#build_call_raw (package#lookup_builtin_function name) args
 
     method build_phi incoming =
       Llvm.build_phi incoming "if_tmp" builder
@@ -103,16 +99,14 @@ class code_builder pkg =
       Llvm.build_br dest_bb builder
     method build_ret value =
       Llvm.build_ret value builder
+    method build_ret_void =
+      Llvm.build_ret_void builder
 
     (* Memory access instructions. *)
-    method build_load name = 
-      Llvm.build_load (self#lookup_var name) name builder
-    method build_load_direct src = 
-      Llvm.build_load src "load_tmp" builder
-    method build_store src name =
-      Llvm.build_store src (self#lookup_var name) builder
-    method build_store_direct src dst =
-      Llvm.build_store src dst builder
+    method build_load src name = 
+      Llvm.build_load src name builder
+    method build_store value dst =
+      Llvm.build_store value dst builder
 
     (* Aggregate access instruction. *)
     method build_gep vector index =
@@ -161,22 +155,52 @@ class code_builder pkg =
     method build_fcmp cmp lhs rhs =
       let name = sprintf "fcmp_%s_tmp" (string_of_fcmp cmp) in
       Llvm.build_fcmp cmp lhs rhs name builder
+  end;;
+
+class function_builder pkg fn_name =
+  object (self)
+    inherit code_builder
+
+    val package = pkg
+    val local_vars = new symbolmap
+    val fn_type = 
+      match pkg#lookup_function_type fn_name with
+      | Ast.Mapping fn_type -> Array.of_list fn_type
+      | _ -> failwith "Function is not of Mapping type!";
+    val mutable ret_bbs : (Llvm.llvalue * Llvm.llbasicblock) list = []
+
+    (* Variable load / store instructions. *)
+    method build_load_var name =
+      Llvm.build_load (self#lookup_var name) name builder
+    method build_store_var src name =
+      Llvm.build_store src (self#lookup_var name) builder
+
+    (* Calling declared functions and intrinsics. *)
+    method build_call_fn (name : string) args =
+      self#build_call (package#lookup_function name) args
+    method build_call_builtin (name : string) args =
+      self#build_call (package#lookup_builtin name) args
 
     (* Handling local variables. *)
     method var_intro name var_type var_lltype =
       let alloca = Llvm.build_alloca var_lltype name builder in
-      localvars#add name (var_type, alloca);
+      local_vars#add name (var_type, alloca);
       alloca
-
     method var_forget name =
-      localvars#rem name
+      local_vars#rem name
+
+    method add_ret_bb value bb =
+      ret_bbs <- (value, bb)::ret_bbs
+
+    method list_ret_bb =
+      ret_bbs
 
     (* Resolving names. *)
     method lookup_function name =
       package#lookup_function name
 
     method lookup_var name =
-      match localvars#get name with
+      match local_vars#get name with
       | None ->
           begin
             match package#lookup_global name with
@@ -188,12 +212,22 @@ class code_builder pkg =
       | Some var ->
           snd var
 
-    method lookup_var_type name =
-      match localvars#get name with
+    (* Type inquiries. *)
+    method var_type name =
+      match local_vars#get name with
       | Some var ->
           fst var
       | None ->
           Ast.Generic
+
+    method arg_type i =
+      if i < Array.length fn_type - 1 then
+        fn_type.(i)
+      else
+        raise (Invalid_argument "index out of bounds")
+
+    method ret_type =
+      fn_type.(Array.length fn_type - 1)
   end;;
 
 (* function-by-function pass pipeline over the package [pkg]. It does not take
@@ -204,6 +238,7 @@ class function_pass_manager pkg =
     val fpm = Llvm.PassManager.create_function pkg#get_module
 
     method initialize =
+      (*
       (* Promote allocas to registers - without that while loops don't work. *)
       Llvm_scalar_opts.add_memory_to_register_promotion fpm;
       (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
@@ -218,6 +253,7 @@ class function_pass_manager pkg =
       Llvm_scalar_opts.add_tail_call_elimination fpm;
       let pmbuilder = Llvm_passmgr_builder.create () in
       Llvm_passmgr_builder.populate_function_pass_manager fpm pmbuilder;
+      *)
       (* Finally... initialize it! *)
       Llvm.PassManager.initialize fpm
 
@@ -269,7 +305,7 @@ class package a_module a_jit =
       Hashtbl.add localfuns name fn_type;
       Llvm.declare_function name fn_lltype package
 
-    method lookup_builtin_function name =
+    method lookup_builtin name =
       match name with
       | "llvm.fabs.f64" ->
           let fn_type = (Ast.Mapping [Ast.DF; Ast.DF])
@@ -301,8 +337,8 @@ class package a_module a_jit =
  
     method get_module = package
 
-    method new_builder =
-      new code_builder self 
+    method new_builder = new code_builder
+    method new_function_builder name = new function_builder self name
 
     method dump =
       print_string @@ Llvm.string_of_llmodule package
@@ -313,7 +349,7 @@ class package a_module a_jit =
       ignore (fpm#initialize);
       ignore (mpm#initialize);
       self#iter_functions (fun fn -> ignore (fpm#run_function fn));
-      ignore (mpm#run_module self#get_module);
+      (*ignore (mpm#run_module self#get_module);*)
       ignore (fpm#finalize);
       fpm#dispose;
       mpm#dispose

@@ -7,7 +7,7 @@ open Utils
 let cast_SI builder v =
   match Llvm.type_of v with
   | t when t = gen_type ->
-      builder#build_call "unbox_SI" [| v |]
+      builder#build_call_fn "unbox_SI" [| v |]
   | t when t = i32_type ->
       v
   | t ->
@@ -16,7 +16,7 @@ let cast_SI builder v =
 let cast_DF builder v =
   match Llvm.type_of v with
   | t when t = gen_type ->
-      builder#build_call "unbox_DF" [| v |]
+      builder#build_call_fn "unbox_DF" [| v |]
   | t when t = double_type ->
       v
   | t ->
@@ -25,7 +25,7 @@ let cast_DF builder v =
 let cast_GEN builder v = 
   match Llvm.type_of v with
   | t when t = i32_type ->
-      builder#build_call "box_SI" [| v |]
+      builder#build_call_fn "box_SI" [| v |]
   | t when t = gen_type ->
       v
   | t when t = void_type ->
@@ -72,70 +72,73 @@ let rec translate_type = function
 (* Code generation starts here *)
 let rec codegen builder exp =
   let codegen = codegen builder in
+  let codegen_some exp = Option.get (codegen exp) in 
   match exp with
+  | Ast.Symbol "T" ->
+      Some (const_int i1_type 1)
+  | Ast.Symbol "NIL" ->
+      Some (const_int i1_type 0)
   | Ast.Char c ->
-      const_int i8_type (Char.code c)
+      Some (const_int i8_type (Char.code c))
   | Ast.Float n ->
-      const_float double_type n
+      Some (const_float double_type n)
   | Ast.Int n ->
-      const_int i32_type n
+      Some (const_int i32_type n)
   | Ast.String s ->
-      const_stringz s
+      Some (const_stringz s)
   | Ast.Var name when name = "NIL" ->
-      const_pointer_null
+      Some (const_pointer_null)
   | Ast.Var name ->
-      builder#build_load name
+      Some (builder#build_load_var name)
   | Ast.Block (vars, exps) ->
       codegen_block builder vars exps
   | Ast.UnaryOp (op, exp) ->
-      codegen_unary_op builder op (codegen exp)
+      Some (codegen_unary_op builder op (codegen_some exp))
   | Ast.BinaryOp (op, lhs, rhs) ->
-      codegen_binary_op builder op (codegen lhs) (codegen rhs)
+      Some (codegen_binary_op builder op (codegen_some lhs) (codegen_some rhs))
   | Ast.Call (name, args) ->
       let name = Ast.literal_symbol name in
       let fn = builder#lookup_function name in
-      let args = Array.to_list @@ Array.map codegen (Array.of_list args) in
-      let types = Array.to_list @@ Array.map Llvm.type_of (Llvm.params fn) in
+      let args = List.map codegen_some args in
+      let types = List.map Llvm.type_of (Array.to_list @@ Llvm.params fn) in
       let typed_args = Array.of_list (List.combine args types) in
-      builder#build_call name (Array.map (cast builder) typed_args)
+      Some (builder#build_call_fn name (Array.map (cast builder) typed_args))
   | Ast.IfThenElse (cond, t, f) ->
-      codegen_if_then_else builder (codegen cond) t f
+      codegen_if_then_else builder (codegen_some cond) t f
   | Ast.IfThen (cond, t) ->
-      codegen_if_then builder (codegen cond) t
+      ignore(codegen_if_then builder (codegen_some cond) t);
+      None
   | Ast.Loop body ->
-      codegen_while builder (Ast.Symbol "T") body
+      ignore(codegen_while builder (Ast.Symbol "T") body);
+      None
   | Ast.While (cond, body) ->
-      codegen_while builder cond body
+      ignore(codegen_while builder cond body);
+      None
   | Ast.Assign (Ast.Var name, value) ->
-      let value = codegen value in
+      let value = codegen_some value in
       let var = builder#lookup_var name in
       let value_type = Llvm.element_type @@ Llvm.type_of var in
-      (*
-      print_string "assign: "; dump_value value; print_string " to: ";
-      dump_type value_type; print_newline ();
-      *)
       let value = cast builder (value, value_type) in
-      builder#build_store value name;
-      builder#build_load name
+      builder#build_store_var value name;
+      None
   | Ast.Assign (Ast.ArrayRef (vector, index), value) ->
-      let value = cast_GEN builder (codegen value) in
-      let vector = codegen @@ Ast.Call ("QVREF", [vector]) in
-      let item = builder#build_gep vector (codegen index) in
-      (*
-      print_string "assign: "; dump_type_of value; print_string " to: ";
-      dump_type_of item; print_newline ();
-      *)
-      builder#build_store_direct value item
-  | Ast.Symbol "T" ->
-      const_int i1_type 1
-  | Ast.Symbol "NIL" ->
-      const_int i1_type 0
+      let value = codegen_some value
+      and index = codegen_some index
+      and vector = codegen_some @@ Ast.Call ("QVREF", [vector]) in
+      let item = builder#build_gep vector index in
+      builder#build_store (cast_GEN builder value) item;
+      None
   | Ast.ArrayRef (vector, index) ->
-      let vector = codegen @@ Ast.Call ("QVREF", [vector]) in
-      let item = builder#build_gep vector (codegen index) in
-      builder#build_load_direct item
+      let index = codegen_some index
+      and vector = codegen_some @@ Ast.Call ("QVREF", [vector]) in
+      let item = builder#build_gep vector index in
+      Some (builder#build_load item (Llvm.value_name vector))
   | Ast.Return value ->
-      builder#build_ret (codegen value)
+      let ret_val = codegen_some value in
+      builder#add_ret_bb ret_val builder#insertion_block;
+      let after_bb = builder#append_block "after" builder#function_block in
+      builder#position_at_end after_bb;
+      None
   | x ->
       Ast.print x; print_char '\n'; failwith "not handled"
 
@@ -188,6 +191,7 @@ and codegen_binary_op builder op lhs rhs =
   *)
   | _ -> raise (NameError (sprintf "Unknown operator '%s'." op))
 
+(* 'if-then' construct is always a statement. *)
 and codegen_if_then builder cond t =
   let codegen = codegen builder in
   (* Convert condition to a bool by comparing equal to 0. *)
@@ -208,26 +212,28 @@ and codegen_if_then builder cond t =
    * other is used for the conditional branch. *)
   let new_then_bb = builder#insertion_block in
 
-  (* Emit merge block. *)
-  let merge_bb = builder#append_block "endif" the_function in
-  builder#position_at_end merge_bb;
-  let incoming = [(izero, new_then_bb); (izero, start_bb)] in
-  let phi = builder#build_phi incoming in
+  (* Emit 'endif' block. *)
+  let endif_bb = builder#append_block "endif" the_function in
+  builder#position_at_end endif_bb;
+
+  ignore(builder#build_phi [(izero, new_then_bb); (izero, start_bb)]);
 
   (* Return to the start block to add the conditional branch. *)
   builder#position_at_end start_bb;
-  ignore (builder#build_cond_br cond_val then_bb merge_bb);
+  builder#build_cond_br cond_val then_bb endif_bb;
 
   (* Set a unconditional branch at the end of the 'then' block and the
-   * 'else' block to the 'merge' block. *)
+   * 'else' block to the 'endif' block. *)
   builder#position_at_end new_then_bb;
-  ignore (builder#build_br merge_bb);
+  ignore (builder#build_br endif_bb);
 
-  (* Finally, set the builder to the end of the merge block. *)
-  builder#position_at_end merge_bb;
+  (* Finally, set the builder to the end of the endif block. *)
+  builder#position_at_end endif_bb;
 
-  phi
+  None
 
+(* 'if-then-else' may be a statement if both branches return values. We silently
+ * assume both values will be of the same type. *)
 and codegen_if_then_else builder cond t f =
   let codegen = codegen builder in
   (* Convert condition to a bool by comparing equal to 0. *)
@@ -257,10 +263,16 @@ and codegen_if_then_else builder cond t f =
    * phi. *)
   let new_else_bb = builder#insertion_block in
 
-  (* Emit merge block. *)
-  let merge_bb = builder#append_block "endif" the_function in
-  builder#position_at_end merge_bb;
+  (* Emit 'endif' block. *)
+  let endif_bb = builder#append_block "endif" the_function in
+  builder#position_at_end endif_bb;
+
+  let phi_has_value = Option.is_some then_val && Option.is_some else_val in
+
+  let then_val = (if phi_has_value then Option.get then_val else izero)
+  and else_val = (if phi_has_value then Option.get else_val else izero) in
   let incoming = [(then_val, new_then_bb); (else_val, new_else_bb)] in
+
   (* FIXME: check if type_of(then_val) equals to type_of(else_val) *)
   (* dump_value then_val; dump_value else_val; *)
   let phi = builder#build_phi incoming in
@@ -270,48 +282,56 @@ and codegen_if_then_else builder cond t f =
   ignore (builder#build_cond_br cond_val then_bb else_bb);
 
   (* Set a unconditional branch at the end of the 'then' block and the
-   * 'else' block to the 'merge' block. *)
+   * 'else' block to the 'endif' block. *)
   builder#position_at_end new_then_bb;
-  ignore (builder#build_br merge_bb);
+  ignore (builder#build_br endif_bb);
   builder#position_at_end new_else_bb;
-  ignore (builder#build_br merge_bb);
+  ignore (builder#build_br endif_bb);
 
-  (* Finally, set the builder to the end of the merge block. *)
-  builder#position_at_end merge_bb;
+  (* Finally, set the builder to the end of the endif block. *)
+  builder#position_at_end endif_bb;
 
-  phi
+  if phi_has_value then Some phi else None
 
+(* 'while' construct is always a statement. *)
 and codegen_while builder cond body =
+  let codegen = codegen builder in
+  let codegen_some exp = Option.get (codegen exp) in 
+
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
   let loop_bb = builder#append_block "loop" the_function in
-  let body_bb = builder#append_block "body" the_function in
-  let end_loop_bb = builder#append_block "end_loop" the_function in
 
   (* Terminate predecessor block with uncoditional jump to loop. *)
   builder#position_at_end start_bb;
   ignore (builder#build_br loop_bb);
-
   builder#position_at_end loop_bb;
-  let cond_val = codegen builder cond in
-  ignore (builder#build_cond_br cond_val body_bb end_loop_bb);
+
+  (* Encode loop exit condition check. *)
+  let cond_val = codegen_some cond in
+
+  let body_bb = builder#append_block "body" the_function in
 
   builder#position_at_end body_bb;
-  ignore (codegen builder body);
-  ignore (builder#build_br loop_bb);
+  ignore(codegen body);
+  builder#build_br loop_bb;
 
+  let end_loop_bb = builder#append_block "end_loop" the_function in
+
+  builder#position_at_end loop_bb;
+  ignore (builder#build_cond_br cond_val body_bb end_loop_bb);
   builder#position_at_end end_loop_bb;
-  izero
+  None
 
 let rec codegen_toplevel pkg tree =
   try
     match tree with
+    (*
     | Ast.Global (name, None) ->
         Some (pkg#declare_global gen_type name)
     | Ast.Global (name, Some value) ->
-        let bdr = pkg#new_builder in
-        let value' = codegen bdr value in
-        Some (pkg#define_global name value')
+        Some (pkg#define_global name (codegen pkg#new_builder value))
+    *)
     | Ast.Assign (Ast.Var name, Ast.Lambda (args, fn_type, body)) ->
         let name = Ast.literal_symbol name
         and args = Array.of_list args in
@@ -320,7 +340,7 @@ let rec codegen_toplevel pkg tree =
           try
             Some (codegen_function_def pkg fn args body)
           with e ->
-            Llvm.delete_function fn; raise e
+            Printexc.print_backtrace stderr; Llvm.delete_function fn; raise e
         end
     | _ ->
         print_string "Syntax Error: Not a toplevel construction.\n";
@@ -352,7 +372,7 @@ and codegen_typed_function_decl pkg name args fn_type =
   fn
 
 and codegen_function_def pkg fn args body =
-  let builder = pkg#new_builder in
+  let builder = pkg#new_function_builder (Llvm.value_name fn) in
 
   (* Create a new basic block to start insertion into. *)
   let entry_bb = builder#append_block "entry" fn in
@@ -360,37 +380,44 @@ and codegen_function_def pkg fn args body =
 
   (* Create an alloca instruction in the entry block of the function. This
    * is used for mutable variables etc. *)
-  let fn_types = 
-    (match pkg#lookup_function_type (Llvm.value_name fn) with
-    | Ast.Mapping fn_type -> Array.of_list fn_type
-    | _ -> failwith "Function is not of Mapping type!") in
   let fn_lltype = Llvm.get_function_type fn in
-  let types = Llvm.param_types fn_lltype
-  and ret_type = Llvm.return_type fn_lltype in
+  let types = Llvm.param_types fn_lltype in
   Array.iteri (fun i value ->
     let name = args.(i)
-    and arg_type = fn_types.(i)
+    and arg_type = builder#arg_type i
     and arg_lltype = types.(i) in
 
     (* Create an alloca for this variable. *)
     ignore(builder#var_intro name arg_type arg_lltype);
 
     (* Store the initial value into the alloca. *)
-    ignore(builder#build_store value name);
+    ignore(builder#build_store value (builder#lookup_var name));
     ) (Llvm.params fn);
 
   (* Finish off the function. *)
-  let body_val_bare = codegen builder body in
-  let body_val = 
-    (if ret_type = gen_type then
-      cast_GEN builder body_val_bare else body_val_bare) in
+  let body_val = codegen builder body in
+  let body_end_bb = builder#insertion_block in
 
-  (* dump_type_of body_val; dump_type ret_type; *)
-
-  if (Llvm.type_of body_val) != ret_type then
-    failwith "Value and return type don't match.";
-
-  ignore(builder#build_ret body_val);
+  (match builder#ret_type with
+  | Ast.Void ->
+      ignore(builder#build_ret_void)
+  | _ ->
+      let returning_bbs = builder#list_ret_bb in
+      if List.length returning_bbs > 0 then
+        begin
+          (* Create merge bb for all returning bbs *)
+          let return_bb = builder#append_block "return" fn in
+          builder#position_at_end return_bb;
+          (* Use phi to merge all returning branches. *)
+          let incoming = [(Option.get body_val, body_end_bb)] @ returning_bbs in
+          List.iter (fun (value, bb) ->
+            builder#position_at_end bb; ignore(builder#build_br return_bb)) incoming;
+          builder#position_at_end return_bb;
+          let ret_val = builder#build_phi incoming in
+          ignore(builder#build_ret ret_val)
+        end
+      else
+        ignore(builder#build_ret (Option.get body_val)));
 
   (* Validate the generated code, checking for consistency. *)
   Llvm_analysis.assert_valid_function fn;
