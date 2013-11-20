@@ -115,9 +115,9 @@ let rec codegen builder exp =
       let typed_args = Array.of_list (List.combine args types) in
       Some (builder#build_call_fn name (Array.map (cast builder) typed_args))
   | Ast.IfThenElse (cond, t, f) ->
-      codegen_if_then_else builder (codegen_some cond) t f
+      codegen_if_then_else builder cond t f
   | Ast.IfThen (cond, t) ->
-      ignore(codegen_if_then builder (codegen_some cond) t);
+      ignore(codegen_if_then builder cond t);
       None
   | Ast.Loop body ->
       ignore(codegen_loop builder body);
@@ -205,14 +205,21 @@ and codegen_binary_op builder op lhs rhs =
 (* 'if-then' construct is always a statement. *)
 and codegen_if_then builder cond t =
   let codegen = codegen builder in
-  (* Convert condition to a bool by comparing equal to 0. *)
-  let cond_val = cast_BOOL builder cond in
+  let codegen_some exp = Option.get (codegen exp) in 
   let i = unique#get in
 
-  (* Grab the first block so that we might later add the conditional branch
-   * to it at the end of the function. *)
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
+
+  let if_bb = builder#append_block ("if." ^ i) the_function in
+
+  builder#position_at_end start_bb;
+  ignore(builder#build_br if_bb);
+  builder#position_at_end if_bb;
+
+  (* Convert condition to a bool by comparing equal to 0. *)
+  let cond_val = cast_BOOL builder (codegen_some cond) in
+
   let then_bb = builder#append_block ("then." ^ i) the_function in
 
   (* Emit 'then' value. *)
@@ -228,10 +235,10 @@ and codegen_if_then builder cond t =
   let endif_bb = builder#append_block ("endif." ^ i) the_function in
   builder#position_at_end endif_bb;
 
-  ignore(builder#build_phi [(iundef, new_then_bb); (iundef, start_bb)]);
+  ignore(builder#build_phi [(iundef, new_then_bb); (iundef, if_bb)]);
 
   (* Return to the start block to add the conditional branch. *)
-  builder#position_at_end start_bb;
+  builder#position_at_end if_bb;
   builder#build_cond_br cond_val then_bb endif_bb;
 
   (* Set a unconditional branch at the end of the 'then' block and the
@@ -248,14 +255,21 @@ and codegen_if_then builder cond t =
  * assume both values will be of the same type. *)
 and codegen_if_then_else builder cond t f =
   let codegen = codegen builder in
-  (* Convert condition to a bool by comparing equal to 0. *)
-  let cond_val = cast_BOOL builder cond in
+  let codegen_some exp = Option.get (codegen exp) in 
   let i = unique#get in
 
-  (* Grab the first block so that we might later add the conditional branch
-   * to it at the end of the function. *)
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
+
+  let if_bb = builder#append_block ("if." ^ i) the_function in
+
+  builder#position_at_end start_bb;
+  ignore(builder#build_br if_bb);
+  builder#position_at_end if_bb;
+
+  (* Convert condition to a bool by comparing equal to 0. *)
+  let cond_val = cast_BOOL builder (codegen_some cond) in
+
   let then_bb = builder#append_block ("then." ^ i) the_function in
   let else_bb = builder#append_block ("else." ^ i) the_function in
 
@@ -291,7 +305,7 @@ and codegen_if_then_else builder cond t f =
   let phi = builder#build_phi incoming in
 
   (* Return to the start block to add the conditional branch. *)
-  builder#position_at_end start_bb;
+  builder#position_at_end if_bb;
   ignore (builder#build_cond_br cond_val then_bb else_bb);
 
   (* Set a unconditional branch at the end of the 'then' block and the
