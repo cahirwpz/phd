@@ -41,6 +41,7 @@ let mdkind_id = Llvm.mdkind_id the_context
 
 let izero = const_int i32_type 0
 let fzero = const_float double_type 0.0
+let iundef = Llvm.undef i32_type
 
 let string_of_icmp = function
   | Icmp.Eq -> "eq"
@@ -238,7 +239,6 @@ class function_pass_manager pkg =
     val fpm = Llvm.PassManager.create_function pkg#get_module
 
     method initialize =
-      (*
       (* Promote allocas to registers - without that while loops don't work. *)
       Llvm_scalar_opts.add_memory_to_register_promotion fpm;
       (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
@@ -253,7 +253,6 @@ class function_pass_manager pkg =
       Llvm_scalar_opts.add_tail_call_elimination fpm;
       let pmbuilder = Llvm_passmgr_builder.create () in
       Llvm_passmgr_builder.populate_function_pass_manager fpm pmbuilder;
-      *)
       (* Finally... initialize it! *)
       Llvm.PassManager.initialize fpm
 
@@ -343,16 +342,18 @@ class package a_module a_jit =
     method dump =
       print_string @@ Llvm.string_of_llmodule package
 
-    method optimize =
+    method optimize = ()
+      (*
       let fpm = new function_pass_manager self
       and mpm = new module_pass_manager in
       ignore (fpm#initialize);
       ignore (mpm#initialize);
       self#iter_functions (fun fn -> ignore (fpm#run_function fn));
-      (*ignore (mpm#run_module self#get_module);*)
+      ignore (mpm#run_module self#get_module);
       ignore (fpm#finalize);
       fpm#dispose;
       mpm#dispose
+      *)
   end;;
 
 (* JIT Interpreter. *)

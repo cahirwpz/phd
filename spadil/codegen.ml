@@ -4,6 +4,17 @@ open ExtList
 open Printf 
 open Utils
 
+class counter =
+  object
+    val mutable counter = 0
+    method get =
+      counter <- counter + 1; string_of_int counter
+    method reset =
+      counter <- 0
+  end
+
+let unique = new counter
+
 let cast_SI builder v =
   match Llvm.type_of v with
   | t when t = gen_type ->
@@ -109,7 +120,7 @@ let rec codegen builder exp =
       ignore(codegen_if_then builder (codegen_some cond) t);
       None
   | Ast.Loop body ->
-      ignore(codegen_while builder (Ast.Symbol "T") body);
+      ignore(codegen_loop builder body);
       None
   | Ast.While (cond, body) ->
       ignore(codegen_while builder cond body);
@@ -196,12 +207,13 @@ and codegen_if_then builder cond t =
   let codegen = codegen builder in
   (* Convert condition to a bool by comparing equal to 0. *)
   let cond_val = cast_BOOL builder cond in
+  let i = unique#get in
 
   (* Grab the first block so that we might later add the conditional branch
    * to it at the end of the function. *)
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
-  let then_bb = builder#append_block "then" the_function in
+  let then_bb = builder#append_block ("then." ^ i) the_function in
 
   (* Emit 'then' value. *)
   builder#position_at_end then_bb;
@@ -213,10 +225,10 @@ and codegen_if_then builder cond t =
   let new_then_bb = builder#insertion_block in
 
   (* Emit 'endif' block. *)
-  let endif_bb = builder#append_block "endif" the_function in
+  let endif_bb = builder#append_block ("endif." ^ i) the_function in
   builder#position_at_end endif_bb;
 
-  ignore(builder#build_phi [(izero, new_then_bb); (izero, start_bb)]);
+  ignore(builder#build_phi [(iundef, new_then_bb); (iundef, start_bb)]);
 
   (* Return to the start block to add the conditional branch. *)
   builder#position_at_end start_bb;
@@ -238,13 +250,14 @@ and codegen_if_then_else builder cond t f =
   let codegen = codegen builder in
   (* Convert condition to a bool by comparing equal to 0. *)
   let cond_val = cast_BOOL builder cond in
+  let i = unique#get in
 
   (* Grab the first block so that we might later add the conditional branch
    * to it at the end of the function. *)
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
-  let then_bb = builder#append_block "then" the_function in
-  let else_bb = builder#append_block "else" the_function in
+  let then_bb = builder#append_block ("then." ^ i) the_function in
+  let else_bb = builder#append_block ("else." ^ i) the_function in
 
   (* Emit 'then' value. *)
   builder#position_at_end then_bb;
@@ -264,13 +277,13 @@ and codegen_if_then_else builder cond t f =
   let new_else_bb = builder#insertion_block in
 
   (* Emit 'endif' block. *)
-  let endif_bb = builder#append_block "endif" the_function in
+  let endif_bb = builder#append_block ("endif." ^ i) the_function in
   builder#position_at_end endif_bb;
 
   let phi_has_value = Option.is_some then_val && Option.is_some else_val in
 
-  let then_val = (if phi_has_value then Option.get then_val else izero)
-  and else_val = (if phi_has_value then Option.get else_val else izero) in
+  let then_val = (if phi_has_value then Option.get then_val else iundef)
+  and else_val = (if phi_has_value then Option.get else_val else iundef) in
   let incoming = [(then_val, new_then_bb); (else_val, new_else_bb)] in
 
   (* FIXME: check if type_of(then_val) equals to type_of(else_val) *)
@@ -293,34 +306,52 @@ and codegen_if_then_else builder cond t f =
 
   if phi_has_value then Some phi else None
 
+(* 'loop' construct is always a statement. *)
+and codegen_loop builder body =
+  let codegen = codegen builder in
+  let i = unique#get in
+
+  let start_bb = builder#insertion_block in
+  let the_function = Llvm.block_parent start_bb in
+  let loop_body_bb = builder#append_block ("loop." ^ i) the_function in
+
+  (* Terminate predecessor block with uncoditional jump to loop. *)
+  builder#position_at_end start_bb;
+  ignore (builder#build_br loop_body_bb);
+  builder#position_at_end loop_body_bb;
+  ignore(codegen body);
+  builder#build_br loop_body_bb;
+  None
+
 (* 'while' construct is always a statement. *)
 and codegen_while builder cond body =
   let codegen = codegen builder in
   let codegen_some exp = Option.get (codegen exp) in 
+  let i = unique#get in
 
   let start_bb = builder#insertion_block in
   let the_function = Llvm.block_parent start_bb in
-  let loop_bb = builder#append_block "loop" the_function in
+  let loop_begin_bb = builder#append_block ("while." ^ i) the_function in
 
   (* Terminate predecessor block with uncoditional jump to loop. *)
   builder#position_at_end start_bb;
-  ignore (builder#build_br loop_bb);
-  builder#position_at_end loop_bb;
+  ignore (builder#build_br loop_begin_bb);
+  builder#position_at_end loop_begin_bb;
 
   (* Encode loop exit condition check. *)
   let cond_val = codegen_some cond in
 
-  let body_bb = builder#append_block "body" the_function in
+  let loop_body_bb = builder#append_block ("iter." ^ i) the_function in
 
-  builder#position_at_end body_bb;
+  builder#position_at_end loop_body_bb;
   ignore(codegen body);
-  builder#build_br loop_bb;
+  builder#build_br loop_begin_bb;
 
-  let end_loop_bb = builder#append_block "end_loop" the_function in
+  let loop_end_bb = builder#append_block ("endwhile." ^ i) the_function in
 
-  builder#position_at_end loop_bb;
-  ignore (builder#build_cond_br cond_val body_bb end_loop_bb);
-  builder#position_at_end end_loop_bb;
+  builder#position_at_end loop_begin_bb;
+  ignore (builder#build_cond_br cond_val loop_body_bb loop_end_bb);
+  builder#position_at_end loop_end_bb;
   None
 
 let rec codegen_toplevel pkg tree =
@@ -409,8 +440,13 @@ and codegen_function_def pkg fn args body =
           let return_bb = builder#append_block "return" fn in
           builder#position_at_end return_bb;
           (* Use phi to merge all returning branches. *)
-          let incoming = [(Option.get body_val, body_end_bb)] @ returning_bbs in
-          List.iter (fun (value, bb) ->
+          let incoming = (
+            match body_val with
+            | Some value ->
+                [(value, body_end_bb)] @ returning_bbs
+            | None ->
+                returning_bbs) in
+          List.iter (fun (_, bb) ->
             builder#position_at_end bb; ignore(builder#build_br return_bb)) incoming;
           builder#position_at_end return_bb;
           let ret_val = builder#build_phi incoming in
