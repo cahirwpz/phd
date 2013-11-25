@@ -5,7 +5,8 @@ open Option
 open Utils
 
 type spadtype =
-  | Array of spadtype | Cons of spadtype
+  | Array of spadtype (* to się mapuje na vector_1d_t *)
+  | Cons of spadtype
   | SI | DF | Boolean | Void | Exit | Generic
   | Mapping of spadtype list (* aka FunctionType *)
   | UserType of string * (spadtype list)
@@ -24,6 +25,7 @@ type tree =
   | Assign of tree * tree
   | BinaryOp of string * tree * tree
   | Block of (string * spadtype) list * tree list
+  | Break | Continue
   | Call of string * tree list
   | Char of char
   | Cons of tree * tree
@@ -39,13 +41,17 @@ type tree =
   | Symbol of string
   | UnaryOp of string * tree
   | Var of string
-  | While of tree * tree
+  | While of tree * tree (* do usunięcia *)
 
 let is_compound = function
   | Char _ | Float _ | Int _ | String _ | Symbol _ | Global _ | Var _ ->
       false
   | _ ->
       true
+
+let list_of_group = function
+  | Sexpr.Group l -> l
+  | _ -> failwith "Not a group!"
 
 (* conversion from S-Expressions *)
 
@@ -55,7 +61,7 @@ exception UnknownForm of string;;
 let error = fun s exp -> raise (SyntaxError (s, Sexpr.Group exp))
 
 (* all operators defined in pritimitives.lisp *)
-let unary = [ "|minus_SI|"; "|minus_DF"; "|abs_DF|"; "NOT" ]
+let unary = [ "|inc_SI|"; "|minus_SI|"; "|minus_DF|"; "|abs_DF|"; "NOT" ]
 let binary = [
   (* SingleInteger *)
   "|add_SI|"; "|sub_SI|"; "|mul_SI|"; "|quo_SI|"; "|rem_SI|";
@@ -86,11 +92,11 @@ let translate_op = function
   | "NOT" -> "not"
   | "abs_DF" -> "abs"
   | "add_SI" | "add_DF" -> "+"
-  | "sub_SI" | "sub_DF" -> "-"
+  | "minus_SI" | "minus_DF" | "sub_SI" | "sub_DF" -> "-"
   | "mul_SI" | "mul_DF" -> "*"
   | "quo_SI" | "div_DF" -> "/"
   | "rem_SI" -> "%"
-  | "eql_SI" | "eql_DF" -> "="
+  | "eql_SI" | "eql_DF" -> "=="
   | "less_SI" | "less_DF" -> "<"
   | "greater_SI" | "greater_DF" -> ">"
   | _ as x -> x
@@ -104,7 +110,7 @@ let rec convert exp =
       | Sexpr.Int n -> Int n
       | Sexpr.Quote (Sexpr.Group g) ->
           let reduce = fun a b -> Cons (convert a, b) 
-          in List.fold_right reduce g (Symbol "nil")
+          in List.fold_right reduce g (Symbol "NIL")
       | Sexpr.Quote (Sexpr.Symbol s) -> Symbol s
       | Sexpr.String s -> String s
       | Sexpr.Symbol s -> Var s
@@ -130,10 +136,12 @@ and convert_group = function
 
 and convert_spec_form = function
   | "BLOCK" -> convert_block
+  | "BREAK" -> convert_break
   | "DEFPARAMETER" | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_decl
   | "IF" -> convert_if
   | "LAMBDA" -> convert_lambda
+  | "CONS" -> convert_cons
   | "LET" -> convert_let
   | "LOOP" -> convert_loop
   | "PROGN" -> convert_progn
@@ -152,9 +160,17 @@ and convert_block = function
       Block ([], List.map convert rest)
   | e -> error "Malformed block s-form" e
 
+and convert_break = function
+  | [] -> Break
+  | e -> error "Malformed break s-form" e
+
 and convert_char = function
   | [Sexpr.Quote (Sexpr.Symbol c)] -> Char c.[0]
   | e -> error "Malformed char s-form" e
+
+and convert_cons = function
+  | [head; tail] -> Cons (convert head, convert tail)
+  | e -> error "Malformed cons s-form" e
 
 and convert_lambda = function
   | (Sexpr.Group args)::body ->
@@ -249,13 +265,17 @@ and convert_type = function
       | "Boolean" -> Boolean
       | "Void" -> Void
       | "List" -> Cons Generic
-      | _ -> Generic)
+      | "NIL" -> Generic
+      | name -> UserType (name, []))
   | [Sexpr.Symbol atype; Sexpr.Group maybe_type]
     when literal_symbol atype = "List" ->
       Cons (convert_type maybe_type)
   | [Sexpr.Symbol atype; Sexpr.Group maybe_type]
     when literal_symbol atype = "PrimitiveArray" ->
       Array (convert_type maybe_type)
+  | (Sexpr.Symbol atype)::rest
+    when literal_symbol atype = "Mapping" ->
+      Mapping (List.map (fun (r) -> convert_type @@ list_of_group r) rest)
   | e -> error "Cannot parse type" e
 
 and convert_aref = function
@@ -286,6 +306,8 @@ let rec print = function
       print name; printf " := "; print value
   | Block (vars, tree) ->
       printf "@[<v>@[<v 2>begin@,"; print_block vars tree; printf "@]@,end@]"
+  | Break ->
+      print_string "break"
   | UnaryOp (op, x) ->
       printf "@[<hov>"; print_string (translate_op op); printf "("; print x;
       printf ")@]"
@@ -301,7 +323,7 @@ let rec print = function
   | Cons (a, Cons _) as lst ->
       printf "@[<1>["; print_cons lst; printf "]@]"
   | Cons (a, b) ->
-      print_char '{'; print a; printf "; "; print b; print_char '}'
+      print_char '('; print a; printf " . "; print b; print_char ')'
   | Float n ->
       print_float n
   | IfThen (pred, if_true) ->
@@ -348,9 +370,9 @@ and print_inline = function
   | x -> print x
 
 and print_cons = function
-  | Cons (a, (Cons (_, _) as rest)) ->
-      print a; printf ";@ "; print_cons rest
-  | Cons (a, Symbol "nil") ->
+  | Cons (a, (Cons _ as rest)) ->
+      print a; printf ",@ "; print_cons rest
+  | Cons (a, Var "NIL") ->
       print a
   | _ -> failwith "Not a list."
 

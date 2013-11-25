@@ -18,24 +18,22 @@ let rec iter_join fn join_fn = function
       join_fn (); 
       iter_join fn join_fn tail
 
-(* Split list into two. First will have n elements. *)
-let rec split_at n lst =
-  split_at' n lst []
-and split_at' n lst acc =
-  if n > 0
-  then split_at' (n - 1) (List.tl lst) (List.hd lst::acc)
-  else (List.rev acc, lst)
-
-(* Split a list by a given element. *)
-let rec split_by elem lst =
-  split_by' elem [] lst
-and split_by' elem left = function
-  | x::xs when x = elem -> (List.rev left, xs)
-  | x::xs -> split_by' elem (x::left) xs
-  | [] -> (List.rev left, [])
+(* [x; x; y; x; x; y; x; y] => [[x; x]; [y; x; x]; [y; x]; [y]] *)
+let slice_with fn lst =
+  let rec slice_with' fn acc = (function
+    | x::xs when fn(x) ->
+        if List.length acc > 0 then
+          (List.rev acc)::(slice_with' fn [x] xs)
+        else
+          slice_with' fn [x] xs
+    | x::xs ->
+        slice_with' fn (x::acc) xs
+    | [] -> [List.rev acc])
+  in
+    slice_with' fn [] lst
 
 let rec but_last = function
-  | x::[] -> []
+  | [x] -> []
   | x::xs -> x::(but_last xs)
   | _ -> failwith "Expected list of at least one element."
 

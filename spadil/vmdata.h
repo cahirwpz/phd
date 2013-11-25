@@ -23,13 +23,13 @@ const GEN cons_key;
 typedef struct vector_1d {
   KEY descriptor;
   LONG size;
-  GEN data[1];
+  GEN data[0];
 } vector_1d_t;
 
 typedef struct string {
   KEY descriptor;
   LONG size;
-  CHAR data[1];
+  CHAR data[0];
 } string_t;
 
 typedef struct symbol {
@@ -51,7 +51,7 @@ typedef struct integer {
 typedef struct bigint {
   KEY descriptor;
   LONG size;
-  LONG data[1];
+  LONG data[0];
 } bigint_t;
 
 typedef struct cons {

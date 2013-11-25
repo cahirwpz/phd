@@ -20,7 +20,9 @@ void error(const char *str) {
   abort();
 }
 
-GEN box_SI(int32_t a) {
+/* SingleInteger */
+
+GEN box_SI(LONG a) {
   integer_t *val = GC_malloc(sizeof(integer_t));
 
   val->descriptor = integer_key;
@@ -28,6 +30,20 @@ GEN box_SI(int32_t a) {
 
   return (GEN)val;
 }
+
+LONG unbox_SI(GEN ptr) {
+  integer_t *val = (integer_t *)ptr;
+
+  assert(val->descriptor == integer_key);
+
+  return val->ival;
+}
+
+void print_SI(LONG a) {
+  printf("%ld\n", a);
+}
+
+/* DoubleFloat */
 
 GEN box_DF(double a) {
   dfloat_t *val = GC_malloc(sizeof(dfloat_t));
@@ -38,6 +54,12 @@ GEN box_DF(double a) {
   return (GEN)val;
 }
 
+void print_DF(double a) {
+  printf("%.15g\n", a);
+}
+
+/* Cons */
+
 GEN CONS(GEN fst, GEN snd) {
   cons_t *val = GC_malloc(sizeof(cons_t));
 
@@ -46,10 +68,6 @@ GEN CONS(GEN fst, GEN snd) {
   val->snd = snd;
 
   return (GEN)val;
-}
-
-bool NULL(GEN ptr) {
-  return ptr == vm_nil;
 }
 
 GEN CAR(GEN ptr) {
@@ -68,20 +86,19 @@ GEN CDR(GEN ptr) {
   return val->snd;
 }
 
-GEN *QVREF(GEN ptr) {
-  vector_1d_t *val = (vector_1d_t *)ptr;
-
-  assert(val->descriptor == vector_1d_key);
-
-  return val->data;
+bool NULL(GEN ptr) {
+  return ptr == vm_nil;
 }
 
-int32_t QVSIZE(GEN ptr) {
-  vector_1d_t *val = (vector_1d_t *)ptr;
+bool ATOM(GEN ptr) {
+  cons_t *val = (cons_t *)ptr;
 
-  assert(val->descriptor == vector_1d_key);
+  return val->descriptor != cons_key;
+}
 
-  return val->size;
+GEN NREVERSE(GEN ptr) {
+  /* TODO */
+  return ptr;
 }
 
 GEN SPADfirst(GEN ptr) {
@@ -95,18 +112,44 @@ GEN SPADfirst(GEN ptr) {
   return val->fst;
 }
 
-int32_t unbox_SI(GEN ptr) {
-  integer_t *val = (integer_t *)ptr;
+/* Vector 1D */
 
-  assert(val->descriptor == integer_key);
+GEN MAKEARR1(LONG size, LONG init) {
+  vector_1d_t *val = GC_malloc(sizeof(vector_1d_t) + sizeof(GEN) * size);
 
-  return val->ival;
+  val->size = size;
+
+  for (int i = 0; i < size; i++)
+    val->data[i] = vm_nil;
+
+  return val;
 }
 
-void print_SI(int32_t a) {
-  printf("%d\n", a);
+GEN QREFELT(GEN ptr, LONG index) {
+  vector_1d_t *val = (vector_1d_t *)ptr;
+
+  return val->data[index];
 }
 
-void print_DF(double a) {
-  printf("%.15g\n", a);
+GEN *QVREF(GEN ptr) {
+  vector_1d_t *val = (vector_1d_t *)ptr;
+
+  assert(val->descriptor == vector_1d_key);
+
+  return val->data;
+}
+
+LONG QVSIZE(GEN ptr) {
+  vector_1d_t *val = (vector_1d_t *)ptr;
+
+  assert(val->descriptor == vector_1d_key);
+
+  return val->size;
+}
+
+/* Function calls */
+
+GEN SPADCALL(GEN ptr, GEN) {
+  /* TODO */
+  return ptr;
 }

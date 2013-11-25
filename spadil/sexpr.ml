@@ -16,6 +16,14 @@ let is_compound = function
   | Group _ | Quote _ -> true
   | _ -> false
 
+let not_nil_symbol = function
+  | Symbol "NIL" -> false
+  | _ -> true
+
+let is_symbol = function
+  | Symbol _ -> true
+  | _ -> false
+
 let rec print = function
   | Float n -> print_float n
   | Group l -> printf "@[<v 1>("; print_group l; printf ")@]"
@@ -30,11 +38,11 @@ and print_list_sep sep lst =
   iter_join print (fun () -> printf sep) lst
 
 and print_form_sep n sep lst =
-  let (fst, snd) = split_at n lst in
+  let (l1, l2) = List.split_nth n lst in
   printf "@[<v>";
-  print_list_sep " " fst;
+  print_list_sep " " l1;
   printf "@,";
-  print_list_sep sep snd;
+  print_list_sep sep l2;
   printf "@]"
 
 and print_group = function
@@ -97,11 +105,11 @@ let rec unquote = function
   | x -> x
 
 (* Rewrite rule tools *)
-let make_progn body =
-  if List.length body > 1 then
-    Group (Symbol "PROGN"::body)
-  else
-    List.hd body
+let make_progn = function
+  | [] -> failwith "Cannot create block with no expressions!"
+  | [x] -> x
+  | body -> Group (Symbol "PROGN"::body)
+
 let make_if pred if_true = 
   Group [Symbol "IF"; pred; if_true]
 let make_if_else pred if_true if_false = 
@@ -125,68 +133,30 @@ let make_cons left right =
 let make_loop body =
   Group ((Symbol "LOOP")::body)
 
-(* Find recursively all occurences of old term and replace them with new term. *)
-let rec substitute oldTerm newTerm lst =
-  let recurse = substitute oldTerm newTerm in
-  match lst with
-  | term::rest when term = oldTerm ->
-      newTerm::(recurse rest)
-  | (Group lst)::rest ->
-      Group (recurse lst)::(recurse rest)
-  | x::xs ->
-      x::(recurse xs)
-  | x -> x
-
 exception NoMatch;;
 
 let symgen = new Symbol.gen "|:T%d|"
 
 (* s-expr rewrite engine *)
-let rec rewrite func = function
+let rec rewrite fn = function
   | Group lst ->
-      let exp = (try (func lst) with NoMatch -> Group lst)
-      in rewrite_rec func exp
-  | e -> e
-and rewrite_rec func = function
-  | Group lst ->
-      Group (List.map (rewrite func) lst)
+      (try
+        match (fn lst) with
+        | Group lst' ->
+            Group (List.map (rewrite fn) lst')
+        | e -> e
+      with NoMatch -> 
+        Group (List.map (rewrite fn) lst))
   | e -> e
 
-let rec rewrite_n fs exp =
-  match fs with
-  | f::fs -> rewrite_n fs (rewrite f exp)
-  | [] -> exp
-
- 
 (* Rewrite cond to series of if forms *)
 let rec cond_to_if = function
   | [Symbol "COND"; Group (Quote (Symbol "T")::body)] ->
       make_progn body 
-  | [Symbol "COND"; Group (pred::_) as body] ->
-      make_if pred (cond_clause body)
-  | Symbol "COND"::(Group (pred::_) as body)::rest ->
-      make_if_else pred (cond_clause body) (cond_to_if (Symbol "COND"::rest))
-  | _ -> raise NoMatch
-
-and cond_clause = function
-  | Group [pred] ->
-      pred
-  | Group (pred::body) ->
-      make_progn body
-  | _ -> failwith "Malformed cond clause."
-
-(* Rewrite prog / prog1 / prog2 to let *)
-let rec prog_to_let = function
-  | Symbol "PROG"::Group []::body ->
-      make_block "NIL" body
-  | Symbol "PROG"::vars::body ->
-      make_block "NIL" [make_let vars body]
-  | Symbol "PROG1"::value::rest ->
-      let temp = symgen#get in
-      make_let (Group [Symbol temp]) ((make_setq temp value)::rest)
-  | Symbol "PROG2"::value1::value2::rest ->
-      let temp = symgen#get in
-      make_let (Group [Symbol temp]) (value1::(make_setq temp value2)::rest)
+  | [Symbol "COND"; Group (pred::body)] ->
+      make_if pred (make_progn body)
+  | Symbol "COND"::(Group (pred::body))::rest ->
+      make_if_else pred (make_progn body) (cond_to_if (Symbol "COND"::rest))
   | _ -> raise NoMatch
 
 (* Handle global variable shadowing (DECLARE (SPECIAL (...))). *)
@@ -221,39 +191,28 @@ let lett_to_setq = function
       make_setq var value
   | _ -> raise NoMatch
 
-let not_nil_symbol = function
-  | Symbol "NIL" -> false
-  | _ -> true
-
-let not_symbol = function
-  | Symbol _ -> false
-  | _ -> true
-
-(* Rewrite seq as block seq *)
+(* Reorganize body of seq into labelled blocks. *)
 let rec seq_simplify = function
   | Symbol "SEQ"::body ->
-      make_seq (seq_to_blocks (List.filter not_nil_symbol body))
+      let body = List.filter not_nil_symbol body in
+      let sliced_body = slice_with is_symbol body in
+      make_seq (List.flatten @@ List.map block_add_label sliced_body)
   | _ -> raise NoMatch
 
-and seq_to_blocks = function
-  | Symbol label::body ->
-      let rest = List.dropwhile not_symbol body
-      and body = List.takewhile not_symbol body in
-      (make_label label body)::(seq_to_blocks rest)
-  | (x::xs) as body ->
-      let rest = List.dropwhile not_symbol body
-      and body = List.takewhile not_symbol body in
-      body @ (seq_to_blocks rest)
-  | [] -> []
+and block_add_label = function
+  | (Symbol label)::body -> [make_label label body]
+  | body -> body
 
 let reduce_trivial_exit = function
   | Symbol "SEQ"::rest ->
-      let body = Utils.but_last rest in
+      let body = but_last rest in
       (match List.last rest with
       | Group [Symbol "EXIT"; Symbol "NIL"] ->
-          make_seq body
+          make_progn body
       | Group [Symbol "EXIT"; value] ->
-            make_seq (body @ [value])
+          make_progn (body @ [value])
+      | Group [Symbol "BREAK"] ->
+          make_progn rest
       | _ ->
           raise NoMatch)
   | _ -> raise NoMatch
@@ -268,19 +227,42 @@ let identify_loops = function
       (match List.last rest with
       | Group [Symbol "GO"; Symbol "G190"] ->
           make_loop (Utils.but_last rest)
-      | _ -> raise NoMatch)
+      | _ ->
+          raise NoMatch)
   | _ -> raise NoMatch
 
-let merge_loop_cond = function
-  | Symbol "LOOP"::(Group [Symbol "IF";
-                           Group [Symbol "NULL"; cond];
-                           Group [Symbol "GO"; Symbol "G191"]])::body ->
-       make_while cond body
+let rec identify_loop_breaks = function
+  | Symbol "LOOP"::body ->
+      make_loop (find_loop_break body)
+  | _ ->
+      raise NoMatch
+
+and find_loop_break = function
+  | Group [Symbol "IF"; cond; Group [Symbol "GO"; Symbol "G191"]]::rest ->
+      (make_if cond (Group [Symbol "BREAK"]))::(find_loop_break rest)
+  | expr::rest ->
+      expr::(find_loop_break rest)
+  | [] -> []
+
+let rec split_if_or_break = function
+  | [Symbol "IF"; Group (Symbol "OR"::conds); Group [Symbol "BREAK"]] ->
+      make_progn (List.map break_when conds)
   | _ -> raise NoMatch
+
+and break_when = function
+  | Group (Symbol "PROGN"::body) when List.last body = Symbol "NIL" ->
+      make_progn (but_last body)
+  | cond ->
+      make_if cond (Group [Symbol "BREAK"])
 
 let expand_loop_exit = function
-  | [Symbol "SEQ"; loop; Group [Symbol "LABEL"; Symbol "G191"; exit]] ->
-      make_seq [loop; exit]
+  | [Symbol "LABEL"; Symbol "G191"; exit] ->
+      exit
+  | _ -> raise NoMatch
+
+let reduce_double_not = function
+  | (Symbol "IF")::(Group [Symbol "NULL"; Group [Symbol "NOT"; expr]])::rest ->
+      Group (Symbol "IF"::expr::rest)
   | _ -> raise NoMatch
 
 let reduce_trivial_if = function
@@ -292,22 +274,6 @@ let simplify_exit = function
   | [Symbol "EXIT"; Group [Symbol "SETQ"; name; expr]] ->
       make_progn [Group [Symbol "SETQ"; name; expr]; Group [Symbol "EXIT"; name]]
   | _ -> raise NoMatch
-
-let rec transform_loops = function
-  | Symbol "LOOP"::(Group [Symbol "IF"; p; t; f])::body when is_return_nil t ->
-      Group (Symbol "WHILE"::(transform_while p (f::body)))
-  | _ -> raise NoMatch
-
-and is_return_nil = function
-  | Group [Symbol "RETURN"; Symbol "NIL"] -> true
-  | _ -> false
-
-and transform_while p body =
-  match p with
-  | Group [Symbol "OR"; Group [Symbol "ATOM"; x] as p'; Group snd]
-    when List.last snd = Symbol "NIL" ->
-      p'::(Group (but_last snd))::body
-  | _ -> p::body
 
 let rec identify_return_stmt = function
   | [Symbol "SDEFUN"; fn; args;
@@ -331,25 +297,79 @@ and replace_return_stmt label var fnbody =
     | _ -> raise NoMatch) in
   rewrite rewrite_return fnbody
 
+let rec identify_break_stmt = function
+  | Symbol "SEQ"::body ->
+      make_seq (locate_break_target body)
+  | _ -> raise NoMatch
+
+and locate_break_target = function
+  | Group [Symbol "EXIT"; body]::
+    Group [Symbol "LABEL"; Symbol label;
+      Group [Symbol "EXIT"; Symbol var]]::rest ->
+        (replace_break_stmt label var body)::(locate_break_target rest)
+  | x::xs -> x::(locate_break_target xs)
+  | [] -> []
+
+and replace_break_stmt label var fnbody =
+  let rewrite_break body = (match body with 
+    | [Symbol "EXIT";
+       Group [Symbol "PROGN";
+         Group [Symbol "SETQ"; Symbol var'; Symbol "|$NoValue|"];
+         Group [Symbol "GO"; Symbol label']]]
+      when var' = var && label' = label ->
+        Group [Symbol "BREAK"]
+    | _ -> raise NoMatch) in
+  rewrite rewrite_break fnbody
+
+let setq_prog1_swap = function
+  | [Symbol "SETQ"; Symbol var;
+      Group (Symbol "PROG1"::exp::exps)] ->
+      make_progn (make_setq var exp::exps)
+  | _ -> raise NoMatch
+
+let inc_SI = function
+  | [Symbol "|inc_SI|"; value] ->
+      Group [Symbol "|add_SI|"; value; Int 1]
+  | _ -> raise NoMatch
+
+let rec flatten_blocks = function
+  | x::xs ->
+      (match x with
+      | Symbol "PROGN" | Symbol "LOOP" ->
+          Group (x::flatten_body xs)
+      | _ -> raise NoMatch)
+  | _ -> raise NoMatch
+
+and flatten_body = function
+  | Group (Symbol "PROGN"::body')::body ->
+      body' @ (flatten_body body)
+  | expr::body ->
+      expr::(flatten_body body)
+  | [] -> []
+
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
   cond_to_if;
   lett_to_setq;
   seq_simplify;
+  identify_return_stmt;
+  identify_break_stmt;
   identify_loops;
   expand_loop_exit;
-  merge_loop_cond;
+  identify_loop_breaks;
+  split_if_or_break;
   reduce_trivial_if;
+  reduce_double_not;
   reduce_trivial_exit;
-  identify_return_stmt;
   lift_seq;
   globals_shadowing;
-  prog_to_let;
+  setq_prog1_swap;
+  inc_SI;
+  flatten_blocks;
   ]
 
 let reader_pass exp =
   unquote (reduce_tree_subst exp)
 
-let simplify exp =
-  let exp' = reader_pass exp
-  in rewrite_n rules exp'
+let simplify sexp =
+  List.fold_left (fun sexp fn -> rewrite fn sexp) (reader_pass sexp) rules

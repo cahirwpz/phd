@@ -27,6 +27,7 @@ let void_type = Llvm.void_type the_context
 let i1_type = Llvm.i1_type the_context
 let i8_type = Llvm.i8_type the_context
 let i32_type = Llvm.i32_type the_context
+let i64_type = Llvm.i64_type the_context
 let const_stringz = Llvm.const_stringz the_context
 let struct_type = Llvm.struct_type the_context
 let const_int = Llvm.const_int
@@ -35,13 +36,15 @@ let gen_type = Llvm.pointer_type i8_type
 let const_null = Llvm.const_null gen_type
 let const_pointer_null = Llvm.const_pointer_null gen_type
 
+let int_type = i64_type
+
 let mdstring = Llvm.mdstring the_context
 let mdnode = Llvm.mdnode the_context
 let mdkind_id = Llvm.mdkind_id the_context
 
-let izero = const_int i32_type 0
+let izero = const_int int_type 0
 let fzero = const_float double_type 0.0
-let iundef = Llvm.undef i32_type
+let iundef = Llvm.undef int_type
 
 let string_of_icmp = function
   | Icmp.Eq -> "eq"
@@ -125,7 +128,7 @@ class code_builder =
     method build_srem lhs rhs =
       Llvm.build_srem rhs lhs "srem_tmp" builder
     method build_neg exp = 
-      Llvm.build_sub (const_int i32_type 0) exp "neg_tmp" builder
+      Llvm.build_sub (const_int int_type 0) exp "neg_tmp" builder
 
     (* Arithmetic instructions on floating point numbers. *)
     method build_fadd lhs rhs = 

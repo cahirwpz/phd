@@ -31,8 +31,8 @@ let graph = ['_' '+' '-' '.' '&' ':' '*' '$' '%' '{' '}' '[' ']' '!' '^' '?'
 let symbol = (alpha | graph)
 let id = symbol (symbol | digit)*
 
-let integer = digit+
-let real = digit+ '.' digit*
+let integer = '-'? digit+
+let real = '-'? digit+ '.' digit*
 
 rule token = parse
   | space+ { token lexbuf }

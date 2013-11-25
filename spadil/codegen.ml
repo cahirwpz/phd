@@ -19,7 +19,7 @@ let cast_SI builder v =
   match Llvm.type_of v with
   | t when t = gen_type ->
       builder#build_call_fn "unbox_SI" [| v |]
-  | t when t = i32_type ->
+  | t when t = int_type ->
       v
   | t ->
       raise @@ CoerceError (v, "SI")
@@ -35,7 +35,7 @@ let cast_DF builder v =
 
 let cast_GEN builder v = 
   match Llvm.type_of v with
-  | t when t = i32_type ->
+  | t when t = int_type ->
       builder#build_call_fn "box_SI" [| v |]
   | t when t = gen_type ->
       v
@@ -46,10 +46,12 @@ let cast_GEN builder v =
 
 let cast_BOOL builder cond =
   match Llvm.type_of cond with
-  | t when t = i32_type ->
+  | t when t = int_type ->
       builder#build_icmp Icmp.Ne cond izero
   | t when t = double_type ->
       builder#build_fcmp Fcmp.Une cond fzero
+  | t when t = gen_type ->
+      builder#build_call_fn "NULL" [| cond |]
   | t when t = i1_type ->
       cond
   | t -> 
@@ -57,7 +59,7 @@ let cast_BOOL builder cond =
 
 let cast builder (value, to_type) =
   match to_type with
-  | t when t = i32_type ->
+  | t when t = int_type ->
       cast_SI builder value
   | t when t = double_type ->
       cast_DF builder value
@@ -69,7 +71,7 @@ let cast builder (value, to_type) =
 let rec translate_type = function
   | Ast.Boolean -> i1_type
   | Ast.DF -> double_type
-  | Ast.SI -> i32_type
+  | Ast.SI -> int_type
   | Ast.Exit
   | Ast.Void -> void_type
   | Ast.Array _
@@ -77,8 +79,14 @@ let rec translate_type = function
   | Ast.UserType _
   | Ast.Generic -> gen_type
   | Ast.Mapping ts ->
-      let ts = List.map translate_type ts in
+      let ts = List.map translate_function_type ts in
       Llvm.function_type (List.last ts) (Array.of_list @@ but_last ts)
+
+and translate_function_type t =
+  let ft = translate_type t in
+  match Llvm.classify_type ft with
+  | Llvm.TypeKind.Function -> Llvm.pointer_type ft
+  | _ -> ft
 
 (* Code generation starts here *)
 let rec codegen builder exp =
@@ -94,10 +102,10 @@ let rec codegen builder exp =
   | Ast.Float n ->
       Some (const_float double_type n)
   | Ast.Int n ->
-      Some (const_int i32_type n)
+      Some (const_int int_type n)
   | Ast.String s ->
       Some (const_stringz s)
-  | Ast.Var name when name = "NIL" ->
+  | Ast.Var "NIL" ->
       Some (const_pointer_null)
   | Ast.Var name ->
       Some (builder#build_load_var name)
@@ -107,6 +115,10 @@ let rec codegen builder exp =
       Some (codegen_unary_op builder op (codegen_some exp))
   | Ast.BinaryOp (op, lhs, rhs) ->
       Some (codegen_binary_op builder op (codegen_some lhs) (codegen_some rhs))
+  | Ast.Cons (head, tail) ->
+      Some (builder#build_call_fn "CONS"
+            [| cast_GEN builder (codegen_some head);
+               cast_GEN builder (codegen_some tail) |])
   | Ast.Call (name, args) ->
       let name = Ast.literal_symbol name in
       let fn = builder#lookup_function name in
@@ -173,7 +185,8 @@ and codegen_unary_op builder op exp =
 
 and codegen_binary_op builder op lhs rhs =
   let cast_SI = cast_SI builder
-  and cast_DF = cast_DF builder in
+  and cast_DF = cast_DF builder
+  and cast_BOOL = cast_BOOL builder in
   match op with
   (* SingleInteger *)
   | "add_SI" -> builder#build_add (cast_SI lhs) (cast_SI rhs)
@@ -192,10 +205,11 @@ and codegen_binary_op builder op lhs rhs =
   | "greater_DF" -> builder#build_fcmp Fcmp.Ogt (cast_DF lhs) (cast_DF rhs)
   | "less_DF" -> builder#build_fcmp Fcmp.Olt (cast_DF lhs) (cast_DF rhs)
   | "eql_DF" -> builder#build_fcmp Fcmp.Oeq (cast_DF lhs) (cast_DF rhs)
-  (*
-  | "REM" -> builder#build_srem rhs lhs
+  (* Boolean *)
   | "AND" -> builder#build_and (cast_BOOL lhs) (cast_BOOL rhs)
   | "OR" -> builder#build_or (cast_BOOL lhs) (cast_BOOL rhs)
+  (*
+  | "REM" -> builder#build_srem rhs lhs
   | ">=" -> builder#build_icmp Icmp.Sge lhs rhs
   | "<=" -> builder#build_icmp Icmp.Sle lhs rhs
   | "~=" -> builder#build_icmp Icmp.Ne lhs rhs
