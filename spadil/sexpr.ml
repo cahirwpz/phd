@@ -34,15 +34,12 @@ let rec print = function
   | TreeDecl (n, expr) -> printf "#%d=" n; print expr
   | TreeRef n -> printf "#%d#" n
 
-and print_list_sep sep lst =
-  iter_join print (fun () -> printf sep) lst
-
 and print_form_sep n sep lst =
   let (l1, l2) = List.split_nth n lst in
   printf "@[<v>";
-  print_list_sep " " l1;
+  print_list print " " l1;
   printf "@,";
-  print_list_sep sep l2;
+  print_list print sep l2;
   printf "@]"
 
 and print_group = function
@@ -65,7 +62,7 @@ and print_group = function
   | Symbol "EXIT"::_
   | Symbol "UNWIND-PROTECT"::_
   | Symbol "COND"::_ as g -> print_form_sep 1 "@," g
-  | _ as e -> print_list_sep " " e
+  | _ as e -> print_list print " " e
 
 (* Perform rewrites normally done by LISP reader. *)
 
@@ -114,24 +111,20 @@ let make_if pred if_true =
   Group [Symbol "IF"; pred; if_true]
 let make_if_else pred if_true if_false = 
   Group [Symbol "IF"; pred; if_true; if_false]
-let make_let vars body =
-  Group (Symbol "LET"::vars::body)
 let make_setq name value =
   Group [Symbol "SETQ"; Symbol name; value]
 let make_return value =
   Group [Symbol "RETURN"; value]
-let make_block label body =
-  Group ((Symbol "BLOCK")::(Symbol label)::body)
 let make_label label body =
   Group ((Symbol "LABEL")::(Symbol label)::body)
-let make_while pred body = 
-  Group ((Symbol "WHILE")::pred::body)
 let make_seq body =
   Group ((Symbol "SEQ")::body)
-let make_cons left right =
-  Group [Symbol "CONS"; left; right]
 let make_loop body =
   Group ((Symbol "LOOP")::body)
+let make_function name =
+  Group [Symbol "FUNCTION"; Symbol name]
+let make_list lst =
+  List.fold_right (fun a b -> Group [Symbol "CONS"; a; b]) lst (Symbol "NIL")
 
 exception NoMatch;;
 
@@ -314,7 +307,7 @@ and replace_break_stmt label var fnbody =
   let rewrite_break body = (match body with 
     | [Symbol "EXIT";
        Group [Symbol "PROGN";
-         Group [Symbol "SETQ"; Symbol var'; Symbol "|$NoValue|"];
+         Group [Symbol "SETQ"; Symbol var'; Symbol "$NoValue"];
          Group [Symbol "GO"; Symbol label']]]
       when var' = var && label' = label ->
         Group [Symbol "BREAK"]
@@ -328,8 +321,8 @@ let setq_prog1_swap = function
   | _ -> raise NoMatch
 
 let inc_SI = function
-  | [Symbol "|inc_SI|"; value] ->
-      Group [Symbol "|add_SI|"; value; Int 1]
+  | [Symbol "inc_SI"; value] ->
+      Group [Symbol "add_SI"; value; Int 1]
   | _ -> raise NoMatch
 
 let rec flatten_blocks = function
@@ -347,8 +340,28 @@ and flatten_body = function
       expr::(flatten_body body)
   | [] -> []
 
+let identify_fn = function
+  | [Symbol "function"; Symbol name] ->
+      make_function name
+  | _ -> raise NoMatch
+
+let spadcall = function
+  | (Symbol "SPADCALL")::rest ->
+      let (args, fn) = split_at_last rest in
+      let fn_ptr = Group [Symbol "CAR"; fn]
+      and fn_env = Group [Symbol "CDR"; fn] in
+      Group [Symbol "FUNCALL"; fn_ptr; make_list (args @ [fn_env])]
+  | _ -> raise NoMatch
+
+let list_to_cons = function
+  | (Symbol "LIST")::args ->
+      make_list args
+  | _ -> raise NoMatch
+
 (* set of rules to be applied when simplifying an s-expression *)
 let rules = [
+  list_to_cons;
+  identify_fn;
   cond_to_if;
   lett_to_setq;
   seq_simplify;
@@ -366,6 +379,7 @@ let rules = [
   setq_prog1_swap;
   inc_SI;
   flatten_blocks;
+  spadcall;
   ]
 
 let reader_pass exp =

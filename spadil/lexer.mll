@@ -14,12 +14,16 @@
   class strbuf =
     object (self)
       val buffer = Buffer.create 1
-                method putc c =
-                  Buffer.add_char buffer c
+      method putc c =
+        Buffer.add_char buffer c
       method puts s = 
         Buffer.add_string buffer s
       method gets =
         Buffer.contents buffer
+      method gets_case_sensitive =
+        let s = Buffer.contents buffer in
+        let l = String.length s in
+        String.sub s 1 (l - 2)
     end
 }
 
@@ -56,7 +60,7 @@ and string buf = parse
   | _ as c { buf#putc c; string buf lexbuf }
 
 and bar buf = parse
-  | '|' as c { buf#putc c; buf#gets }
+  | '|' as c { buf#putc c; buf#gets_case_sensitive }
   | "\\" (_ as c) { buf#putc '\\'; buf#putc c; bar buf lexbuf }
   | _ as c { buf#putc c; bar buf lexbuf }
 
@@ -66,5 +70,5 @@ and reader = parse
   | ':' (id as name) { LABEL name }
   | '(' { VECTOR }
   | "'" '|'{ let buf = new strbuf in buf#putc '|'; FUNCTION (bar buf lexbuf) }
-  | "'" (id as name) { FUNCTION name }
+  | "'" (id as name) { FUNCTION (String.uppercase name) }
   | _ as c { unknown_char lexbuf c; token lexbuf }

@@ -18,7 +18,6 @@ let rec rewrite rule e =
   | IfThenElse (pred, t, f) -> IfThenElse (r pred, r t, r f)
   | Lambda (args, types, exp) -> Lambda (args, types, r exp)
   | Return exp -> Return (r exp)
-  | While (pred, exp) -> While (r pred, r exp)
   | e -> e
 
 and apply rule exp =

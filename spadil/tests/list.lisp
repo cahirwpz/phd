@@ -1,5 +1,4 @@
 ; czy na poziomie spada da się oddzielić NULL(Boolean) od NULL(List) ?
-; EXIT == RETURN-FROM SEQ
 
 (SDEFUN |FOOLIST;leni;LSi;1|
         ((|l| |List| (|SingleInteger|)) ($ |SingleInteger|))
@@ -50,6 +49,8 @@
 
 (SDEFUN |main| (($ |Void|))
        (SPROG ((|l| (|List| (|SingleInteger|))))
-             (SETQ |l| (CONS 5 (CONS 15 (CONS 2 (CONS 20 NIL)))))
+             (SETQ |l| '(5 15 2 20))
+             (|print_SI| (|FOOLIST;sumi;LSi;4| |l| NIL))
              (|print_SI| (|FOOLIST;sumr;LSi;6| |l| NIL))
+             (|print_SI| (|FOOLIST;leni;LSi;1| |l| NIL))
              (|print_SI| (|FOOLIST;lenr;LSi;3| |l| NIL))))

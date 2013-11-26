@@ -82,7 +82,7 @@
                    . #2#)
              (SEQ G190
                   (COND
-                   ((NULL
+                   ((NOT ; a było null
                      (|less_DF| |err|
                                 (|abs_DF|
                                  (|div_DF| (|sub_DF| |new_n| |old_n|)

@@ -10,13 +10,13 @@ module VarSet =
   end
 
 (* Iterate over all elements, calling function in between *)
-let rec iter_join fn join_fn = function
+let rec print_list print_fn sep = function
   | [] -> ()
-  | [head] -> fn head
+  | [head] -> print_fn head
   | head::tail ->
-      fn head;
-      join_fn (); 
-      iter_join fn join_fn tail
+      print_fn head;
+      Format.printf sep; 
+      print_list print_fn sep tail
 
 (* [x; x; y; x; x; y; x; y] => [[x; x]; [y; x; x]; [y; x]; [y]] *)
 let slice_with fn lst =

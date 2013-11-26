@@ -69,15 +69,17 @@ let cast builder (value, to_type) =
       raise @@ CoerceError (value, Llvm.string_of_lltype to_type)
 
 let rec translate_type = function
+  | Ast.UserType ("CArray", []) -> Llvm.pointer_type gen_type
   | Ast.Boolean -> i1_type
   | Ast.DF -> double_type
   | Ast.SI -> int_type
   | Ast.Exit
   | Ast.Void -> void_type
+  | Ast.Record _
   | Ast.Array _
   | Ast.Cons _
   | Ast.UserType _
-  | Ast.Generic -> gen_type
+  | Ast.Any -> gen_type
   | Ast.Mapping ts ->
       let ts = List.map translate_function_type ts in
       Llvm.function_type (List.last ts) (Array.of_list @@ but_last ts)
@@ -120,7 +122,6 @@ let rec codegen builder exp =
             [| cast_GEN builder (codegen_some head);
                cast_GEN builder (codegen_some tail) |])
   | Ast.Call (name, args) ->
-      let name = Ast.literal_symbol name in
       let fn = builder#lookup_function name in
       let args = List.map codegen_some args in
       let types = List.map Llvm.type_of (Array.to_list @@ Llvm.params fn) in
@@ -133,9 +134,6 @@ let rec codegen builder exp =
       None
   | Ast.Loop body ->
       ignore(codegen_loop builder body);
-      None
-  | Ast.While (cond, body) ->
-      ignore(codegen_while builder cond body);
       None
   | Ast.Assign (Ast.Var name, value) ->
       let value = codegen_some value in
@@ -351,49 +349,21 @@ and codegen_loop builder body =
   builder#build_br loop_body_bb;
   None
 
-(* 'while' construct is always a statement. *)
-and codegen_while builder cond body =
-  let codegen = codegen builder in
-  let codegen_some exp = Option.get (codegen exp) in 
-  let i = unique#get in
-
-  let start_bb = builder#insertion_block in
-  let the_function = Llvm.block_parent start_bb in
-  let loop_begin_bb = builder#append_block ("while." ^ i) the_function in
-
-  (* Terminate predecessor block with uncoditional jump to loop. *)
-  builder#position_at_end start_bb;
-  ignore (builder#build_br loop_begin_bb);
-  builder#position_at_end loop_begin_bb;
-
-  (* Encode loop exit condition check. *)
-  let cond_val = codegen_some cond in
-
-  let loop_body_bb = builder#append_block ("iter." ^ i) the_function in
-
-  builder#position_at_end loop_body_bb;
-  ignore(codegen body);
-  builder#build_br loop_begin_bb;
-
-  let loop_end_bb = builder#append_block ("endwhile." ^ i) the_function in
-
-  builder#position_at_end loop_begin_bb;
-  ignore (builder#build_cond_br cond_val loop_body_bb loop_end_bb);
-  builder#position_at_end loop_end_bb;
-  None
-
 let rec codegen_toplevel pkg tree =
   try
     match tree with
-    (*
-    | Ast.Global (name, None) ->
+    | Ast.Global (name, _) ->
         Some (pkg#declare_global gen_type name)
+    (*
     | Ast.Global (name, Some value) ->
         Some (pkg#define_global name (codegen pkg#new_builder value))
     *)
+    | Ast.FunDecl (name, args, fn_type) ->
+        let args = Array.of_list args in
+        ignore(codegen_typed_function_decl pkg name args fn_type);
+        None
     | Ast.Assign (Ast.Var name, Ast.Lambda (args, fn_type, body)) ->
-        let name = Ast.literal_symbol name
-        and args = Array.of_list args in
+        let args = Array.of_list args in
         let fn = codegen_typed_function_decl pkg name args fn_type in
         begin
           try
@@ -420,11 +390,10 @@ let rec codegen_toplevel pkg tree =
       Printexc.print_backtrace stderr;
       None
 
+(* Declare function type. *)
 and codegen_typed_function_decl pkg name args fn_type =
-  (* Declare function type. *)
-  let fn_lltype = translate_type fn_type in
   (* Create the function declaration and add it to the module. *)
-  let fn = pkg#declare_function name fn_type fn_lltype in
+  let fn = pkg#declare_function name fn_type (translate_type fn_type) in
   (* Specify argument parameters. *)
   let set_param_name = (fun i value -> Llvm.set_value_name args.(i) value) in
   Array.iteri set_param_name (Llvm.params fn);

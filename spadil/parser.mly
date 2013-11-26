@@ -27,7 +27,7 @@ sexpr:
   | QUOTE sexpr { Sexpr.Quote $2 }
   | SYMBOL { Sexpr.Symbol $1 }
   | LABEL { Sexpr.Symbol ("#:" ^ $1) }
-  | FUNCTION { Sexpr.Group [Sexpr.Symbol "function"; Sexpr.Symbol $1] }
+  | FUNCTION { Sexpr.Group [Sexpr.Symbol "FUNCTION"; Sexpr.Symbol $1] }
   | TREE_REF { Sexpr.TreeRef $1 }
   | TREE_DECL sexpr { Sexpr.TreeDecl ($1, $2) }
   | LPAREN sexpr_list RPAREN { Sexpr.Group $2 }

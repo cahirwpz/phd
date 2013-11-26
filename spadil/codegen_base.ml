@@ -222,7 +222,7 @@ class function_builder pkg fn_name =
       | Some var ->
           fst var
       | None ->
-          Ast.Generic
+          Ast.Any
 
     method arg_type i =
       if i < Array.length fn_type - 1 then

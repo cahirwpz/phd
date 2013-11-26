@@ -54,6 +54,14 @@ GEN box_DF(double a) {
   return (GEN)val;
 }
 
+double unbox_DF(GEN ptr) {
+  dfloat_t *val = (dfloat_t *)ptr;
+
+  assert(val->descriptor == dfloat_key);
+
+  return val->dval;
+}
+
 void print_DF(double a) {
   printf("%.15g\n", a);
 }
@@ -112,6 +120,36 @@ GEN SPADfirst(GEN ptr) {
   return val->fst;
 }
 
+/* Rational numbers */
+
+GEN DIVIDE2(LONG a, LONG b) {
+  return CONS(box_SI(a / b), box_SI(a % b));
+}
+
+LONG QCAR(GEN ptr) {
+  cons_t *cons = (cons_t *)ptr;
+
+  assert(cons->descriptor == cons_key);
+
+  integer_t *integer = (integer_t *)cons->fst;
+
+  assert(integer->descriptor == integer_key);
+
+  return integer->ival;
+}
+
+LONG QCDR(GEN ptr) {
+  cons_t *cons = (cons_t *)ptr;
+
+  assert(cons->descriptor == cons_key);
+
+  integer_t *integer = (integer_t *)cons->snd;
+
+  assert(integer->descriptor == integer_key);
+
+  return integer->ival;
+}
+
 /* Vector 1D */
 
 GEN MAKEARR1(LONG size, LONG init) {
@@ -145,11 +183,4 @@ LONG QVSIZE(GEN ptr) {
   assert(val->descriptor == vector_1d_key);
 
   return val->size;
-}
-
-/* Function calls */
-
-GEN SPADCALL(GEN ptr, GEN) {
-  /* TODO */
-  return ptr;
 }
