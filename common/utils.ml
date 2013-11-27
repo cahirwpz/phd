@@ -1,3 +1,4 @@
+open ExtHashtbl
 open ExtList
 
 (* Set of strings *)
@@ -7,6 +8,31 @@ module VarSet =
 
     let from_list strings =
       List.fold_right add strings empty
+  end
+
+class ['a] symbolmap =
+  object (self)
+    val map : (string, 'a Stack.t) Hashtbl.t =
+      Hashtbl.create 10
+    method private get_stack name =
+      match Hashtbl.find_option map name with
+      | Some stack ->
+          stack
+      | None ->
+          let stack = Stack.create () in
+          Hashtbl.add map name stack;
+          stack
+    method add name value =
+      Stack.push value (self#get_stack name)
+    method rem name =
+      let stack = self#get_stack name in
+      ignore (Stack.pop stack)
+    method get name =
+      let stack = self#get_stack name in
+      if Stack.is_empty stack then
+        None
+      else 
+        Some (Stack.top stack)
   end
 
 (* Iterate over all elements, calling function in between *)

@@ -1,4 +1,4 @@
-open Codegen_dt
+open Utils
 open ExtHashtbl
 open ExtString
 open Printf
@@ -171,7 +171,7 @@ class function_builder pkg fn_name =
       match pkg#lookup_function_type fn_name with
       | Ast.Mapping fn_type -> Array.of_list fn_type
       | _ -> failwith "Function is not of Mapping type!";
-    val mutable ret_bbs : (Llvm.llvalue * Llvm.llbasicblock) list = []
+    val mutable return_bbs : (Llvm.llvalue * Llvm.llbasicblock) list = []
 
     (* Variable load / store instructions. *)
     method build_load_var name =
@@ -194,10 +194,10 @@ class function_builder pkg fn_name =
       local_vars#rem name
 
     method add_ret_bb value bb =
-      ret_bbs <- (value, bb)::ret_bbs
+      return_bbs <- (value, bb)::return_bbs
 
     method list_ret_bb =
-      ret_bbs
+      return_bbs
 
     (* Resolving names. *)
     method lookup_function name =

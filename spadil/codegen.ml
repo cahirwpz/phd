@@ -1,4 +1,3 @@
-open Codegen_dt
 open Codegen_base
 open ExtList
 open Printf 
@@ -155,8 +154,7 @@ let rec codegen builder exp =
       let item = builder#build_gep vector index in
       Some (builder#build_load item (Llvm.value_name vector))
   | Ast.Return value ->
-      let ret_val = codegen_some value in
-      builder#add_ret_bb ret_val builder#insertion_block;
+      builder#add_ret_bb (codegen_some value) builder#insertion_block;
       let after_bb = builder#append_block "after" builder#function_block in
       builder#position_at_end after_bb;
       None
