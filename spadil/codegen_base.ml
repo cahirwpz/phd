@@ -166,7 +166,7 @@ class function_builder pkg fn_name =
     inherit code_builder
 
     val package = pkg
-    val local_vars = new symbolmap
+    val local_vars = SymbolMap.create 10
     val fn_type = 
       match pkg#lookup_function_type fn_name with
       | Ast.Mapping fn_type -> Array.of_list fn_type
@@ -188,10 +188,10 @@ class function_builder pkg fn_name =
     (* Handling local variables. *)
     method var_intro name var_type var_lltype =
       let alloca = Llvm.build_alloca var_lltype name builder in
-      local_vars#add name (var_type, alloca);
+      SymbolMap.add local_vars name (var_type, alloca);
       alloca
     method var_forget name =
-      local_vars#rem name
+      SymbolMap.remove local_vars name
 
     method add_ret_bb value bb =
       return_bbs <- (value, bb)::return_bbs
@@ -204,7 +204,7 @@ class function_builder pkg fn_name =
       package#lookup_function name
 
     method lookup_var name =
-      match local_vars#get name with
+      match SymbolMap.get local_vars name with
       | None ->
           begin
             match package#lookup_global name with
@@ -218,7 +218,7 @@ class function_builder pkg fn_name =
 
     (* Type inquiries. *)
     method var_type name =
-      match local_vars#get name with
+      match SymbolMap.get local_vars name with
       | Some var ->
           fst var
       | None ->

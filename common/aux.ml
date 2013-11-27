@@ -10,30 +10,37 @@ module VarSet =
       List.fold_right add strings empty
   end
 
-class ['a] symbolmap =
-  object (self)
-    val map : (string, 'a Stack.t) Hashtbl.t =
-      Hashtbl.create 10
-    method private get_stack name =
+(* Map from string to stack of 'a *)
+module SymbolMap :
+  sig
+    type 'a t
+    val create : int -> 'a t
+    val add : 'a t -> string -> 'a -> unit
+    val remove : 'a t -> string -> unit
+    val get : 'a t -> string -> 'a option
+  end = struct
+    type 'a t = (string, 'a Stack.t) Hashtbl.t
+
+    let get_stack map name =
       match Hashtbl.find_option map name with
-      | Some stack ->
-          stack
+      | Some stack -> stack
       | None ->
           let stack = Stack.create () in
           Hashtbl.add map name stack;
           stack
-    method add name value =
-      Stack.push value (self#get_stack name)
-    method rem name =
-      let stack = self#get_stack name in
-      ignore (Stack.pop stack)
-    method get name =
-      let stack = self#get_stack name in
-      if Stack.is_empty stack then
+
+    let create size = Hashtbl.create size
+    let add map name value =
+      Stack.push value (get_stack map name)
+    let remove map name =
+      ignore (Stack.pop (get_stack map name))
+    let get map name =
+      let stack = get_stack map name in
+      if Stack.is_empty stack then 
         None
-      else 
+      else
         Some (Stack.top stack)
-  end
+  end;;
 
 (* Iterate over all elements, calling function in between *)
 let rec print_list print_fn sep = function
