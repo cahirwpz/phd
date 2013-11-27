@@ -20,12 +20,11 @@ and parse_unit pkg input =
   let il_opt = Rewrite.simplify il in
   (* printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@."; *)
   Ast.print il_opt; printf "@.@.";
+  List.iter (load_bc jit) bclist; printf "@."
   ignore(Codegen.codegen_toplevel pkg il)
 
 (* Load compiled modules. *)
 let rec load_runtime jit bclist =
-  List.iter (load_bc jit) bclist;
-  printf "@."
 
 and load_bc jit bc = 
   match jit#load_package bc with

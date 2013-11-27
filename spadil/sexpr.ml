@@ -1,6 +1,6 @@
-open Format
+open Aux
 open ExtList
-open Utils
+open Format
 
 type sexpr =
   | Float of float
@@ -219,7 +219,7 @@ let identify_loops = function
   | Symbol "LABEL"::Symbol "G190"::rest ->
       (match List.last rest with
       | Group [Symbol "GO"; Symbol "G190"] ->
-          make_loop (Utils.but_last rest)
+          make_loop (but_last rest)
       | _ ->
           raise NoMatch)
   | _ -> raise NoMatch

@@ -1,8 +1,8 @@
+open Aux 
 open Format
 open ExtList
 open ExtString
 open Option
-open Utils
 
 type spadtype =
   | Array of spadtype (* to się mapuje na vector_1d_t *)

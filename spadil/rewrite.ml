@@ -1,6 +1,6 @@
+open Aux
 open Ast
-open List
-open Utils
+open ExtList
 
 exception NoMatch
 
@@ -8,7 +8,7 @@ let symgen = new Symbol.gen "@%d"
 
 (* ast rewrite engine *)
 let rec rewrite rule e =
-  let r = apply rule and rn = map (apply rule) in
+  let r = apply rule and rn = List.map (apply rule) in
   match e with
   | Apply (fn, exps) -> Apply (r fn, rn exps)
   | Assign (name, exp) -> Assign (name, r exp)
@@ -40,7 +40,7 @@ let reduce_block = function
 (* Flatten structure of a block. *)
 let rec flatten_block = function
   | Block (vars, body) ->
-      let body = map flatten_block body in
+      let body = List.map flatten_block body in
       let vars = vars @ (collect_vars body) in
       Block (vars, collect_exps body)
   | x -> x
