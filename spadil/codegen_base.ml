@@ -171,7 +171,10 @@ class function_builder pkg fn_name =
       match pkg#lookup_function_type fn_name with
       | Ast.Mapping fn_type -> Array.of_list fn_type
       | _ -> failwith "Function is not of Mapping type!";
-    val mutable return_bbs : (Llvm.llvalue * Llvm.llbasicblock) list = []
+    val return_bbs : (Llvm.llvalue * Llvm.llbasicblock) ScopedList.t =
+      ScopedList.create ()
+    val break_bbs : Llvm.llbasicblock ScopedList.t =
+      ScopedList.create ()
 
     (* Variable load / store instructions. *)
     method build_load_var name =
@@ -193,11 +196,11 @@ class function_builder pkg fn_name =
     method var_forget name =
       SymbolMap.remove local_vars name
 
-    method add_ret_bb value bb =
-      return_bbs <- (value, bb)::return_bbs
+    method add_return_bb value bb =
+      ScopedList.add return_bbs (value, bb)
 
-    method list_ret_bb =
-      return_bbs
+    method list_return_bbs =
+      ScopedList.exit return_bbs
 
     (* Resolving names. *)
     method lookup_function name =
@@ -219,10 +222,8 @@ class function_builder pkg fn_name =
     (* Type inquiries. *)
     method var_type name =
       match SymbolMap.get local_vars name with
-      | Some var ->
-          fst var
-      | None ->
-          Ast.Any
+      | Some var -> fst var
+      | None -> Ast.Any
 
     method arg_type i =
       if i < Array.length fn_type - 1 then
@@ -232,6 +233,15 @@ class function_builder pkg fn_name =
 
     method ret_type =
       fn_type.(Array.length fn_type - 1)
+
+    method loop_enter =
+      ScopedList.enter break_bbs
+
+    method loop_exit =
+      ScopedList.exit break_bbs
+
+    method loop_break = 
+      ScopedList.add break_bbs self#insertion_block
   end;;
 
 (* function-by-function pass pipeline over the package [pkg]. It does not take
@@ -345,8 +355,7 @@ class package a_module a_jit =
     method dump =
       print_string @@ Llvm.string_of_llmodule package
 
-    method optimize = ()
-      (*
+    method optimize =
       let fpm = new function_pass_manager self
       and mpm = new module_pass_manager in
       ignore (fpm#initialize);
@@ -356,7 +365,6 @@ class package a_module a_jit =
       ignore (fpm#finalize);
       fpm#dispose;
       mpm#dispose
-      *)
   end;;
 
 (* JIT Interpreter. *)

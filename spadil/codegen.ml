@@ -112,6 +112,12 @@ let rec codegen builder exp =
       Some (builder#build_load_var name)
   | Ast.Block (vars, exps) ->
       codegen_block builder vars exps
+  | Ast.Break ->
+      builder#loop_break;
+      let bb_name = "unreachable." ^ unique#get in
+      let bb = builder#append_block bb_name builder#function_block in
+      builder#position_at_end bb;
+      None
   | Ast.UnaryOp (op, exp) ->
       Some (codegen_unary_op builder op (codegen_some exp))
   | Ast.BinaryOp (op, lhs, rhs) ->
@@ -154,7 +160,7 @@ let rec codegen builder exp =
       let item = builder#build_gep vector index in
       Some (builder#build_load item (Llvm.value_name vector))
   | Ast.Return value ->
-      builder#add_ret_bb (codegen_some value) builder#insertion_block;
+      builder#add_return_bb (codegen_some value) builder#insertion_block;
       let after_bb = builder#append_block "after" builder#function_block in
       builder#position_at_end after_bb;
       None
@@ -343,8 +349,25 @@ and codegen_loop builder body =
   builder#position_at_end start_bb;
   ignore (builder#build_br loop_body_bb);
   builder#position_at_end loop_body_bb;
+  (* Before we start generating code for the loop's body, we need to create a
+   * new context for break statements - let's call it loop context. Each loop
+   * (nested as well) creates a new context. *)
+  builder#loop_enter (* loop_body_bb *);
   ignore(codegen body);
-  builder#build_br loop_body_bb;
+  ignore(builder#build_br loop_body_bb);
+  (* If there was at least one break statement we need to generate a new basic
+   * block. Then retrace to break BBs and append direct jump to each of these.
+   * Finally we merge control flow by inserting phi just after the loop. *)
+  let break_bbs = builder#loop_exit in
+  if List.length break_bbs > 0 then (
+    let loop_exit_bb = builder#append_block ("loop_exit." ^ i) the_function in
+    List.iter (fun (bb) ->
+      builder#position_at_end bb; ignore(builder#build_br loop_exit_bb)
+    ) break_bbs;
+    builder#position_at_end loop_exit_bb;
+    let incoming = List.map (fun (bb) -> (iundef, bb)) break_bbs in
+    ignore(builder#build_phi incoming)
+  );
   None
 
 let rec codegen_toplevel pkg tree =
@@ -428,7 +451,7 @@ and codegen_function_def pkg fn args body =
   | Ast.Void ->
       ignore(builder#build_ret_void)
   | _ ->
-      let returning_bbs = builder#list_ret_bb in
+      let returning_bbs = builder#list_return_bbs in
       if List.length returning_bbs > 0 then
         begin
           (* Create merge bb for all returning bbs *)

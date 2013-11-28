@@ -40,7 +40,29 @@ module SymbolMap :
         None
       else
         Some (Stack.top stack)
-  end;;
+  end
+
+module ScopedList :
+  sig
+    type 'a t
+    val create : unit -> 'a t
+    val enter : 'a t -> unit
+    val exit: 'a t -> 'a list
+    val add : 'a t -> 'a -> unit
+  end = struct
+    type 'a t = ('a list) Stack.t
+
+    let create () =
+      let stack = Stack.create () in
+      Stack.push [] stack; stack
+    let enter stack =
+      Stack.push [] stack
+    let exit stack =
+      Stack.pop stack
+    let add stack item =
+      let items = Stack.pop stack in
+      Stack.push (item::items) stack
+  end
 
 (* Iterate over all elements, calling function in between *)
 let rec print_list print_fn sep = function
