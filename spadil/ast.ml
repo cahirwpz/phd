@@ -134,6 +134,7 @@ and convert_spec_form = function
   | "DEFPARAMETER" | "DEFVAR" -> convert_defvar
   | "DEFUN" -> convert_fun_def
   | "FUNCTION" -> convert_fun_symbol
+  | "FUNCALL" -> convert_fun_call
   | "IF" -> convert_if
   | "LAMBDA" -> convert_lambda
   | "CONS" -> convert_cons
@@ -166,6 +167,10 @@ and convert_char = function
 and convert_cons = function
   | [head; tail] -> Cons (convert head, convert tail)
   | e -> error "Malformed cons s-form" e
+
+and convert_fun_call = function
+  | func::args -> Apply (convert func, List.map convert args)
+  | e -> error "Malformed funcall s-form" e
 
 and convert_lambda = function
   | (Sexpr.Group args)::body ->
@@ -297,9 +302,7 @@ and convert_setaref = function
 (* stringification *)
 let rec print = function
   | Apply (func, args) ->
-      print func; print_char '(';
-      print_list print ", " args;
-      print_char ')'
+      print_string "apply("; print_list print ", " (func::args); print_char ')'
   | ArrayRef (name, index) ->
       print name; print_char '['; print index; print_char ']'
   | Assign (name, Lambda (args, Mapping types, body)) ->

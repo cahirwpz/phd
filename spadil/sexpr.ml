@@ -350,7 +350,7 @@ let spadcall = function
       let (args, fn) = split_at_last rest in
       let fn_ptr = Group [Symbol "CAR"; fn]
       and fn_env = Group [Symbol "CDR"; fn] in
-      Group [Symbol "FUNCALL"; fn_ptr; make_list (args @ [fn_env])]
+      Group (Symbol "FUNCALL"::fn_ptr::args @ [fn_env])
   | _ -> raise NoMatch
 
 let list_to_cons = function

@@ -104,9 +104,18 @@ bool ATOM(GEN ptr) {
   return val->descriptor != cons_key;
 }
 
-GEN NREVERSE(GEN ptr) {
-  /* TODO */
-  return ptr;
+GEN NREVERSE(GEN lst) {
+  if (NULL(lst))
+    return lst;
+
+  GEN rev = vm_nil;
+
+  do {
+    rev = CONS(CAR(lst), rev);
+    lst = CDR(lst);
+  } while (!NULL(lst));
+
+  return rev;
 }
 
 GEN SPADfirst(GEN ptr) {
@@ -118,6 +127,17 @@ GEN SPADfirst(GEN ptr) {
     error("Cannot take first of an empty list");
 
   return val->fst;
+}
+
+LONG LENGTH(GEN lst) {
+  LONG l = 0;
+
+  while (!NULL(lst)) {
+    lst = CDR(lst);
+    l++;
+  }
+
+  return l;
 }
 
 /* Rational numbers */
@@ -184,3 +204,18 @@ LONG QVSIZE(GEN ptr) {
 
   return val->size;
 }
+
+GEN LIST2VEC(GEN lst) {
+  LONG i = 0;
+  LONG n = LENGTH(lst);
+  GEN vec = MAKEARR1(n, 0);
+  GEN *arr = QVREF(vec);
+
+  while (i < n) {
+    arr[i++] = CAR(lst);
+    lst = CDR(lst);
+  }
+
+  return vec;
+}
+

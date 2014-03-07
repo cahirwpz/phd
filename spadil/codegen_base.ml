@@ -89,6 +89,10 @@ class code_builder =
     method function_block =
       Llvm.block_parent @@ Llvm.insertion_block builder
 
+    (* Type conversion *)
+    method build_bitcast value to_type =
+      Llvm.build_bitcast value to_type "cast_tmp" builder
+
     (* Control flow. *)
     method build_call fn args =
       let res_type = Llvm.return_type @@ Llvm.get_function_type fn in
