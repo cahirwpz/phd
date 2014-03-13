@@ -1,0 +1,115 @@
+)abbrev package PRSTOOL ParserTools
+++ Functions for s-expression parsing 
+ParserTools() : with
+    firstSymbol? : (SExpression, Symbol) -> Boolean
+
+    capsule? : SExpression -> Boolean
+    case? : SExpression -> Boolean
+    coerce? : SExpression -> Boolean
+    collect? : SExpression -> Boolean
+    domain? : SExpression -> Boolean
+    exit? : SExpression -> Boolean
+    function? : SExpression -> Boolean
+    functor? : SExpression -> Boolean
+    itor? : SExpression -> Boolean
+    guard? : SExpression -> Boolean
+    has? : SExpression -> Boolean
+    if? : SExpression -> Boolean
+    ifelse? : SExpression -> Boolean
+    import? : SExpression -> Boolean
+    is? : SExpression -> Boolean
+    join? : SExpression -> Boolean
+    lambda? : SExpression -> Boolean
+    let? : SExpression -> Boolean
+    listof? : SExpression -> Boolean
+    loop? : SExpression -> Boolean
+    macro? : SExpression -> Boolean
+    mapping? : SExpression -> Boolean
+    nobranch? : SExpression -> Boolean
+    package? : SExpression -> Boolean
+    pretend? : SExpression -> Boolean
+    progn? : SExpression -> Boolean
+    quote? : SExpression -> Boolean
+    record? : SExpression -> Boolean
+    segment? : SExpression -> Boolean
+    seq? : SExpression -> Boolean
+    signature? : SExpression -> Boolean
+    step? : SExpression -> Boolean
+    tuple? : SExpression -> Boolean
+    typesel? : SExpression -> Boolean
+    union? : SExpression -> Boolean
+    var? : SExpression -> Boolean
+    while? : SExpression -> Boolean
+  == add
+    firstSymbol? (ex, sym) ==
+        not list? ex => false
+        fst := car ex
+        not symbol? fst => false
+        symbol fst = sym
+
+    list_of_eq? : (SExpression, Symbol, Integer) -> Boolean
+    list_of_eq? (ex, sym, n) ==
+      not list? ex => false
+      not (#ex = n) => false
+      list_ex := destruct ex
+      not symbol? list_ex.1 => false
+      symbol list_ex.1 = sym
+
+    list_of_ge? : (SExpression, Symbol, Integer) -> Boolean
+    list_of_ge? (ex, sym, n) ==
+      not list? ex => false
+      #ex < n => false
+      list_ex := destruct ex
+      not symbol? list_ex.1 => false
+      symbol list_ex.1 = sym
+
+    nobranch? ex ==
+      symbol? ex and symbol ex = 'noBranch => true
+      false
+
+    functor? ex ==
+      list_of_ge?(ex, 'DEF, 5) =>
+        fifth := ex.5
+        firstSymbol? (car ex.3, 'Category) => true
+        capsule? fifth => true
+        list_of_eq?(fifth, 'add, 3) => true
+      false
+
+    capsule? ex == list_of_ge?(ex, 'CAPSULE, 1)
+    case? ex == list_of_eq?(ex, 'case, 3)
+    coerce? ex == list_of_eq?(ex, '::, 3)
+    collect? ex == list_of_ge?(ex, 'COLLECT, 3)
+    domain? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'domain
+    exit? ex == list_of_eq?(ex, 'exit, 3)
+    function? ex == list_of_eq?(ex, 'DEF, 5)
+    itor? ex == list_of_eq?(ex, 'IN, 3)
+    guard? ex == list_of_eq?(ex, '|, 2)
+    has? ex == list_of_eq?(ex, 'has, 3)
+    ifelse? ex == list_of_eq?(ex, 'IF, 4)
+    import? ex == list_of_eq?(ex, 'import, 2)
+    is? ex == list_of_eq?(ex, 'is, 3)
+    join? ex == list_of_ge?(ex, 'Join, 2)
+    lambda? ex == list_of_eq?(ex, '+->, 3)
+    let? ex == list_of_eq?(ex, 'LET, 3)
+    listof? ex == list_of_ge?(ex, 'LISTOF, 3)
+    loop? ex == list_of_ge?(ex, 'REPEAT, 3)
+    macro? ex == list_of_eq?(ex, 'MDEF, 5)
+    mapping? ex == list_of_ge?(ex, 'Mapping, 2)
+    package? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'package
+    pretend? ex == list_of_eq?(ex, 'pretend, 3)
+    progn? ex == list_of_ge?(ex, 'PROGN, 2)
+    quote? ex == list_of_eq?(ex, 'QUOTE, 2)
+    record? ex == list_of_ge?(ex, 'Record, 3)
+    segment? ex == list_of_eq?(ex, 'SEGMENT, 3)
+    seq? ex == list_of_ge?(ex, 'SEQ, 2)
+    signature? ex == list_of_eq?(ex, 'SIGNATURE, 3) or list_of_eq?(ex, 'SIGNATURE, 4)
+    step? ex == list_of_eq?(ex, 'STEP, 4) or list_of_eq?(ex, 'STEP, 5)
+    tuple? ex == list_of_ge?(ex, '_@Tuple, 3)
+    typesel? ex == list_of_eq?(ex, '@, 3)
+    union? ex == list_of_ge?(ex, 'Union, 3)
+    var? ex == list_of_eq?(ex, ':, 3)
+    while? ex == list_of_eq?(ex, 'WHILE, 2)
+
+)abbrev category PRSCAT ParsableCategory
+ParsableCategory() : Category == SetCategory with
+  parse : SExpression -> %
