@@ -1,0 +1,244 @@
+)abbrev domain SPTFTOR SpadFunctorType
+SpadFunctorType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "args") -> List(T)
+    construct : (Symbol, List(T)) -> %
+  == add
+    -- functor's parameter can be arbitrary value (not only type)
+    Rep := Record(ft_name : Symbol, ft_args : List(T))
+
+    elt(x, "args") == x.ft_args
+    elt(x, "name") == x.ft_name
+
+    construct(n, al) == [n, al]$Rep pretend %
+
+    parse ex ==
+      fargs : List(T) := [ parse e for e in destruct cdr(ex) ]
+      [ symbol car ex, fargs ]
+
+    coerce ftor ==
+      fname := ftor.name :: OutputForm
+      fargs := [ t :: OutputForm for t in ftor.args ]
+      empty? fargs => fname
+      hconcat [ fname, paren fargs ]
+
+)abbrev domain SPTMAP SpadMappingType
+SpadMappingType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "args") -> List(T)
+    elt : (%, "type") -> T
+    construct : (List(T), T) -> %
+  == add
+    Rep := Record(m_args : List(T), m_type : T)
+
+    import ParserTools
+
+    elt(x, "args") == x.m_args
+    elt(x, "type") == x.m_type
+
+    construct(al, t) == [al, t]$Rep pretend %
+
+    parseFunType : SExpression -> T
+    parseFunType s ==
+      if firstSymbol? (s, ':) then parse s.3 else parse s
+        
+    parse ex ==
+      sig : List(T) := reverse [ parseFunType e for e in destruct cdr ex ]
+      [ reverse(rest sig), first sig ]
+
+    coerce mapping ==
+      ts := [t :: OutputForm for t in mapping.args]
+      src := if #ts > 1 then paren ts else first ts
+      hconcat [src, " -> ", mapping.type :: OutputForm]
+
+)abbrev domain SPTSUM SpadSumType
+SpadSumType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "types") -> List(T)
+    elt : (%, "kind") -> Union("join", "domain", "package", "list")
+    construct : (Union("join", "domain", "package", "list"), List(T)) -> %
+  == add
+    Rep :=
+      Record(s_kind : Union("join", "domain", "package", "list"), s_types : List(T))
+
+    import ParserTools
+
+    elt(x, "kind") == x.s_kind
+    elt(x, "types") == x.s_types
+
+    construct(k, tl) == [k, tl]$Rep pretend %
+
+    parse ex ==
+      lst :=
+        domain? ex or package? ex =>
+          -- (CATEGORY domain ...)
+          -- (CATEGORY package ...)
+          destruct cdr(cdr(ex))
+        join? ex or progn? ex =>
+          -- (Join ...)
+          -- (PROGN ...)
+          destruct cdr(ex)
+
+      args : List(T) := [ parse e for e in lst ]
+
+      domain? ex => ["domain", args]
+      package? ex => ["package", args]
+      join? ex => ["join", args]
+      progn? ex => ["list", args]
+
+    coerce(sum : %) : OutputForm ==
+      ts := [ t :: OutputForm for t in sum.types ]
+      sum.kind case "join" => hconcat ["Join(", pile ts, ")"]
+      pile [hconcat["{", pile ts], "}"]
+
+)abbrev domain SPTSIG SpadSignatureType
+SpadSignatureType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "type") -> SpadMappingType(T)
+    construct : (Symbol, SpadMappingType T) -> %
+  == add
+    Rep := Record(s_name : Symbol, s_type : SpadMappingType(T))
+
+    elt(x, "name") == x.s_name
+    elt(x, "type") == x.s_type
+
+    construct(n, t) == [n, t]$Rep pretend %
+
+    parse ex ==
+      -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
+      -- (SIGNATURE name Type constant)
+      res : T := parse(car ex.3)
+      targs : List(T) := if #ex = 3
+        then [ parse e for e in destruct(cdr ex.3) ]
+        else [ parse ex.4 ]
+      [ symbol ex.2, construct(targs, res) ]
+
+    coerce(sig : %) : OutputForm ==
+      hconcat [sig.name :: OutputForm, " : ", sig.type :: OutputForm]
+
+)abbrev domain SPTNAMED SpadNamedType
+SpadNamedType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "type") -> T
+    construct : (Symbol, T) -> %
+  == add
+    Rep := Record(n_name : Symbol, n_type : T)
+
+    import SExpression
+
+    elt(x, "name") == x.n_name
+    elt(x, "type") == x.n_type
+
+    construct(n, t) == [n, t]$Rep pretend %
+
+    parse ex ==
+      -- (: field Type)
+      [ symbol ex.2, (parse ex.3) $ T ]
+
+    coerce(field : %) : OutputForm ==
+      hconcat [field.name :: OutputForm, " : ", field.type :: OutputForm]
+
+)abbrev domain SPTREC SpadRecordType
+SpadRecordType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "fields") -> List SpadNamedType(T)
+    construct : List SpadNamedType(T) -> %
+  == add
+    Rep := List SpadNamedType(T)
+
+    elt(x, "fields") == x pretend List SpadNamedType(T)
+
+    construct fl == fl pretend %
+
+    parse ex ==
+      -- (Record (: field1 Type1) (: field2 Type2) ...)
+      construct [parse e for e in destruct cdr ex]
+
+    coerce(record : %) : OutputForm ==
+      hconcat ["Record", paren [f :: OutputForm for f in record]]
+
+)abbrev domain SPTUNION SpadUnionType
+SpadUnionType(T : SpadTypeCategory) : ParsableCategory with
+    elt : (%, "variants") -> List Union(T, SpadNamedType(T))
+    construct : List Union(T, SpadNamedType(T)) -> %
+  == add
+    Rep := List Union(T, SpadNamedType(T))
+
+    import ParserTools
+
+    elt(x, "variants") == x pretend List Union(T, SpadNamedType(T))
+
+    construct fl == fl pretend %
+
+    parseUnionField : SExpression -> Union(T, SpadNamedType(T))
+    parseUnionField s ==
+      var? s => construct(symbol s.2, parse s.3) $ SpadNamedType(T)
+      (parse s) $ T
+
+    parse ex ==
+      -- (Union (: field1 Type1) (: field2 Type2) ...)
+      -- (Union Type1 Type2 ...)
+      construct [parseUnionField e for e in destruct cdr ex]
+
+    coerce_field : Union(T, SpadNamedType(T)) -> OutputForm
+    coerce_field f ==
+      f case T => (f :: T) :: OutputForm
+      (f :: SpadNamedType(T)) :: OutputForm
+
+    coerce(union : %) : OutputForm ==
+      hconcat ["Union", paren [coerce_field v for v in union.variants]]
+
+)abbrev domain SPTYPE SpadType
+++ SPAD type representation
+SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
+    Rep := Union(sum : SpadSumType(%),
+                 record : SpadRecordType(%),
+                 union : SpadUnionType(%),
+                 functor : SpadFunctorType(%),
+                 mapping : SpadMappingType(%),
+                 signature : SpadSignatureType(%),
+                 singleton : String,
+                 expression : N,
+                 unknown : "unknown")
+
+    import ParserTools
+    import OutputForm
+    import OutputFormHelper
+
+    unknownType == ["unknown"]
+
+    unknownType? t == t case unknown
+    functorType? t == t case functor
+    sumType? t == t case sum
+    recordType? t == t case record
+    unionType? t == t case union
+    mappingType? t == t case mapping
+    signatureType? t == t case signature
+
+    parse ex ==
+      -- print (hconcat ["type: ", ex :: OutputForm])
+
+      null? ex => ["unknown"]
+      string? ex => [string ex]
+      symbol? ex =>
+        [construct(symbol ex, []) $ SpadFunctorType(%)]
+      signature? ex =>
+        [(parse ex) $ SpadSignatureType(%)]
+      record? ex =>
+        [(parse ex) $ SpadRecordType(%)]
+      union? ex => 
+        [(parse ex) $ SpadUnionType(%)]
+      var? ex or mapping? ex => 
+        [(parse ex) $ SpadMappingType(%)]
+      domain? ex or package? ex or join? ex or progn? ex =>
+        [(parse ex) $ SpadSumType(%)]
+      [(parse ex) $ SpadFunctorType(%)]
+
+    coerce ex ==
+      ex case record => ex.record :: OutputForm
+      ex case union => ex.union :: OutputForm
+      ex case singleton => ex.singleton :: OutputForm
+      ex case signature => ex.signature :: OutputForm
+      ex case sum => ex.sum :: OutputForm
+      ex case functor => ex.functor :: OutputForm
+      ex case mapping => ex.mapping :: OutputForm
+      ex case unknown => ""
+
+      error "coerce $ SpadType: Variant not handled!"
