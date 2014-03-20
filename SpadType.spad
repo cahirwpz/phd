@@ -205,12 +205,13 @@ SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
     unknownType == ["unknown"]
 
     unknownType? t == t case unknown
-    functorType? t == t case functor
-    sumType? t == t case sum
-    recordType? t == t case record
-    unionType? t == t case union
-    mappingType? t == t case mapping
-    signatureType? t == t case signature
+    sumTypeOf t == if t case sum then t.sum else "failed"
+    recordTypeOf t == if t case record then t.record else "failed"
+    unionTypeOf t == if t case union then t.union else "failed"
+    functorTypeOf t == if t case functor then t.functor else "failed"
+    mappingTypeOf t == if t case mapping then t.mapping else "failed"
+    signatureTypeOf t == if t case signature then t.signature else "failed"
+    singletonTypeOf t == if t case singleton then t.singleton else "failed"
 
     parse ex ==
       -- print (hconcat ["type: ", ex :: OutputForm])

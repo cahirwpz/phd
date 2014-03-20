@@ -1,13 +1,17 @@
 )abbrev domain SPIMP SpadImport
 ++ SPAD domain / category / package import declaration
-SpadImport(N : SpadNodeCategory) : ParsableCategory == add
-  import OutputForm
+SpadImport(N : SpadNodeCategory) : ParsableCategory with
+    elt : (%, "type") -> SpadType(N)
+  == add
+    import OutputForm
 
-  parse ex ==
-    (parse ex.2)$SpadType(N) pretend %
+    elt (x, "type") == x pretend SpadType(N)
 
-  coerce ex ==
-    hconcat ["import ", (ex pretend SpadType(N)) :: OutputForm]
+    parse ex ==
+      (parse ex.2)$SpadType(N) pretend %
+
+    coerce ex ==
+      hconcat ["import ", ex.type :: OutputForm]
 
 )abbrev domain SPDCL SpadSymbolDecl
 ++ SPAD variable declaration representation
@@ -86,8 +90,8 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
     coerce apply ==
       fun := apply.function
       argl := [ a :: OutputForm for a in apply.args ]
-      funsym := getSymbol fun
 
+      funsym := symbolOf fun
       funsym case "failed" =>
         #argl = 0 => fun :: OutputForm
         hconcat [fun :: OutputForm, paren argl]
@@ -140,8 +144,8 @@ SpadSegment(N : SpadNodeCategory) : ParsableCategory with
       ofs : List OutputForm := [ rstart, ".." ]
       if not(range.end case "infinity") then
         ofs := concat(ofs, [rend])
-      i := getInteger range.step
-      if i case Integer and i ~= 1 then
+      i := integerOf range.step
+      if (i case Integer) and i ~= 1 then
         ofs := concat(ofs, ["by", rstep])
       spaces ofs
 
@@ -360,8 +364,8 @@ SpadSequence(N : SpadNodeCategory) : ParsableCategory with
       ex.kind case "list" => bracket lst
       ex.kind case "tuple" => paren lst
 
-)abbrev package SPCOND SpadIfElse
-SpadIfElse(N : SpadNodeCategory) : ParsableCategory with
+)abbrev package SPCOND SpadConditional
+SpadConditional(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "cond") -> N
     elt : (%, "truebr") -> N
     elt : (%, "falsebr") -> Union(N, "empty")
@@ -446,7 +450,7 @@ SpadFunction(N : SpadNodeCategory) : ParsableCategory with
 
 )abbrev package SPMACRO SpadMacro
 ++ SPAD macro representation
-SpadMacro() : ParsableCategory with
+SpadMacro(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List Symbol
     elt : (%, "body") -> SExpression
@@ -496,13 +500,13 @@ SpadNode() : SpadNodeCategory == add
                  apply : SpadApply(%),
                  assign : SpadAssign(%),
                  loop : SpadLoop(%),
-                 ifelse : SpadIfElse(%),
+                 cond : SpadConditional(%),
+                 smacro : SpadMacro(%),
                  sfunction : SpadFunction(%),
-                 smacro : SpadMacro,
-                 type : SpadType(%),
-                 typeimp : SpadImport(%),
+                 stype : SpadType(%),
+                 simport : SpadImport(%),
                  typeexpr : SpadTypeExpression(%),
-                 range : SpadSegment(%),
+                 segment : SpadSegment(%),
                  dfloat : DoubleFloat,
                  integer : Integer,
                  symbol : Symbol,
@@ -513,12 +517,25 @@ SpadNode() : SpadNodeCategory == add
     import SExpression
     import ParserTools
 
-    getSymbol ex ==
-      if ex case symbol then ex.symbol else "failed"
-    getInteger ex ==
-      if ex case integer then ex.integer else "failed"
+    sequenceOf n == if n case seq then n.seq else "failed"
+    lambdaOf n == if n case lambda then n.lambda else "failed"
+    applyOf n == if n case apply then n.apply else "failed"
+    assignOf n == if n case assign then n.assign else "failed"
+    loopOf n == if n case loop then n.loop else "failed"
+    conditionalOf n == if n case cond then n.cond else "failed"
+    functionOf n == if n case sfunction then n.sfunction else "failed"
+    macroOf n == if n case smacro then n.smacro else "failed"
+    typeOf n == if n case stype then n.stype else "failed"
+    importOf n == if n case simport then n.simport else "failed"
+    typeExprOf n == if n case typeexpr then n.typeexpr else "failed"
+    segmentOf n == if n case segment then n.segment else "failed"
+    floatOf n == if n case dfloat then n.dfloat else "failed"
+    integerOf n == if n case integer then n.integer else "failed"
+    symbolOf n == if n case symbol then n.symbol else "failed"
+    stringOf n == if n case string then n.string else "failed"
 
     construct (seq : SpadSequence(%)) : % == [seq]$Rep
+    construct (seg : SpadSegment(%)) : % == [seg]$Rep
 
     parse ex ==
       -- print (hconcat ["expression: ", ex :: OutputForm])
@@ -544,7 +561,7 @@ SpadNode() : SpadNodeCategory == add
         [(parse ex) $ SpadFunction(%)]
 
       macro? ex =>
-        [(parse ex) $ SpadMacro]
+        [(parse ex) $ SpadMacro(%)]
 
       var? ex or case? ex or has? ex or is? ex or pretend? ex or coerce? ex or typesel? ex => 
         -- {expression with type annotation}
@@ -572,7 +589,7 @@ SpadNode() : SpadNodeCategory == add
         -- (IF condition expr 'noBranch)
         -- (IF condition 'noBranch expr)
         (c, l, r) := (ex.2, ex.3, ex.4)
-        sc : SpadIfElse(%) :=
+        sc : SpadConditional(%) :=
           nobranch? l =>
             pc := parse (convert [convert '_not, c])
             [pc, parse r, "empty"]
@@ -613,23 +630,21 @@ SpadNode() : SpadNodeCategory == add
       error "SExpression not handled!"
 
     coerce ex ==
-      ex case range => ex.range :: OutputForm
+      ex case segment => ex.segment :: OutputForm
       ex case lambda => ex.lambda :: OutputForm
       ex case seq => ex.seq :: OutputForm
       ex case apply => ex.apply :: OutputForm
       ex case loop => ex.loop :: OutputForm
-      ex case ifelse => ex.ifelse :: OutputForm
+      ex case cond => ex.cond :: OutputForm
       ex case sfunction => ex.sfunction :: OutputForm
       ex case smacro => ex.smacro :: OutputForm
-      ex case typeimp => ex.typeimp :: OutputForm
+      ex case simport => ex.simport :: OutputForm
+      ex case stype => ex.stype :: OutputForm
       ex case typeexpr => ex.typeexpr :: OutputForm
       ex case assign => ex.assign :: OutputForm
-      ex case type => ex.type :: OutputForm
       ex case string => ex.string :: OutputForm
       ex case symbol => ex.symbol :: OutputForm
       ex case dfloat => ex.dfloat :: OutputForm
       ex case integer => ex.integer :: OutputForm
 
       error "coerce $ SpadNode: variant not handled!"
-
-

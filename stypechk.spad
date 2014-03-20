@@ -97,78 +97,143 @@ SpadTreeMacroExpander() : with
     walk : SpadType(SpadNode) -> SpadType(SpadNode)
     walk : SpadNode -> SpadNode
   == add
-    env : List SpadMacro
+    T ==> SpadType(SpadNode)
 
-    expand (st : SpadType(SpadNode)) : SpadType(SpadNode) == st
-      --st case sum =>
-      --  construct(st.sum.kind, [expand t for t in st.sum.types]) $ ?
-      --st case record =>
-      --  construct(...) $ RecordType
-      --st case union =>
-      --  construct(...) $ UnionType
-      --st case deptype =>
-      --  dt := st.deptype
-      --  construct(pred dt, expand ptrue dt, expand pfalse dt) $ DependentType
-      --st case functor =>
-      --  ft := st.functor
-      --  construct(ft.ft_name, [expand e for e ft.ft_args])$ FunctorType
-      --st case mapping =>
-      --  mt := st.mapping
-      --  construct([expand e for e in mt.m_args], expand mt.m_type) $ MappingType
-      --st case signature =>
-      --  sig := st.signature
-      --  construct(sig.sig_name, expand sig.sig_type) $ SignatureType
-      --
-      --st
+    import OutputForm
 
-    expand (ex : SpadNode) : SpadNode == ex
-      --ex case seq =>
-      --  construct(ex.s_type, [expand e for e in ex.s_sexpr]) $ SSeq
-      --ex case lambda =>
-      --  construct(ex.f_args, expand ex.f_type, expand ex.f_body) $ SLambda
-      --ex case apply =>
-      --  construct(expand ex.a_fun, [expand e for e in a_args]) $ SApply
-      --  -- handle case where ex.a_fun is Symbol
-      --ex case assign =>
-      --  construct(expand ex.lval, expand ex.rval) $ SAssign
-      --ex case coerce =>
-      --  construct(expand ex.exp, ex.kind, expand ex.type) $ SCoerce
-      --ex case loop =>
-      --  construct(ex.l_type,
-      --            [expand e for e in ex.l_itor],
-      --            [expand e for e in ex.l_guard],
-      --            expand ex.l_body) $ SLoop
-      --ex case ifelse =>
-      --  construct(expand pred ex, expand ptrue ex, expand pfalse ex) $ SIfElse
-      --ex case type =>
-      --  expand ex
-      --ex case typeof =>
-      --  construct(ex.t_kind, expand ex.t_expr, expand ex.t_type) $ STypeOf
-      --ex case range =>
-      --  ex.end case "infinity" =>
-      --    construct(expand ex.start, "infinity", expand ex.step)$SRange
-      --  construct(expand ex.start, expand ex.end, expand ex.step)$SRange
-      --ex case symbol =>
-      --  sex := find(ex, env)
-      --  if sex case "failed" then
-      --    ex
-      --  else
-      --    parse ex
-      --
-      --ex
+    env : List SpadMacro(SpadNode)
 
-    expand (f : SpadFunctor) : SpadFunctor == f
-      -- old_env := copy env
-      --
-      --caps := f.capsule
-      --
-      --for e in caps repeat
-      --  if e case SpadMacro then
-      --    env := cons(e,env)
-      --  else
-      --    expand e
-      --
-      --env := old_env
+    walk (t : SpadType(SpadNode)) : SpadType(SpadNode) ==
+      sum := sumTypeOf t
+      sum case SpadSumType(T) =>
+        for typ in sum.types repeat
+          walk typ
+
+      record := recordTypeOf t
+      record case SpadRecordType(T) =>
+        for field in record.fields repeat
+          walk field.type
+        
+      union := unionTypeOf t
+      union case SpadUnionType(T) =>
+        for variant in union.variants repeat
+          variant case T =>
+            walk (variant :: T)
+          variant case SpadNamedType(T) =>
+            walk variant.type
+      
+      ftor := functorTypeOf t
+      ftor case SpadFunctorType(T) =>
+        for arg in ftor.args repeat
+          walk arg
+
+      fun := mappingTypeOf t
+      fun case SpadMappingType(T) =>
+        for arg in fun.args repeat
+          walk arg
+        walk fun.type
+
+      --sig := signatureTypeOf t
+      --sig case SpadSignatureType(T) =>
+      --  ...
+
+      --singleton := singletonTypeOf t
+      --singleton case String =>
+      --  ...
+
+      t
+
+    walk (n : SpadNode) : SpadNode ==
+      seq := sequenceOf n
+      seq case SpadSequence(SpadNode) =>
+        for expr in seq.list repeat
+          walk expr
+
+      lambda := lambdaOf n
+      lambda case SpadLambda(SpadNode) =>
+        walk lambda.type
+        walk lambda.body
+
+      apply := applyOf n
+      apply case SpadApply(SpadNode) =>
+        walk apply.function
+        for arg in apply.args repeat
+          walk arg
+
+      assign := assignOf n
+      assign case SpadAssign(SpadNode) =>
+        walk assign.lvalue
+        walk assign.rvalue
+
+      loop := loopOf n
+      loop case SpadLoop(SpadNode) =>
+        for itor in loop.itors repeat
+          -- walk itor.var
+          walk itor.seq
+        for guard in loop.guards repeat
+          walk guard
+        walk loop.body
+
+      cond := conditionalOf n
+      cond case SpadConditional(SpadNode) =>
+        walk cond.cond 
+        walk cond.truebr
+        cond.falsebr case SpadNode =>
+          walk (cond.falsebr :: SpadNode)
+
+      func := functionOf n
+      func case SpadFunction(SpadNode) =>
+        for arg in func.args repeat
+          arg case SpadSymbolDecl(SpadNode) =>
+            walk arg.type
+        walk func.type
+        walk func.body
+
+      smacro := macroOf n
+      smacro case SpadMacro(SpadNode) =>
+        print (smacro.name :: OutputForm)
+
+      stype := typeOf n
+      stype case SpadType(SpadNode) =>
+        walk stype
+
+      simport := importOf n
+      simport case SpadImport(SpadNode) =>
+        walk simport.type
+
+      typexpr := typeExprOf n
+      typexpr case SpadTypeExpression(SpadNode) =>
+        walk typexpr.expr
+        walk typexpr.type
+
+      segment := segmentOf n
+      segment case SpadSegment(SpadNode) =>
+        walk segment.start
+        walk segment.step
+        segment.end case SpadNode =>
+          walk (segment.end :: SpadNode)
+
+      --sym := symbolOf n
+      --sym case Symbol =>
+      --  ...
+
+      --f := floatOf n
+      --f case DoubleFloat =>
+      --  ...
+
+      --i := integerOf n
+      --i case Integer =>
+      --  ...
+        
+      --str := stringOf n
+      --str case String =>
+      --  ...
+
+      n
+
+    walk (f : SpadFunctor) : SpadFunctor ==
+      walk f.capsule
+      f
 
 )abbrev package SPTYPCHK SpadTypeChecker
 ++ Author: Krystian Baclawski
@@ -180,15 +245,13 @@ SpadTypeChecker() : with
     check : SExpression -> Void 
       ++ check(sex) runs type checker for parse tree
   == add
-    import SpadFunctor
     import OutputForm
+    import SpadFunctor
+    import SpadTreeMacroExpander
 
     check e ==
       -- print (e :: OutputForm)
 
-      -- na poziomie funkcji to nie działa:
-      -- SF ==> SpadFunctor
-      -- id (x : SExpression) : SExpression == x
-
       ftor : SpadFunctor := parse e
+      walk ftor
       print (ftor :: OutputForm)
