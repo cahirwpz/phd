@@ -1,5 +1,6 @@
 )boot $LINELENGTH := 180
 )compile ParserTools.spad
+)compile SpadCategories.spad
 
 )abbrev package OUTFHELP OutputFormHelper
 ++ Helper function for output form printing
@@ -34,330 +35,28 @@ OutputFormHelper() : with
     spaces l ==
       separateBy(l, " ")
 
-)abbrev package DEP Dependent
-Dependent(I : SetCategory, T : SetCategory) : SetCategory with
-    elt : (%, "pred") -> I
-    elt : (%, "ptrue") -> T
-    elt : (%, "pfalse") -> Union(T, "empty")
-    construct : (I, T, Union(T, "empty")) -> %
-  == add
-    Rep := Record(d_pred : I, d_ptrue : T, d_pfalse : Union(T, "empty"))
-
-    import OutputForm
-
-    elt(x, "pred") == x.d_pred
-    elt(x, "ptrue") == x.d_ptrue
-    elt(x, "pfalse") == x.d_pfalse
-
-    construct(p, pt, pf) == [p, pt, pf] $ Rep
-
-    coerce d ==
-      if d.d_pfalse case "empty" then
-        pile([hconcat ["if ", d.d_pred :: OutputForm],
-              hconcat [hspace 1, "then ", d.d_ptrue :: OutputForm]])
-      else
-        pile([hconcat ["if ", d.d_pred :: OutputForm],
-              hconcat [hspace 1, "then ", d.d_ptrue :: OutputForm],
-              hconcat [hspace 1, "else ", d.d_pfalse :: OutputForm]])
-
-)abbrev package SPTFTOR SpadFunctorType
-SpadFunctorType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List(T)
-    construct : (Symbol, List(T)) -> %
-  == add
-    -- parametrem funktora może być wartość (dowolna)
-    FunctorType(T) ==>
-      Record(ft_name : Symbol, ft_args : List(T))
-    rep(x) ==> (x pretend FunctorType(T))
-
-    elt(x, "args") == rep(x).ft_args
-    elt(x, "name") == rep(x).ft_name
-
-    construct(n, al) == [n, al]$FunctorType(T) pretend %
-
-    parse ex ==
-      fargs : List(T) := [ parse e for e in destruct cdr(ex) ]
-      [ symbol car ex, fargs ]
-
-    coerce ftor ==
-      fname := ftor.name :: OutputForm
-      fargs := [ t :: OutputForm for t in ftor.args ]
-      empty? fargs => fname
-      hconcat [ fname, paren fargs ]
-
-)abbrev package SPTMAP SpadMappingType
-SpadMappingType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "args") -> List(T)
-    elt : (%, "type") -> T
-    construct : (List(T), T) -> %
-  == add
-    MappingType(T) ==>
-      Record(m_args : List(T), m_type : T)
-    rep(x) ==> (x pretend MappingType(T))
-
-    import ParserTools
-
-    elt(x, "args") == rep(x).m_args
-    elt(x, "type") == rep(x).m_type
-
-    construct(al, t) == [al, t]$(MappingType T) pretend %
-
-    parseFunType : SExpression -> T
-    parseFunType s ==
-      if firstSymbol? (s, ':) then parse s.3 else parse s
-        
-    parse ex ==
-      sig : List(T) := reverse [ parseFunType e for e in destruct cdr ex ]
-      [ reverse(rest sig), first sig ]
-
-    coerce mapping ==
-      ts := [t :: OutputForm for t in mapping.args]
-      src := if #ts > 1 then paren ts else first ts
-      hconcat [src, " -> ", mapping.type :: OutputForm]
-
-)abbrev package SPTSUM SpadSumType
-SpadSumType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "types") -> List(T)
-    elt : (%, "kind") -> Union("join", "domain", "package", "list")
-    construct : (Union("join", "domain", "package", "list"), List(T)) -> %
-  == add
-    SumType(T) ==>
-      Record(s_kind : Union("join", "domain", "package", "list"), s_types : List(T))
-    rep(x) ==> (x pretend SumType(T))
-
-    import ParserTools
-
-    elt(x, "kind") == rep(x).s_kind
-    elt(x, "types") == rep(x).s_types
-
-    construct(k, tl) == [k, tl]$(SumType T) pretend %
-
-    parse ex ==
-      lst :=
-        domain? ex or package? ex =>
-          -- (CATEGORY domain ...)
-          -- (CATEGORY package ...)
-          destruct cdr(cdr(ex))
-        join? ex or progn? ex =>
-          -- (Join ...)
-          -- (PROGN ...)
-          destruct cdr(ex)
-
-      args : List(T) := [ parse e for e in lst ]
-
-      domain? ex => ["domain", args]
-      package? ex => ["package", args]
-      join? ex => ["join", args]
-      progn? ex => ["list", args]
-
-    coerce(sum : %) : OutputForm ==
-      ts := [ t :: OutputForm for t in sum.types ]
-      sum.kind case "join" => hconcat ["Join(", pile ts, ")"]
-      pile [hconcat["{", pile ts], "}"]
-
-)abbrev package SPTSIG SpadSignatureType
-SpadSignatureType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "name") -> Symbol
-    elt : (%, "type") -> SpadMappingType(T)
-    construct : (Symbol, SpadMappingType T) -> %
-  == add
-    SignatureType(T) ==>
-      Record(s_name : Symbol, s_type : SpadMappingType(T))
-    rep(x) ==> (x pretend (SignatureType T))
-
-    elt(x, "name") == rep(x).s_name
-    elt(x, "type") == rep(x).s_type
-
-    construct(n, t) == [n, t]$(SignatureType T) pretend %
-
-    parse ex ==
-      -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
-      -- (SIGNATURE name Type constant)
-      res : T := parse(car ex.3)
-      targs : List(T) := if #ex = 3
-        then [ parse e for e in destruct(cdr ex.3) ]
-        else [ parse ex.4 ]
-      [ symbol ex.2, construct(targs, res) ]
-
-    coerce(sig : %) : OutputForm ==
-      hconcat [sig.name :: OutputForm, " : ", sig.type :: OutputForm]
-
-)abbrev package SPTNAMED SpadNamedType
-SpadNamedType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "name") -> Symbol
-    elt : (%, "type") -> T
-    construct : (Symbol, T) -> %
-  == add
-    NamedType(T) ==>
-      Record(n_name : Symbol, n_type : T)
-    rep(x) ==> (x pretend (NamedType T))
-
-    import SExpression
-
-    elt(x, "name") == rep(x).n_name
-    elt(x, "type") == rep(x).n_type
-
-    construct(n, t) == [n, t]$(NamedType T) pretend %
-
-    parse ex ==
-      -- (: field Type)
-      [ symbol ex.2, (parse ex.3) $ T ]
-
-    coerce(field : %) : OutputForm ==
-      hconcat [field.name :: OutputForm, " : ", field.type :: OutputForm]
-
-)abbrev package SPTREC SpadRecordType
-SpadRecordType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "fields") -> List SpadNamedType(T)
-    construct : List SpadNamedType(T) -> %
-  == add
-    Rep := List SpadNamedType(T)
-
-    elt(x, "fields") == x pretend List SpadNamedType(T)
-
-    construct fl == fl pretend %
-
-    parse ex ==
-      -- (Record (: field1 Type1) (: field2 Type2) ...)
-      construct [parse e for e in destruct cdr ex]
-
-    coerce(record : %) : OutputForm ==
-      hconcat ["Record", paren [f :: OutputForm for f in record]]
-
-)abbrev package SPTUNION SpadUnionType
-SpadUnionType(T : ParsableCategory) : ParsableCategory with
-    elt : (%, "variants") -> List Union(T, SpadNamedType(T))
-    construct : List Union(T, SpadNamedType(T)) -> %
-  == add
-    Rep := List Union(T, SpadNamedType(T))
-
-    import ParserTools
-
-    elt(x, "variants") == x pretend List Union(T, SpadNamedType(T))
-
-    construct fl == fl pretend %
-
-    parseUnionField : SExpression -> Union(T, SpadNamedType(T))
-    parseUnionField s ==
-      var? s => construct(symbol s.2, parse s.3) $ SpadNamedType(T)
-      (parse s) $ T
-
-    parse ex ==
-      -- (Union (: field1 Type1) (: field2 Type2) ...)
-      -- (Union Type1 Type2 ...)
-      construct [parseUnionField e for e in destruct cdr ex]
-
-    coerce_field : Union(T, SpadNamedType(T)) -> OutputForm
-    coerce_field f ==
-      f case T => (f :: T) :: OutputForm
-      (f :: SpadNamedType(T)) :: OutputForm
-
-    coerce(union : %) : OutputForm ==
-      hconcat ["Union", paren [coerce_field v for v in union.variants]]
-
-)abbrev package SPTYPE SpadType
-++ SPAD type representation
-SpadType() : ParsableCategory with
-    empty : %
-    unknownType? : % -> Boolean
-    functorType? : % -> Boolean
-    sumType? : % -> Boolean
-    recordType? : % -> Boolean
-    unionType? : % -> Boolean
-    mappingType? : % -> Boolean
-    signatureType? : % -> Boolean
-  == add
-    DependentType := Dependent(SExpression, %)
-
-    Rep := Union(sum : SpadSumType(%),
-                 record : SpadRecordType(%),
-                 union : SpadUnionType(%),
-                 deptype : DependentType,
-                 functor : SpadFunctorType(%),
-                 mapping : SpadMappingType(%),
-                 signature : SpadSignatureType(%),
-                 singleton : String,
-                 integer : Integer,
-                 unknown : "unknown")
-
-    import ParserTools
-    import OutputForm
-    import OutputFormHelper
-
-    empty == ["unknown"]
-
-    unknownType? t == t case unknown
-    functorType? t == t case functor
-    sumType? t == t case sum
-    recordType? t == t case record
-    unionType? t == t case union
-    mappingType? t == t case mapping
-    signatureType? t == t case signature
-
-    parse ex ==
-      -- print (hconcat ["type: ", ex :: OutputForm])
-
-      null? ex => ["unknown"]
-      string? ex => [string ex]
-      integer? ex => [integer ex]
-      symbol? ex => [construct(symbol ex, [])]
-
-      signature? ex =>
-        [(parse ex) $ SpadSignatureType(%)]
-      record? ex =>
-        [(parse ex) $ SpadRecordType(%)]
-      union? ex => 
-        [(parse ex) $ SpadUnionType(%)]
-      var? ex or mapping? ex => 
-        [(parse ex) $ SpadMappingType(%)]
-      domain? ex or package? ex or join? ex or progn? ex =>
-        [(parse ex) $ SpadSumType(%)]
-
-      ifelse? ex =>
-        (spred, strue, sfalse) := (ex.2, ex.3, ex.4)
-        nobranch? sfalse =>
-          construct(construct(spred, parse strue, "empty"))
-        construct(construct(spred, parse strue, parse sfalse))
-
-      [(parse ex) $ SpadFunctorType(%)]
-
-    coerce ex ==
-      ex case record => ex.record :: OutputForm
-      ex case union => ex.union :: OutputForm
-      ex case singleton => ex.singleton :: OutputForm
-      ex case integer => ex.integer :: OutputForm
-      ex case signature => ex.signature :: OutputForm
-      ex case deptype => ex.deptype :: OutputForm
-      ex case sum => ex.sum :: OutputForm
-      ex case functor => ex.functor :: OutputForm
-      ex case mapping => ex.mapping :: OutputForm
-      ex case unknown => ""
-
-      error "coerce $ SpadType: Variant not handled!"
-
 )abbrev domain SPIMP SpadImport
 ++ SPAD domain / category / package import declaration
-SpadImport() : ParsableCategory == add
+SpadImport(T : ParsableCategory) : ParsableCategory == add
   import OutputForm
 
   parse ex ==
-    (parse ex.2)$SpadType pretend %
+    (parse ex.2)$T pretend %
 
   coerce ex ==
-    hconcat ["import ", (ex pretend SpadType) :: OutputForm]
+    hconcat ["import ", (ex pretend T) :: OutputForm]
 
 )abbrev domain SPDCL SpadSymbolDecl
 ++ SPAD variable declaration representation
-SpadSymbolDecl() : ParsableCategory with
+SpadSymbolDecl(T : SpadTypeCategory) : ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "type") -> SpadType
-    construct : (Symbol, SpadType) -> %
+    elt : (%, "type") -> T
+    construct : (Symbol, T) -> %
       ++ construct(name,type)
     construct : Symbol -> %
       ++ construct(name)
   == add
-    Rep := Record(s_name : Symbol, s_type : SpadType)
+    Rep := Record(s_name : Symbol, s_type : T)
 
     import OutputForm
     import OutputFormHelper
@@ -367,7 +66,7 @@ SpadSymbolDecl() : ParsableCategory with
     elt(x, "type") == x.s_type
 
     construct(aname, atype) == [aname, atype]$Rep
-    construct(aname) == [aname, empty]$Rep
+    construct(aname) == [aname, unknownType]$Rep
 
     parse ex ==
       --print (hconcat ["variable: ", ex :: OutputForm])
@@ -386,48 +85,40 @@ SpadSymbolDecl() : ParsableCategory with
         if unknownType? var.s_type then "?" else coerce var.s_type
       spaces [aname, ":", atype]
 
-)abbrev category SPEXCAT SpadExpressionCategory
-SpadExpressionCategory() : Category == ParsableCategory with
-  getSymbol : % -> Union(Symbol, "failed")
-  getInteger : % -> Union(Integer, "failed")
-  construct : SpadSegment(%) -> %
-
-)abbrev domain SPEXASS SpadAssign
-SpadAssign(E : ParsableCategory) : ParsableCategory with
+)abbrev domain SPASS SpadAssign
+SpadAssign(E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "lvalue") -> E
     elt : (%, "rvalue") -> E
     construct : (E, E) -> %
   == add
-    Assign(T) ==> Record(lv : T, rv : T)
-    rep(x) ==> (x pretend Assign(E))
+    Rep := Record(lv : E, rv : E)
 
-    elt(x, "lvalue") == rep(x).lv
-    elt(x, "rvalue") == rep(x).rv
+    elt(x, "lvalue") == x.lv
+    elt(x, "rvalue") == x.rv
 
-    construct (lval, rval) == [lval, rval]$Assign(E) pretend %
+    construct (lval, rval) == [lval, rval]$Rep pretend %
 
     parse ex ==
       -- (LET expr value)
       construct(parse ex.2, parse ex.3)
 
     coerce assign ==
-      hconcat [rep(assign).lv :: OutputForm, " := ", rep(assign).rv :: OutputForm]
+      hconcat [assign.lv :: OutputForm, " := ", assign.rv :: OutputForm]
 
-)abbrev domain SPEXAPP SpadApply
-SpadApply(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev domain SPAPP SpadApply
+SpadApply(E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "function") -> E
     elt : (%, "args") -> List E
     construct : (E, List E) -> %
   == add
-    Apply(T) ==> Record(a_fn : T, a_args : List T)
-    rep(x) ==> (x pretend Apply(E))
+    Rep := Record(a_fn : E, a_args : List E)
 
     import OutputFormHelper
 
-    elt(x, "function") == rep(x).a_fn
-    elt(x, "args") == rep(x).a_args
+    elt(x, "function") == x.a_fn
+    elt(x, "args") == x.a_args
 
-    construct (fn, lst) == [fn, lst]$Apply(E) pretend %
+    construct (fn, lst) == [fn, lst]$Rep pretend %
 
     coerce apply ==
       fun := apply.function
@@ -456,25 +147,24 @@ SpadApply(E : SpadExpressionCategory) : ParsableCategory with
       -- finally, every other function call
       hconcat [funsym :: OutputForm, paren argl]
 
-)abbrev domain SPEXSEG SpadSegment
-SpadSegment(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev domain SPSEG SpadSegment
+SpadSegment(E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "start") -> E
     elt : (%, "end") -> Union(E, "infinity")
     elt : (%, "step") -> E
     construct : (E, E) -> %
     construct : (E, E, E) -> %
   == add
-    Range(T) ==> Record(r_start : T, r_end : Union(T, "infinity"), r_step : T)
-    rep(x) ==> (x pretend Range(E))
+    Rep := Record(r_start : E, r_end : Union(E, "infinity"), r_step : E)
 
     import OutputFormHelper
 
-    elt(x, "start") == rep(x).r_start
-    elt(x, "end") == rep(x).r_end
-    elt(x, "step") == rep(x).r_step
+    elt(x, "start") == x.r_start
+    elt(x, "end") == x.r_end
+    elt(x, "step") == x.r_step
 
-    construct(f,l,s) == [f,l,s]$Range(E) pretend %
-    construct(f,s) == [f,"infinity",s]$Range(E) pretend %
+    construct(f,l,s) == [f,l,s]$Rep pretend %
+    construct(f,s) == [f,"infinity",s]$Rep pretend %
 
     parse ex ==
       -- (SEGMENT first last)
@@ -492,45 +182,43 @@ SpadSegment(E : SpadExpressionCategory) : ParsableCategory with
         ofs := concat(ofs, ["by", rstep])
       spaces ofs
 
-)abbrev package SPEXITR SpadIterator
-SpadIterator(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev package SPITR SpadIterator
+SpadIterator(E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "var") -> Symbol
     elt : (%, "seq") -> E
     construct : (Symbol, E) -> %
   == add
-    Iterator(T) ==> Record(i_var : Symbol, i_seq : T)
-    rep(x) ==> (x pretend Iterator(E))
+    Rep := Record(i_var : Symbol, i_seq : E)
 
-    elt(x, "var") == rep(x).i_var
-    elt(x, "seq") == rep(x).i_seq
+    elt(x, "var") == x.i_var
+    elt(x, "seq") == x.i_seq
 
-    construct(v,s) == [v,s]$Iterator(E) pretend %
+    construct(v,s) == [v,s]$Rep pretend %
 
     coerce itor ==
       hconcat ["for ", itor.var :: OutputForm, " in ", itor.seq :: OutputForm]
 
-)abbrev domain SPEXTYP SpadTypeExpression
-SpadTypeExpression(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev domain SPTEX SpadTypeExpression
+SpadTypeExpression(T : SpadTypeCategory, E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "kind") -> Symbol
     elt : (%, "expr") -> E
-    elt : (%, "type") -> E
-    construct : (Symbol, E, E) -> %
+    elt : (%, "type") -> T
+    construct : (Symbol, E, T) -> %
   == add
-    TypeExpr(T) ==> Record(t_kind : Symbol, t_expr : T, t_type : T)
-    rep(x) ==> (x pretend TypeExpr(E))
+    Rep := Record(t_kind : Symbol, t_expr : E, t_type : T)
 
     import SExpression
 
-    elt(x,"kind") == rep(x).t_kind
-    elt(x,"expr") == rep(x).t_expr
-    elt(x,"type") == rep(x).t_type
+    elt(x,"kind") == x.t_kind
+    elt(x,"expr") == x.t_expr
+    elt(x,"type") == x.t_type
 
     construct(k,e,t) ==
       operators : List Symbol :=
         ['case, 'has, 'is, 'pretend, ':, '::, '@]
       not member?(k, operators) =>
         error "Not a type expression operator!"
-      [k,e,t]$TypeExpr(E) pretend %
+      [k,e,t]$Rep pretend %
 
     parse ex ==
       construct(symbol ex.1, parse ex.2, parse ex.3)
@@ -540,31 +228,30 @@ SpadTypeExpression(E : SpadExpressionCategory) : ParsableCategory with
                ex.kind :: OutputForm, " ",
                ex.type :: OutputForm])
 
-)abbrev domain SPEXLP SpadLoop
-SpadLoop(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev domain SPLOOP SpadLoop
+SpadLoop(E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "kind") -> Union("loop", "collect")
     elt : (%, "itors") -> List SpadIterator(E)
     elt : (%, "guards") -> List E
     elt : (%, "body") -> E
     construct : (Union("loop", "collect"), List SpadIterator(E), List E, E) -> %
   == add
-    Loop(T) ==>
-      Record(l_kind : Union("loop", "collect"),
-             l_itors : List SpadIterator(T),
-             l_guards : List T,
-             l_body : T)
-    rep(x) ==> (x pretend Loop(E))
+    Rep := 
+      Record(lp_kind : Union("loop", "collect"),
+             lp_itors : List SpadIterator(E),
+             lp_guards : List E,
+             lp_body : E)
 
     import ParserTools
     import OutputForm
     import OutputFormHelper
 
-    elt(x,"kind") == rep(x).l_kind
-    elt(x,"itors") == rep(x).l_itors
-    elt(x,"guards") == rep(x).l_guards
-    elt(x,"body") == rep(x).l_body
+    elt(x,"kind") == x.lp_kind
+    elt(x,"itors") == x.lp_itors
+    elt(x,"guards") == x.lp_guards
+    elt(x,"body") == x.lp_body
 
-    construct(k,il,gl,b) == [k,il,gl,b]$Loop(E) pretend %
+    construct(k,il,gl,b) == [k,il,gl,b]$Rep pretend %
 
     parse ex ==
       lst := destruct cdr ex
@@ -623,25 +310,23 @@ SpadLoop(E : SpadExpressionCategory) : ParsableCategory with
       ex.kind case "collect" =>
         spaces ["[", b, spaces concat(il, gl), "]"]
 
-)abbrev domain SPEXLMD SpadLambda
-SpadLambda(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev domain SPLAM SpadLambda
+SpadLambda(T : SpadTypeCategory, E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "args") -> List Symbol
-    elt : (%, "type") -> SpadType
+    elt : (%, "type") -> T
     elt : (%, "body") -> E
-    construct : (List Symbol, SpadType, E) -> %
+    construct : (List Symbol, T, E) -> %
   == add
-    Lambda(T) ==>
-      Record(f_args : List Symbol, f_type : SpadType, f_body : T)
-    rep(x) ==> (x pretend Lambda(E))
+    Rep := Record(f_args : List Symbol, f_type : T, f_body : E)
 
     import ParserTools
     import OutputForm
 
-    elt(x,"args") == rep(x).f_args
-    elt(x,"type") == rep(x).f_type
-    elt(x,"body") == rep(x).f_body
+    elt(x,"args") == x.f_args
+    elt(x,"type") == x.f_type
+    elt(x,"body") == x.f_body
 
-    construct(al,t,b) == [al,t,b]$Lambda(E) pretend %
+    construct(al,t,b) == [al,t,b]$Rep pretend %
 
     nameOf : SExpression -> Symbol
     nameOf s == if list? s then symbol s.2 else symbol s
@@ -671,179 +356,90 @@ SpadLambda(E : SpadExpressionCategory) : ParsableCategory with
       hconcat(["function ", paren [e :: OutputForm for e in ex.args],
                " : ", ex.type :: OutputForm, " == ", ex.body :: OutputForm])
 
-)abbrev package SPEXSEQ SpadSequence
-SpadSequence(E : SpadExpressionCategory) : ParsableCategory with
+)abbrev package SPSEQ SpadSequence
+SpadSequence(E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "kind") -> Union("prog", "list", "tuple")
     elt : (%, "list") -> List E
     construct : (Union("prog", "list", "tuple"), List(E)) -> %
   == add
-    Seq(T) ==>
-      Record(s_kind : Union("prog", "list", "tuple"), s_list : List(T))
-    rep(x) ==> (x pretend Seq(E))
+    Rep := Record(s_kind : Union("prog", "list", "tuple"), s_list : List E)
 
     import OutputForm
+    import ParserTools
 
-    elt(x, "kind") == rep(x).s_kind
-    elt(x, "list") == rep(x).s_list
+    elt(x, "kind") == x.s_kind
+    elt(x, "list") == x.s_list
 
-    construct(k,l) == [k,l]$Seq(E) pretend %
+    construct(k,l) == [k,l]$Rep
+
+    parse ex ==
+      content : List E := []
+
+      for e in destruct ex repeat
+        var? e =>
+          if listof? e.2
+            then
+              -- (: (LISTOF x y z ...) Type)
+              varlst := destruct(cdr e.2)
+              for var in varlst repeat
+                sexp : E := parse (convert [convert '_:, var, e.3])
+                content := [sexp, :content]
+            else
+              content := [(parse e) $ E, :content]
+
+        content := [(parse e) $ E, :content]
+
+      ["prog", reverse content]
 
     coerce ex ==
       lst := [ e :: OutputForm for e in ex.list ]
-      ex.kind case "prog" => pile lst
+      ex.kind case "prog" => hconcat [hspace 2, pile lst]
       ex.kind case "list" => bracket lst
       ex.kind case "tuple" => paren lst
 
-)abbrev package SPEXPR SpadExpression
-++ SPAD generic expression
-SpadExpression() : SpadExpressionCategory == add
-    SIfElse := Dependent(%, %)
-
-    Rep := Union(seq : SpadSequence(%),
-                 lambda : SpadLambda(%),
-                 apply : SpadApply(%),
-                 assign : SpadAssign(%),
-                 loop : SpadLoop(%),
-                 ifelse : SIfElse,
-                 type : SpadType,
-                 typeexpr : SpadTypeExpression(%),
-                 range : SpadSegment(%),
-                 dfloat : DoubleFloat,
-                 integer : Integer,
-                 symbol : Symbol,
-                 string : String)
+)abbrev package SPCOND SpadIfElse
+SpadIfElse(E : SpadNodeCategory) : ParsableCategory with
+    elt : (%, "cond") -> E
+    elt : (%, "truebr") -> E
+    elt : (%, "falsebr") -> Union(E, "empty")
+    construct : (E, E, Union(E, "empty")) -> %
+  == add
+    Rep := Record(c_cond : E, c_true : E, c_false : Union(E, "empty"))
 
     import OutputForm
-    import OutputFormHelper
-    import SExpression
-    import ParserTools
-    import SpadSymbolDecl
 
-    getSymbol ex ==
-      if ex case symbol then ex.symbol else "failed"
-    getInteger ex ==
-      if ex case integer then ex.integer else "failed"
+    elt(x, "cond") == x.c_cond
+    elt(x, "truebr") == x.c_true
+    elt(x, "falsebr") == x.c_false
 
-    parse ex ==
-      -- czemu odkomentowanie linii niżej wywala kompilację ?
-      -- print (hconcat ["expression: ", ex :: OutputForm])
-      -- print (ex :: OutputForm)
+    construct(c, tb, fb) == [c, tb, fb]$Rep pretend %
 
-      seq? ex =>
-        -- {sequence of expressions}
-        -- (SEQ expr1 expr2 ...)
-        construct(["prog", [parse e for e in destruct cdr ex]])
-
-      tuple? ex =>
-        -- {tuple constructor}
-        -- (@Tuple expr1 expr2 ...)
-        construct(["tuple", [parse e for e in destruct cdr ex]])
-
-      lambda? ex =>
-        [(parse ex) $ SpadLambda(%)]
-
-      var? ex or case? ex or has? ex or is? ex or pretend? ex or coerce? ex or typesel? ex => 
-        -- {expression with type annotation}
-        -- (: expr Type) 
-        -- {expression with "case" operator}
-        -- (case expr Type)
-        -- {expression with "has" operator}
-        -- (has expr Type)
-        -- {expression with "is" operator}
-        -- (is expr Type)
-        -- {expression with "pretend" operator}
-        -- (pretend expr Type)
-        -- {expression with "::" coerce operator}
-        -- (:: expr Type)
-        -- {expression with "@" type selector operator}
-        -- (@ expr Type)
-        [(parse ex) $ SpadTypeExpression(%)]
-
-      let? ex =>
-        [(parse ex) $ SpadAssign(%)]
-
-      ifelse? ex =>
-        -- {if-then-else expression of if-then statement}
-        -- (IF condition expr1 expr2)
-        -- (IF condition expr 'noBranch)
-        -- (IF condition 'noBranch expr)
-        (c, l, r) := (ex.2, ex.3, ex.4)
-        sc : SIfElse :=
-          nobranch? l =>
-            pc := parse (convert [convert '_not, c])
-            construct(pc, parse r, "empty")
-          nobranch? r =>
-            construct(parse c, parse l, "empty")
-          construct(parse c, parse l, parse r)
-        construct sc
-
-      collect? ex or loop? ex =>
-        [(parse ex) $ SpadLoop(%)]
-
-      record? ex or union? ex =>
-        [(parse ex) $ SpadType]
-
-      list? ex and #ex > 0 =>
-        lst := [parse e for e in destruct ex]
-        symbol? ex.1 and symbol ex.1 = 'construct =>
-          construct(["list", rest lst])
-        construct([first lst, rest lst])
-
-      string? ex =>
-        construct(string ex)
-
-      symbol? ex =>
-        construct(symbol ex)
-
-      integer? ex =>
-        construct(integer ex)
-
-      float? ex =>
-        construct(float ex)
-
-      null? ex =>
-        construct(["list", []])
-
-      print "parse $ SpadExpression:"
-      print (ex :: OutputForm)
-      error "SExpression not handled!"
-
-    coerce ex ==
-      ex case range => ex.range :: OutputForm
-      ex case lambda => ex.lambda :: OutputForm
-      ex case seq => ex.seq :: OutputForm
-      ex case apply => ex.apply :: OutputForm
-      ex case loop => ex.loop :: OutputForm
-      ex case ifelse => ex.ifelse :: OutputForm
-      ex case typeexpr => ex.typeexpr :: OutputForm
-      ex case assign => ex.assign :: OutputForm
-      ex case type => ex.type :: OutputForm
-      ex case string => ex.string :: OutputForm
-      ex case symbol => ex.symbol :: OutputForm
-      ex case dfloat => ex.dfloat :: OutputForm
-      ex case integer => ex.integer :: OutputForm
-
-      error "coerce $ SpadExpression: variant not handled!"
+    coerce c ==
+      c.falsebr case "empty" =>
+        pile([hconcat ["if ", c.cond :: OutputForm],
+              hconcat [hspace 1, "then ", c.truebr :: OutputForm]])
+      pile([hconcat ["if ", c.cond :: OutputForm],
+            hconcat [hspace 1, "then ", c.truebr :: OutputForm],
+            hconcat [hspace 1, "else ", c.falsebr :: OutputForm]])
 
 )abbrev package SPFN SpadFunction
 ++ SPAD function
-SpadFunction() : ParsableCategory with
+SpadFunction(T : SpadTypeCategory, E : SpadNodeCategory) : ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List Union(String, SpadSymbolDecl)
-    elt : (%, "type") -> SpadType
-    elt : (%, "body") -> SpadExpression
-    construct : (Symbol, List Union(String, SpadSymbolDecl), SpadType, SpadExpression) -> %
+    elt : (%, "args") -> List Union(String, SpadSymbolDecl(T))
+    elt : (%, "type") -> T 
+    elt : (%, "body") -> E
+    construct : (Symbol, List Union(String, SpadSymbolDecl(T)), T, E) -> %
       ++ construct(name,varlist,type,exp)
   == add
     Rep := Record(fn_name : Symbol,
-                  fn_args : List Union(String, SpadSymbolDecl),
-                  fn_type : SpadType,
-                  fn_body : SpadExpression)
+                  fn_args : List Union(String, SpadSymbolDecl(T)),
+                  fn_type : T,
+                  fn_body : E)
 
     import OutputForm
     import ParserTools
-    import SpadSymbolDecl
-    import SpadExpression
+    import SpadSymbolDecl(T)
 
     elt(x, "name") == x.fn_name
     elt(x, "args") == x.fn_args
@@ -853,7 +449,7 @@ SpadFunction() : ParsableCategory with
     construct(fname, fargs, ftype, fbody) == 
       [fname, fargs, ftype, fbody] $ Rep
 
-    parse_arg : (SExpression, SExpression) -> Union(String, SpadSymbolDecl)
+    parse_arg : (SExpression, SExpression) -> Union(String, SpadSymbolDecl(T))
     parse_arg(s, t) ==
       string? s =>
         string s
@@ -868,7 +464,7 @@ SpadFunction() : ParsableCategory with
         arg_types := destruct cdr(ex.3)
         fargs := [ parse_arg(s, t) for s in arg_names for t in arg_types ]
         ftype := car ex.3
-        fbody := ex.5
+        fbody := convert [ex.5]
         construct(fname, fargs, parse ftype, parse fbody)
 
       print "------"
@@ -929,124 +525,425 @@ SpadMacro() : ParsableCategory with
       hconcat([m.md_name :: OutputForm,
                margs, " ==> ", pile [m.md_body :: OutputForm]])
 
-)abbrev package SPCAPS SpadCapsule
-++ SPAD capsule representation
-SpadCapsule() : ParsableCategory
-  == add
-    DependentCapsule := 
-      Record(c_pred : SpadExpression, c_true : %, c_false : Union(%, "empty"))
-    CapsuleContent :=
-      Union(SpadSymbolDecl, SpadExpression, SpadMacro, SpadFunction, SpadImport, DependentCapsule) -- czy nie połączyć z ciałem funkcji
+)abbrev package SPNODE SpadNode
+++ SPAD generic expression
+SpadNode(T : SpadTypeCategory) : SpadNodeCategory == add
+    LAMBDA ==> SpadLambda(T, %)
+    APPLY ==> SpadApply(%)
+    ASSIGN ==> SpadAssign(%)
+    LOOP ==> SpadLoop(%)
+    IFELSE ==> SpadIfElse(%)
+    IMPORT ==> SpadImport(T)
+    SEQUENCE ==> SpadSequence(%)
+    TYPEEXPR ==> SpadTypeExpression(T, %)
+    SEGMENT ==> SpadSegment(%)
+    FUNC ==> SpadFunction(T, %)
+    MACRO ==> SpadMacro
 
-    Rep := List CapsuleContent
+    Rep := Union(seq : SEQUENCE,
+                 lambda : LAMBDA,
+                 apply : APPLY,
+                 assign : ASSIGN,
+                 loop : LOOP,
+                 ifelse : IFELSE,
+                 sfunction : FUNC,
+                 smacro : MACRO,
+                 type : T,
+                 typeimp : IMPORT,
+                 typeexpr : TYPEEXPR,
+                 range : SEGMENT,
+                 dfloat : DoubleFloat,
+                 integer : Integer,
+                 symbol : Symbol,
+                 string : String)
 
     import OutputForm
+    import OutputFormHelper
+    import SExpression
     import ParserTools
-    import SpadFunction
-    import SpadMacro
-    import SpadSymbolDecl
+
+    getSymbol ex ==
+      if ex case symbol then ex.symbol else "failed"
+    getInteger ex ==
+      if ex case integer then ex.integer else "failed"
+
+    construct (seq : SEQUENCE) : % == [seq]$Rep
 
     parse ex ==
-      -- print (hconcat ["capsule: ", ex :: OutputForm])
+      -- print (hconcat ["expression: ", ex :: OutputForm])
 
-      content : List CapsuleContent := []
-      sfun : SpadFunction 
-      smacro : SpadMacro 
-      svar : SpadSymbolDecl
-      sexp : SpadExpression
-      simp : SpadImport
-      sdep : DependentCapsule
+      import? ex =>
+        [(parse ex) $ IMPORT]
 
-      for e in destruct ex repeat
-        if exit? e then e := e.3
+      seq? ex =>
+        -- {sequence of expressions}
+        -- (SEQ expr1 expr2 ...)
+        [parse(cdr ex) $ SEQUENCE]
 
-        function? e =>
-          sfun := parse e
-          content := [sfun, :content]
+      tuple? ex =>
+        -- {tuple constructor}
+        -- (@Tuple expr1 expr2 ...)
+        exl : List % := [parse e for e in destruct cdr ex]
+        [construct("tuple", exl) $ SEQUENCE]
 
-        macro? e =>
-          smacro := parse e
-          content := [smacro, :content]
+      lambda? ex =>
+        [(parse ex) $ LAMBDA]
 
-        var? e =>
-          if listof? e.2
-            then
-              -- (: (LISTOF x y z ...) Type)
-              varlst := destruct(cdr e.2)
-              for var in varlst repeat
-                svar := construct(symbol var, parse e.3)
-                content := [svar, :content]
-            else
-              svar := parse e
-              content := [svar, :content]
+      function? ex =>
+        [(parse ex) $ FUNC]
 
-        let? e =>
-          sexp := parse e
-          content := [sexp, :content]
+      macro? ex =>
+        [(parse ex) $ MACRO]
 
-        import? e =>
-          simp := parse e
-          content := [simp, :content]
+      var? ex or case? ex or has? ex or is? ex or pretend? ex or coerce? ex or typesel? ex => 
+        -- {expression with type annotation}
+        -- (: expr Type) 
+        -- {expression with "case" operator}
+        -- (case expr Type)
+        -- {expression with "has" operator}
+        -- (has expr Type)
+        -- {expression with "is" operator}
+        -- (is expr Type)
+        -- {expression with "pretend" operator}
+        -- (pretend expr Type)
+        -- {expression with "::" coerce operator}
+        -- (:: expr Type)
+        -- {expression with "@" type selector operator}
+        -- (@ expr Type)
+        [(parse ex) $ TYPEEXPR]
 
-        ifelse? e =>
-          cpred : SpadExpression := parse e.2
-          ctrue : %
-          cfalse : Union(%, "empty")
+      let? ex =>
+        [(parse ex) $ ASSIGN]
 
-          (strue, sfalse) := (e.3, e.4)
+      ifelse? ex =>
+        -- {if-then-else expression of if-then statement}
+        -- (IF condition expr1 expr2)
+        -- (IF condition expr 'noBranch)
+        -- (IF condition 'noBranch expr)
+        (c, l, r) := (ex.2, ex.3, ex.4)
+        sc : IFELSE :=
+          nobranch? l =>
+            pc := parse (convert [convert '_not, c])
+            [pc, parse r, "empty"]
+          nobranch? r =>
+            [parse c, parse l, "empty"]
+          [parse c, parse l, parse r]
+        [sc]
 
-          ctrue :=
-            seq? strue => parse cdr strue
-            parse convert [strue]
-          cfalse :=
-            nobranch? sfalse => "empty"
-            seq? sfalse => parse cdr sfalse
-            parse convert [sfalse]
+      collect? ex or loop? ex =>
+        [(parse ex) $ LOOP]
+
+      record? ex or union? ex =>
+        [(parse ex) $ T]
+
+      list? ex and #ex > 0 =>
+        lst := [parse e for e in destruct ex]
+        symbol? ex.1 and symbol ex.1 = 'construct =>
+          construct(["list", rest lst])
+        construct([first lst, rest lst])
+
+      string? ex =>
+        construct(string ex)
+
+      symbol? ex =>
+        construct(symbol ex)
+
+      integer? ex =>
+        construct(integer ex)
+
+      float? ex =>
+        construct(float ex)
+
+      null? ex =>
+        construct(["list", []] $ SEQUENCE)
+
+      print "parse $ SpadNode:"
+      print (ex :: OutputForm)
+      error "SExpression not handled!"
+
+    coerce ex ==
+      ex case range => ex.range :: OutputForm
+      ex case lambda => ex.lambda :: OutputForm
+      ex case seq => ex.seq :: OutputForm
+      ex case apply => ex.apply :: OutputForm
+      ex case loop => ex.loop :: OutputForm
+      ex case ifelse => ex.ifelse :: OutputForm
+      ex case sfunction => ex.sfunction :: OutputForm
+      ex case smacro => ex.smacro :: OutputForm
+      ex case typeimp => ex.typeimp :: OutputForm
+      ex case typeexpr => ex.typeexpr :: OutputForm
+      ex case assign => ex.assign :: OutputForm
+      ex case type => ex.type :: OutputForm
+      ex case string => ex.string :: OutputForm
+      ex case symbol => ex.symbol :: OutputForm
+      ex case dfloat => ex.dfloat :: OutputForm
+      ex case integer => ex.integer :: OutputForm
+
+      error "coerce $ SpadNode: variant not handled!"
+
+)abbrev package SPTFTOR SpadFunctorType
+SpadFunctorType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "args") -> List(T)
+    construct : (Symbol, List(T)) -> %
+  == add
+    -- functor's parameter can be arbitrary value (not only type)
+    Rep := Record(ft_name : Symbol, ft_args : List(T))
+
+    elt(x, "args") == x.ft_args
+    elt(x, "name") == x.ft_name
+
+    construct(n, al) == [n, al]$Rep pretend %
+
+    parse ex ==
+      fargs : List(T) := [ parse e for e in destruct cdr(ex) ]
+      [ symbol car ex, fargs ]
+
+    coerce ftor ==
+      fname := ftor.name :: OutputForm
+      fargs := [ t :: OutputForm for t in ftor.args ]
+      empty? fargs => fname
+      hconcat [ fname, paren fargs ]
+
+)abbrev package SPTMAP SpadMappingType
+SpadMappingType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "args") -> List(T)
+    elt : (%, "type") -> T
+    construct : (List(T), T) -> %
+  == add
+    Rep := Record(m_args : List(T), m_type : T)
+
+    import ParserTools
+
+    elt(x, "args") == x.m_args
+    elt(x, "type") == x.m_type
+
+    construct(al, t) == [al, t]$Rep pretend %
+
+    parseFunType : SExpression -> T
+    parseFunType s ==
+      if firstSymbol? (s, ':) then parse s.3 else parse s
         
-          content := [construct(cpred, ctrue, cfalse), :content]
+    parse ex ==
+      sig : List(T) := reverse [ parseFunType e for e in destruct cdr ex ]
+      [ reverse(rest sig), first sig ]
 
-        print "---" :: OutputForm
-        print "inside capsule but not handled:"
-        print (e :: OutputForm)
+    coerce mapping ==
+      ts := [t :: OutputForm for t in mapping.args]
+      src := if #ts > 1 then paren ts else first ts
+      hconcat [src, " -> ", mapping.type :: OutputForm]
+
+)abbrev package SPTSUM SpadSumType
+SpadSumType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "types") -> List(T)
+    elt : (%, "kind") -> Union("join", "domain", "package", "list")
+    construct : (Union("join", "domain", "package", "list"), List(T)) -> %
+  == add
+    Rep :=
+      Record(s_kind : Union("join", "domain", "package", "list"), s_types : List(T))
 
-      construct(reverse content)
+    import ParserTools
 
-    coerce c ==
-      ofs : List OutputForm := []
+    elt(x, "kind") == x.s_kind
+    elt(x, "types") == x.s_types
 
-      for i in c repeat
-        i case DependentCapsule =>
-          of := pile(
-            if i.c_false = "empty" then
-              [hconcat ["if ", i.c_pred :: OutputForm],
-               hconcat [hspace 1, "then ", i.c_true :: OutputForm]]
-            else
-              [hconcat ["if ", i.c_pred :: OutputForm],
-               hconcat [hspace 1, "then ", i.c_true :: OutputForm],
-               hconcat [hspace 1, "else ", i.c_false :: OutputForm]])
-          ofs := [of, :ofs]
-        ofs := [i :: OutputForm, :ofs]
+    construct(k, tl) == [k, tl]$Rep pretend %
 
-      hconcat [hspace 2, pile reverse ofs]
+    parse ex ==
+      lst :=
+        domain? ex or package? ex =>
+          -- (CATEGORY domain ...)
+          -- (CATEGORY package ...)
+          destruct cdr(cdr(ex))
+        join? ex or progn? ex =>
+          -- (Join ...)
+          -- (PROGN ...)
+          destruct cdr(ex)
+
+      args : List(T) := [ parse e for e in lst ]
+
+      domain? ex => ["domain", args]
+      package? ex => ["package", args]
+      join? ex => ["join", args]
+      progn? ex => ["list", args]
+
+    coerce(sum : %) : OutputForm ==
+      ts := [ t :: OutputForm for t in sum.types ]
+      sum.kind case "join" => hconcat ["Join(", pile ts, ")"]
+      pile [hconcat["{", pile ts], "}"]
+
+)abbrev package SPTSIG SpadSignatureType
+SpadSignatureType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "type") -> SpadMappingType(T)
+    construct : (Symbol, SpadMappingType T) -> %
+  == add
+    Rep := Record(s_name : Symbol, s_type : SpadMappingType(T))
+
+    elt(x, "name") == x.s_name
+    elt(x, "type") == x.s_type
+
+    construct(n, t) == [n, t]$Rep pretend %
+
+    parse ex ==
+      -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
+      -- (SIGNATURE name Type constant)
+      res : T := parse(car ex.3)
+      targs : List(T) := if #ex = 3
+        then [ parse e for e in destruct(cdr ex.3) ]
+        else [ parse ex.4 ]
+      [ symbol ex.2, construct(targs, res) ]
+
+    coerce(sig : %) : OutputForm ==
+      hconcat [sig.name :: OutputForm, " : ", sig.type :: OutputForm]
+
+)abbrev package SPTNAMED SpadNamedType
+SpadNamedType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "type") -> T
+    construct : (Symbol, T) -> %
+  == add
+    Rep := Record(n_name : Symbol, n_type : T)
+
+    import SExpression
+
+    elt(x, "name") == x.n_name
+    elt(x, "type") == x.n_type
+
+    construct(n, t) == [n, t]$Rep pretend %
+
+    parse ex ==
+      -- (: field Type)
+      [ symbol ex.2, (parse ex.3) $ T ]
+
+    coerce(field : %) : OutputForm ==
+      hconcat [field.name :: OutputForm, " : ", field.type :: OutputForm]
+
+)abbrev package SPTREC SpadRecordType
+SpadRecordType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "fields") -> List SpadNamedType(T)
+    construct : List SpadNamedType(T) -> %
+  == add
+    Rep := List SpadNamedType(T)
+
+    elt(x, "fields") == x pretend List SpadNamedType(T)
+
+    construct fl == fl pretend %
+
+    parse ex ==
+      -- (Record (: field1 Type1) (: field2 Type2) ...)
+      construct [parse e for e in destruct cdr ex]
+
+    coerce(record : %) : OutputForm ==
+      hconcat ["Record", paren [f :: OutputForm for f in record]]
+
+)abbrev package SPTUNION SpadUnionType
+SpadUnionType(T : ParsableCategory) : ParsableCategory with
+    elt : (%, "variants") -> List Union(T, SpadNamedType(T))
+    construct : List Union(T, SpadNamedType(T)) -> %
+  == add
+    Rep := List Union(T, SpadNamedType(T))
+
+    import ParserTools
+
+    elt(x, "variants") == x pretend List Union(T, SpadNamedType(T))
+
+    construct fl == fl pretend %
+
+    parseUnionField : SExpression -> Union(T, SpadNamedType(T))
+    parseUnionField s ==
+      var? s => construct(symbol s.2, parse s.3) $ SpadNamedType(T)
+      (parse s) $ T
+
+    parse ex ==
+      -- (Union (: field1 Type1) (: field2 Type2) ...)
+      -- (Union Type1 Type2 ...)
+      construct [parseUnionField e for e in destruct cdr ex]
+
+    coerce_field : Union(T, SpadNamedType(T)) -> OutputForm
+    coerce_field f ==
+      f case T => (f :: T) :: OutputForm
+      (f :: SpadNamedType(T)) :: OutputForm
+
+    coerce(union : %) : OutputForm ==
+      hconcat ["Union", paren [coerce_field v for v in union.variants]]
+
+)abbrev domain SPTYPE SpadType
+++ SPAD type representation
+SpadType() : SpadTypeCategory == add
+    Rep := Union(sum : SpadSumType(%),
+                 record : SpadRecordType(%),
+                 union : SpadUnionType(%),
+                 functor : SpadFunctorType(%),
+                 mapping : SpadMappingType(%),
+                 signature : SpadSignatureType(%),
+                 singleton : String,
+                 expression : SpadNode(%),
+                 unknown : "unknown")
+
+    import ParserTools
+    import OutputForm
+    import OutputFormHelper
+
+    unknownType == ["unknown"]
+
+    unknownType? t == t case unknown
+    functorType? t == t case functor
+    sumType? t == t case sum
+    recordType? t == t case record
+    unionType? t == t case union
+    mappingType? t == t case mapping
+    signatureType? t == t case signature
+
+    parse ex ==
+      -- print (hconcat ["type: ", ex :: OutputForm])
+
+      null? ex => ["unknown"]
+      string? ex => [string ex]
+      symbol? ex =>
+        [construct(symbol ex, []) $ SpadFunctorType(%)]
+      signature? ex =>
+        [(parse ex) $ SpadSignatureType(%)]
+      record? ex =>
+        [(parse ex) $ SpadRecordType(%)]
+      union? ex => 
+        [(parse ex) $ SpadUnionType(%)]
+      var? ex or mapping? ex => 
+        [(parse ex) $ SpadMappingType(%)]
+      domain? ex or package? ex or join? ex or progn? ex =>
+        [(parse ex) $ SpadSumType(%)]
+      [(parse ex) $ SpadFunctorType(%)]
+
+    coerce ex ==
+      ex case record => ex.record :: OutputForm
+      ex case union => ex.union :: OutputForm
+      ex case singleton => ex.singleton :: OutputForm
+      ex case signature => ex.signature :: OutputForm
+      ex case sum => ex.sum :: OutputForm
+      ex case functor => ex.functor :: OutputForm
+      ex case mapping => ex.mapping :: OutputForm
+      ex case unknown => ""
+
+      error "coerce $ SpadType: Variant not handled!"
 
 )abbrev package SPFTOR SpadFunctor
 ++ SPAD functor representation
 SpadFunctor() : ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List SpadSymbolDecl
+    elt : (%, "args") -> List SpadSymbolDecl(SpadType)
     elt : (%, "type") -> SpadType
     elt : (%, "extends") -> SpadType
-    elt : (%, "capsule") -> SpadCapsule
+    elt : (%, "capsule") -> SpadNode(SpadType)
   == add
     Rep := Record(f_name : Symbol,
-                  f_args : List SpadSymbolDecl,
+                  f_args : List SpadSymbolDecl(SpadType),
                   f_type : SpadType,
                   f_extends : SpadType,
-                  f_capsule : SpadCapsule)
+                  f_capsule : SpadNode(SpadType))
 
     import OutputForm
     import ParserTools
-    import SpadCapsule
+    import SpadNode(SpadType)
 
     elt(x,"name") == x.f_name
     elt(x,"args") == x.f_args
@@ -1055,7 +952,7 @@ SpadFunctor() : ParsableCategory with
     elt(x,"capsule") == x.f_capsule
 
     parse ex ==
-      --print (hconcat ["functor: ", ex :: OutputForm])
+      print (hconcat ["functor: ", ex :: OutputForm])
 
       functor? ex =>
         arg_names := destruct cdr(ex.2)
@@ -1063,11 +960,12 @@ SpadFunctor() : ParsableCategory with
         fname := symbol car(ex.2)
         ftype := car ex.3
         fbody := ex.5
-        fargs : List SpadSymbolDecl :=
+        fargs : List SpadSymbolDecl(SpadType) :=
           [ [symbol s, parse t] for s in arg_names for t in arg_types ]
         fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
         fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
-        construct(fname, fargs, parse ftype, parse fextends, parse cdr fcapsule)
+        fcapsule := convert cons(convert 'SEQ, destruct cdr fcapsule)
+        construct(fname, fargs, parse ftype, parse fextends, parse fcapsule)
 
       print "------"
       print (ex :: OutputForm)
@@ -1075,20 +973,18 @@ SpadFunctor() : ParsableCategory with
 
     coerce f ==
       blankSeparate(
-        [ f.f_name :: OutputForm,
-          paren [arg :: OutputForm for arg in f.f_args], ":", 
-          hconcat [hspace 2, f.f_type :: OutputForm],
-          "==", f.f_extends :: OutputForm, "add",
-          f.f_capsule :: OutputForm])
+        [f.f_name :: OutputForm,
+         paren [arg :: OutputForm for arg in f.f_args], ":", 
+         hconcat [hspace 2, f.f_type :: OutputForm],
+         "==", f.f_extends :: OutputForm, "add",
+         f.f_capsule :: OutputForm])
 
 )abbrev package STMEXP SpadTreeMacroExpander
 SpadTreeMacroExpander() : with
     walk : SpadFunctor -> SpadFunctor
     walk : SpadType -> SpadType
-    walk : SpadExpression -> SpadExpression
+    walk : SpadNode(SpadType) -> SpadNode(SpadType)
   == add
-    import SpadCapsule
-
     env : List SpadMacro
 
     expand (st : SpadType) : SpadType == st
@@ -1113,7 +1009,7 @@ SpadTreeMacroExpander() : with
       --
       --st
 
-    expand (ex : SpadExpression) : SpadExpression == ex
+    expand (ex : SpadNode(SpadType)) : SpadNode(SpadType) == ex
       --ex case seq =>
       --  construct(ex.s_type, [expand e for e in ex.s_sexpr]) $ SSeq
       --ex case lambda =>

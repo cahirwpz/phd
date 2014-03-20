@@ -1,0 +1,18 @@
+)abbrev category SPTYPEC SpadTypeCategory
+SpadTypeCategory() : Category == ParsableCategory with
+  unknownType : %
+
+  unknownType? : % -> Boolean
+  functorType? : % -> Boolean
+  sumType? : % -> Boolean
+  recordType? : % -> Boolean
+  unionType? : % -> Boolean
+  mappingType? : % -> Boolean
+  signatureType? : % -> Boolean
+
+)abbrev category SPNODEC SpadNodeCategory
+SpadNodeCategory() : Category == ParsableCategory with
+  getSymbol : % -> Union(Symbol, "failed")
+  getInteger : % -> Union(Integer, "failed")
+  construct : SpadSegment(%) -> %
+  construct : SpadSequence(%) -> %

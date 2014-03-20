@@ -1,5 +1,5 @@
-)abbrev package TXTWRT TextWriter
-TextWriter() : with
+)abbrev package TXTPRT TextPrinter
+TextPrinter() : with
     stdout : constant -> %
 
     "<<" : (%, String) -> %
@@ -53,3 +53,7 @@ TextWriter() : with
     test () ==
       stdout << "ala" << " " << "ma" << reset << " " << "kota" << eol
       Void
+
+)abbrev category PRTCAT PrintableCategory
+PrintableCategory() : Category == with
+  "<<" : (TextPrinter, %) -> TextPrinter
