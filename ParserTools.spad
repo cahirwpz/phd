@@ -8,6 +8,7 @@ ParserTools() : with
     coerce? : SExpression -> Boolean
     collect? : SExpression -> Boolean
     domain? : SExpression -> Boolean
+    domsel? : SExpression -> Boolean
     exit? : SExpression -> Boolean
     function? : SExpression -> Boolean
     functor? : SExpression -> Boolean
@@ -31,12 +32,12 @@ ParserTools() : with
     progn? : SExpression -> Boolean
     quote? : SExpression -> Boolean
     record? : SExpression -> Boolean
+    retsel? : SExpression -> Boolean
     segment? : SExpression -> Boolean
     seq? : SExpression -> Boolean
     signature? : SExpression -> Boolean
     step? : SExpression -> Boolean
     tuple? : SExpression -> Boolean
-    typesel? : SExpression -> Boolean
     union? : SExpression -> Boolean
     var? : SExpression -> Boolean
     while? : SExpression -> Boolean
@@ -105,7 +106,8 @@ ParserTools() : with
     signature? ex == list_of_eq?(ex, 'SIGNATURE, 3) or list_of_eq?(ex, 'SIGNATURE, 4)
     step? ex == list_of_eq?(ex, 'STEP, 4) or list_of_eq?(ex, 'STEP, 5)
     tuple? ex == list_of_ge?(ex, '_@Tuple, 3)
-    typesel? ex == list_of_eq?(ex, '@, 3)
+    retsel? ex == list_of_eq?(ex, '@, 3)
+    domsel? ex == list_of_eq?(ex, 'Sel, 3)
     union? ex == list_of_ge?(ex, 'Union, 3)
     var? ex == list_of_eq?(ex, ':, 3)
     while? ex == list_of_eq?(ex, 'WHILE, 2)

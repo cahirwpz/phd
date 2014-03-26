@@ -2,13 +2,16 @@
 ++ SPAD domain / category / package import declaration
 SpadImport(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "type") -> SpadType(N)
+    construct : SpadType(N) -> %
   == add
     import OutputForm
+
+    construct x == x pretend %
 
     elt (x, "type") == x pretend SpadType(N)
 
     parse ex ==
-      (parse ex.2)$SpadType(N) pretend %
+      [parse ex.2]
 
     coerce ex ==
       hconcat ["import ", ex.type :: OutputForm]
@@ -81,11 +84,15 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
     Rep := Record(a_fn : N, a_args : List N)
 
     import OutputFormHelper
+    import String
 
     elt(x, "function") == x.a_fn
     elt(x, "args") == x.a_args
 
     construct (fn, lst) == [fn, lst]$Rep pretend %
+
+    binop : List Symbol :=
+      ['_-, '_+, '_*, '_/, '_^, '_=, '_~_=, '_<, '_>, '_<_=, '_>_=, 'OR, 'AND, 'or, 'and]
 
     coerce apply ==
       fun := apply.function
@@ -93,12 +100,13 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
 
       funsym := symbolOf fun
       funsym case "failed" =>
-        #argl = 0 => fun :: OutputForm
-        hconcat [fun :: OutputForm, paren argl]
+        funof := fun :: OutputForm
+        #argl = 0 => funof
+        hconcat [paren funof, paren argl]
 
       funsym = 'QUOTE =>
         hconcat ["'", :argl]
-      funsym = 'elt =>
+      member?(funsym, ['elt, 'Sel]) =>
         hconcat [first argl, ".", last argl]
       funsym = 'exit =>
         hconcat ["exit{", first argl, "}", "(", last argl, ")"]
@@ -106,10 +114,11 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
         hconcat ["return{", first argl, "}", "(", last argl, ")"]
       #argl = 0 and funsym = 'Zero => "0"
       #argl = 0 and funsym = 'One => "1"
-      #argl = 2 and member?(funsym, ['_-, '_+, '_*, '_/, '_^, '_=, '_~_=, '_<, '_>, '_<_=, '_>_=]) =>
+      #argl = 2 and member?(funsym, binop) =>
+        opstr := (lowerCase (string funsym)) :: Symbol
         paren spaces([argl.1 :: OutputForm,
-                      funsym :: OutputForm,
-                      argl.2 :: OutputForm ])
+                      opstr :: OutputForm,
+                      argl.2 :: OutputForm])
 
       -- finally, every other function call
       hconcat [funsym :: OutputForm, paren argl]
@@ -130,8 +139,8 @@ SpadSegment(N : SpadNodeCategory) : ParsableCategory with
     elt(x, "end") == x.r_end
     elt(x, "step") == x.r_step
 
-    construct(f,l,s) == [f,l,s]$Rep pretend %
-    construct(f,s) == [f,"infinity",s]$Rep pretend %
+    construct(f,l,s) == [f,l,s]$Rep
+    construct(f,s) == [f,"infinity",s]$Rep
 
     parse ex ==
       -- (SEGMENT first last)
@@ -165,16 +174,17 @@ SpadIterator(N : SpadNodeCategory) : ParsableCategory with
     coerce itor ==
       hconcat ["for ", itor.var :: OutputForm, " in ", itor.seq :: OutputForm]
 
-)abbrev domain SPTEX SpadTypeExpression
-SpadTypeExpression(N : SpadNodeCategory) : ParsableCategory with
+)abbrev domain SPTEX SpadTypeExpr
+SpadTypeExpr(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "kind") -> Symbol
     elt : (%, "expr") -> N
-    elt : (%, "type") -> SpadType(N)
-    construct : (Symbol, E, T) -> %
+    elt : (%, "type") -> N
+    construct : (Symbol, N, N) -> %
   == add
-    Rep := Record(t_kind : Symbol, t_expr : N, t_type : SpadType(N))
+    Rep := Record(t_kind : Symbol, t_expr : N, t_type : N)
 
     import SExpression
+    import ParserTools
 
     elt(x,"kind") == x.t_kind
     elt(x,"expr") == x.t_expr
@@ -182,13 +192,18 @@ SpadTypeExpression(N : SpadNodeCategory) : ParsableCategory with
 
     construct(k,e,t) ==
       operators : List Symbol :=
-        ['case, 'has, 'is, 'pretend, ':, '::, '@]
+        ['case, 'has, 'is, 'pretend, ':, '::, '@, '_$]
       not member?(k, operators) =>
         error "Not a type expression operator!"
       [k,e,t]$Rep pretend %
 
     parse ex ==
-      construct(symbol ex.1, parse ex.2, parse ex.3)
+      s := symbol ex.1
+      e1 := (parse ex.2)@N
+      e2 := (parse ex.3)@N
+      domsel? ex =>
+        construct('_$, e2, e1)
+      construct(s, e1, e2)
 
     coerce ex ==
       hconcat([ex.expr :: OutputForm, " ",
@@ -359,7 +374,7 @@ SpadSequence(N : SpadNodeCategory) : ParsableCategory with
       ["prog", reverse content]
 
     coerce ex ==
-      lst := [ e :: OutputForm for e in ex.list ]
+      lst := [ e :: OutputForm for e in ex.list | not emptyNode? e ]
       ex.kind case "prog" => hconcat [hspace 2, pile lst]
       ex.kind case "list" => bracket lst
       ex.kind case "tuple" => paren lst
@@ -492,7 +507,7 @@ SpadMacro(N : SpadNodeCategory) : ParsableCategory with
       hconcat([m.md_name :: OutputForm,
                margs, " ==> ", pile [m.md_body :: OutputForm]])
 
-)abbrev package SPNODE SpadNode
+)abbrev domain SPNODE SpadNode
 ++ SPAD generic expression
 SpadNode() : SpadNodeCategory == add
     Rep := Union(seq : SpadSequence(%),
@@ -505,12 +520,14 @@ SpadNode() : SpadNodeCategory == add
                  sfunction : SpadFunction(%),
                  stype : SpadType(%),
                  simport : SpadImport(%),
-                 typeexpr : SpadTypeExpression(%),
+                 typeexpr : SpadTypeExpr(%),
                  segment : SpadSegment(%),
                  dfloat : DoubleFloat,
                  integer : Integer,
                  symbol : Symbol,
-                 string : String)
+                 string : String,
+                 empty : "empty")
+
 
     import OutputForm
     import OutputFormHelper
@@ -534,8 +551,29 @@ SpadNode() : SpadNodeCategory == add
     symbolOf n == if n case symbol then n.symbol else "failed"
     stringOf n == if n case string then n.string else "failed"
 
-    construct (seq : SpadSequence(%)) : % == [seq]$Rep
+    symbol? n == n case symbol
+    sequence? n == n case seq
+
+    emptyNode () == ["empty"]$Rep
+    emptyNode? n == n case empty
+
+
+    construct (apply : SpadApply(%)) : % == [apply]$Rep
+    construct (assign : SpadAssign(%)) : % == [assign]$Rep
+    construct (df : DoubleFloat) : % == [df]$Rep
+    construct (func : SpadFunction(%)) : % == [func]$Rep
+    construct (typimp : SpadImport(%)) : % == [typimp]$Rep
+    construct (i : Integer) : % == [i]$Rep
+    construct (lambda : SpadLambda(%)) : % == [lambda]$Rep
+    construct (loop : SpadLoop(%)) : % == [loop]$Rep
+    construct (scond : SpadConditional(%)) : % == [scond]$Rep
+    construct (smacro : SpadMacro(%)) : % == [smacro]$Rep
     construct (seg : SpadSegment(%)) : % == [seg]$Rep
+    construct (seq : SpadSequence(%)) : % == [seq]$Rep
+    construct (s : String) : % == [s]$Rep
+    construct (s : Symbol) : % == [s]$Rep
+    construct (typexpr : SpadTypeExpr(%)) : % == [typexpr]$Rep
+    construct (type : SpadType(%)) : % == [type]$Rep
 
     parse ex ==
       -- print (hconcat ["expression: ", ex :: OutputForm])
@@ -563,7 +601,8 @@ SpadNode() : SpadNodeCategory == add
       macro? ex =>
         [(parse ex) $ SpadMacro(%)]
 
-      var? ex or case? ex or has? ex or is? ex or pretend? ex or coerce? ex or typesel? ex => 
+      (var? ex or case? ex or has? ex or is? ex or pretend? ex or coerce? ex or
+       domsel? ex or retsel? ex) => 
         -- {expression with type annotation}
         -- (: expr Type) 
         -- {expression with "case" operator}
@@ -576,9 +615,11 @@ SpadNode() : SpadNodeCategory == add
         -- (pretend expr Type)
         -- {expression with "::" coerce operator}
         -- (:: expr Type)
-        -- {expression with "@" type selector operator}
+        -- {expression with "@" return type selection operator}
         -- (@ expr Type)
-        [(parse ex) $ SpadTypeExpression(%)]
+        -- {expression with "$" domain selection operator}
+        -- (Sel expr Type)
+        [(parse ex) $ SpadTypeExpr(%)]
 
       let? ex =>
         [(parse ex) $ SpadAssign(%)]
@@ -646,5 +687,6 @@ SpadNode() : SpadNodeCategory == add
       ex case symbol => ex.symbol :: OutputForm
       ex case dfloat => ex.dfloat :: OutputForm
       ex case integer => ex.integer :: OutputForm
+      ex case empty => ""
 
       error "coerce $ SpadNode: variant not handled!"

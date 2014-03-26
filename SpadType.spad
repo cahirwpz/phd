@@ -10,10 +10,10 @@ SpadFunctorType(T : SpadTypeCategory) : ParsableCategory with
     elt(x, "args") == x.ft_args
     elt(x, "name") == x.ft_name
 
-    construct(n, al) == [n, al]$Rep pretend %
+    construct(s, al) == [s, al]$Rep
 
     parse ex ==
-      fargs : List(T) := [ parse e for e in destruct cdr(ex) ]
+      fargs : List(T) := [ parse e for e in destruct cdr ex ]
       [ symbol car ex, fargs ]
 
     coerce ftor ==
@@ -35,7 +35,7 @@ SpadMappingType(T : SpadTypeCategory) : ParsableCategory with
     elt(x, "args") == x.m_args
     elt(x, "type") == x.m_type
 
-    construct(al, t) == [al, t]$Rep pretend %
+    construct(al, t) == [al, t]$Rep
 
     parseFunType : SExpression -> T
     parseFunType s ==
@@ -47,7 +47,7 @@ SpadMappingType(T : SpadTypeCategory) : ParsableCategory with
 
     coerce mapping ==
       ts := [t :: OutputForm for t in mapping.args]
-      src := if #ts > 1 then paren ts else first ts
+      src := if #ts ~= 1 then paren ts else first ts
       hconcat [src, " -> ", mapping.type :: OutputForm]
 
 )abbrev domain SPTSUM SpadSumType
@@ -204,6 +204,12 @@ SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
 
     unknownType == ["unknown"]
 
+    construct (t : SpadSumType(%)) : % == [t]$Rep
+    construct (t : SpadRecordType(%)) : % == [t]$Rep
+    construct (t : SpadUnionType(%)) : % == [t]$Rep
+    construct (t : SpadFunctorType(%)) : % == [t]$Rep
+    construct (t : SpadMappingType(%)) : % == [t]$Rep
+
     unknownType? t == t case unknown
     sumTypeOf t == if t case sum then t.sum else "failed"
     recordTypeOf t == if t case record then t.record else "failed"
@@ -214,12 +220,16 @@ SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
     singletonTypeOf t == if t case singleton then t.singleton else "failed"
 
     parse ex ==
-      -- print (hconcat ["type: ", ex :: OutputForm])
+      --print (hconcat ["type: ", ex :: OutputForm])
 
       null? ex => ["unknown"]
       string? ex => [string ex]
       symbol? ex =>
-        [construct(symbol ex, []) $ SpadFunctorType(%)]
+        s := symbol ex
+        -- BUG? czemu nie dziala to:
+        -- if s = '$ then s := '%
+        if s = '$ then s := coerce "%"
+        [construct(s, []) $ SpadFunctorType(%)]
       signature? ex =>
         [(parse ex) $ SpadSignatureType(%)]
       record? ex =>
