@@ -315,10 +315,8 @@ SpadTreeMacroExpander() : Type with
       --sig case SpadSignatureType(T) =>
       --  ...
 
-      --singleton := singletonTypeOf t
-      --singleton case String =>
-      --  ...
-
+      -- no need to rewrite singleton type
+      -- just return unchanged
       t
 
     rewrite (n : N) : N ==
@@ -345,13 +343,12 @@ SpadTreeMacroExpander() : Type with
         nguards := [rewrite guard for guard in loop.guards]
         [[loop.kind, nitors, nguards, rewrite loop.body]]
 
-      --cond := conditionalOf n
-      --cond case SpadConditional(N) =>
-      --  c := rewrite cond.cond
-      --  t := rewrite cond.truebr
-      --  if cond.falsebr case N
-      --    then [[c, t]$SpadConditional(N)]
-      --    else [[c, t, rewrite (cond.falsebr :: N)]$SpadConditional(N)]
+      scond := conditionalOf n
+      scond case SpadConditional(N) =>
+        c := rewrite scond.cond
+        t := rewrite scond.truebr
+        f := (scond.falsebr case N => rewrite (scond.falsebr :: N); "empty")
+        [[c, t, f]$SpadConditional(N)]
 
       func := functionOf n
       func case SpadFunction(N) =>
@@ -368,18 +365,17 @@ SpadTreeMacroExpander() : Type with
         env.s := smacro
         emptyNode()
 
-      --stype := typeOf n
-      --stype case SpadType(N) =>
-      --  rewrite stype
+      stype := typeOf n
+      stype case SpadType(N) =>
+        [rewrite (stype :: SpadType(N))]
 
       simport := importOf n
       simport case SpadImport(N) =>
         [[rewrite simport.type]$SpadImport(N)]
 
-      --typexpr := typeExprOf n
-      --typexpr case SpadTypeExpr(N) =>
-      --  rewrite typexpr.expr
-      --  rewrite typexpr.type
+      typexpr := typeExprOf n
+      typexpr case SpadTypeExpr(N) =>
+        [[typexpr.kind, rewrite typexpr.expr, rewrite typexpr.type]$SpadTypeExpr(N)]
 
       segment := segmentOf n
       segment case SpadSegment(N) =>
@@ -396,17 +392,8 @@ SpadTreeMacroExpander() : Type with
         not key?(s, env) => n
         parse env.s.body
 
-      --f := floatOf n
-      --f case DoubleFloat =>
-      --  ...
-
-      --i := integerOf n
-      --i case Integer =>
-      --  ...
-        
-      --str := stringOf n
-      --str case String =>
-      --  ...
+      -- no need to rewrite float, integer and string values
+      -- just return unchanged
       n
 
     rewrite (f : SpadFunctor) : SpadFunctor ==

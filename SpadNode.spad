@@ -557,23 +557,22 @@ SpadNode() : SpadNodeCategory == add
     emptyNode () == ["empty"]$Rep
     emptyNode? n == n case empty
 
-
-    construct (apply : SpadApply(%)) : % == [apply]$Rep
-    construct (assign : SpadAssign(%)) : % == [assign]$Rep
-    construct (df : DoubleFloat) : % == [df]$Rep
-    construct (func : SpadFunction(%)) : % == [func]$Rep
-    construct (typimp : SpadImport(%)) : % == [typimp]$Rep
-    construct (i : Integer) : % == [i]$Rep
-    construct (lambda : SpadLambda(%)) : % == [lambda]$Rep
-    construct (loop : SpadLoop(%)) : % == [loop]$Rep
-    construct (scond : SpadConditional(%)) : % == [scond]$Rep
-    construct (smacro : SpadMacro(%)) : % == [smacro]$Rep
-    construct (seg : SpadSegment(%)) : % == [seg]$Rep
-    construct (seq : SpadSequence(%)) : % == [seq]$Rep
-    construct (s : String) : % == [s]$Rep
-    construct (s : Symbol) : % == [s]$Rep
-    construct (typexpr : SpadTypeExpr(%)) : % == [typexpr]$Rep
-    construct (type : SpadType(%)) : % == [type]$Rep
+    construct (n : SpadApply(%)) : % == [n]$Rep
+    construct (n : SpadAssign(%)) : % == [n]$Rep
+    construct (n : DoubleFloat) : % == [n]$Rep
+    construct (n : SpadFunction(%)) : % == [n]$Rep
+    construct (n : SpadImport(%)) : % == [n]$Rep
+    construct (n : Integer) : % == [n]$Rep
+    construct (n : SpadLambda(%)) : % == [n]$Rep
+    construct (n : SpadLoop(%)) : % == [n]$Rep
+    construct (n : SpadConditional(%)) : % == [n]$Rep
+    construct (n : SpadMacro(%)) : % == [n]$Rep
+    construct (n : SpadSegment(%)) : % == [n]$Rep
+    construct (n : SpadSequence(%)) : % == [n]$Rep
+    construct (n : String) : % == [n]$Rep
+    construct (n : Symbol) : % == [n]$Rep
+    construct (n : SpadTypeExpr(%)) : % == [n]$Rep
+    construct (n : SpadType(%)) : % == [n]$Rep
 
     parse ex ==
       -- print (hconcat ["expression: ", ex :: OutputForm])
