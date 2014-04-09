@@ -1,19 +1,19 @@
 )abbrev category SPTYPEC SpadTypeCategory
 SpadTypeCategory() : Category == ParsableCategory with
-  unknownType : %
-
-  unknownType? : % -> Boolean
-
   construct : SpadFunctorType(%) -> %
   construct : SpadMappingType(%) -> %
   construct : SpadRecordType(%) -> %
   construct : SpadSumType(%) -> %
   construct : SpadUnionType(%) -> %
+  construct : SpadNamedType(%) -> %
+
+  unknownType? : % -> Boolean
+  unknownType : constant -> %
 
   functorTypeOf : % -> Union(SpadFunctorType(%), "failed")
   mappingTypeOf : % -> Union(SpadMappingType(%), "failed")
   recordTypeOf : % -> Union(SpadRecordType(%), "failed")
-  signatureTypeOf : % -> Union(SpadSignatureType(%), "failed")
+  namedTypeOf : % -> Union(SpadNamedType(%), "failed")
   singletonTypeOf : % -> Union(String, "failed")
   sumTypeOf : % -> Union(SpadSumType(%), "failed")
   unionTypeOf : % -> Union(SpadUnionType(%), "failed")

@@ -3,6 +3,7 @@
 ParserTools() : with
     firstSymbol? : (SExpression, Symbol) -> Boolean
 
+    attribute? : SExpression -> Boolean
     capsule? : SExpression -> Boolean
     case? : SExpression -> Boolean
     coerce? : SExpression -> Boolean
@@ -76,6 +77,7 @@ ParserTools() : with
         list_of_eq?(fifth, 'add, 3) => true
       false
 
+    attribute? ex == list_of_eq?(ex, 'ATTRIBUTE, 2)
     capsule? ex == list_of_ge?(ex, 'CAPSULE, 1)
     case? ex == list_of_eq?(ex, 'case, 3)
     coerce? ex == list_of_eq?(ex, '::, 3)

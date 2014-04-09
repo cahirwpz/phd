@@ -16,45 +16,6 @@ SpadImport(N : SpadNodeCategory) : ParsableCategory with
     coerce ex ==
       hconcat ["import ", ex.type :: OutputForm]
 
-)abbrev domain SPDCL SpadSymbolDecl
-++ SPAD variable declaration representation
-SpadSymbolDecl(N : SpadNodeCategory) : ParsableCategory with
-    elt : (%, "name") -> Symbol
-    elt : (%, "type") -> SpadType(N)
-    construct : (Symbol, SpadType(N)) -> %
-      ++ construct(name,type)
-    construct : Symbol -> %
-      ++ construct(name)
-  == add
-    Rep := Record(s_name : Symbol, s_type : SpadType(N))
-
-    import OutputForm
-    import OutputFormHelper
-    import ParserTools
-
-    elt(x, "name") == x.s_name
-    elt(x, "type") == x.s_type
-
-    construct(aname, atype) == [aname, atype]$Rep
-    construct(aname) == [aname, unknownType]$Rep
-
-    parse ex ==
-      --print (hconcat ["variable: ", ex :: OutputForm])
-
-      var? ex =>
-        construct(symbol ex.2, parse ex.3)
-      symbol? ex =>
-        construct(symbol ex)
-
-      print (ex :: OutputForm)
-      error "parse $ SpadSymbolDecl: not a variable definition!"
-
-    coerce var ==
-      aname := var.s_name :: OutputForm
-      atype : OutputForm :=
-        if unknownType? var.s_type then "?" else coerce var.s_type
-      spaces [aname, ":", atype]
-
 )abbrev domain SPASS SpadAssign
 SpadAssign(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "lvalue") -> N
@@ -178,10 +139,10 @@ SpadIterator(N : SpadNodeCategory) : ParsableCategory with
 SpadTypeExpr(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "kind") -> Symbol
     elt : (%, "expr") -> N
-    elt : (%, "type") -> N
-    construct : (Symbol, N, N) -> %
+    elt : (%, "type") -> SpadType(N)
+    construct : (Symbol, N, SpadType(N)) -> %
   == add
-    Rep := Record(t_kind : Symbol, t_expr : N, t_type : N)
+    Rep := Record(t_kind : Symbol, t_expr : N, t_type : SpadType(N))
 
     import SExpression
     import ParserTools
@@ -199,11 +160,17 @@ SpadTypeExpr(N : SpadNodeCategory) : ParsableCategory with
 
     parse ex ==
       s := symbol ex.1
-      e1 := (parse ex.2)@N
-      e2 := (parse ex.3)@N
-      domsel? ex =>
-        construct('_$, e2, e1)
-      construct(s, e1, e2)
+      n : N
+      t : SpadType(N)
+      if domsel? ex
+        then
+          s := '_$
+          n := parse ex.3
+          t := parse ex.2
+        else
+          n := parse ex.2
+          t := parse ex.3
+      construct(s, n, t)
 
     coerce ex ==
       hconcat([ex.expr :: OutputForm, " ",
@@ -394,7 +361,7 @@ SpadConditional(N : SpadNodeCategory) : ParsableCategory with
     elt(x, "truebr") == x.c_true
     elt(x, "falsebr") == x.c_false
 
-    construct(c, tb, fb) == [c, tb, fb]$Rep pretend %
+    construct(c, tb, fb) == [c, tb, fb]$Rep
 
     coerce c ==
       c.falsebr case "empty" =>
@@ -406,22 +373,26 @@ SpadConditional(N : SpadNodeCategory) : ParsableCategory with
 
 )abbrev package SPFN SpadFunction
 ++ SPAD function
-SpadFunction(N : SpadNodeCategory) : ParsableCategory with
+SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
+  T ==> SpadType(N)
+
+  Exports ==> ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List Union(String, SpadSymbolDecl(N))
-    elt : (%, "type") -> SpadType(N)
+    elt : (%, "args") -> List Union(String, SpadNamedType(T))
+    elt : (%, "type") -> T
     elt : (%, "body") -> N
-    construct : (Symbol, List Union(String, SpadSymbolDecl(N)), SpadType(N), N) -> %
+    construct : (Symbol, List Union(String, SpadNamedType(T)), T, N) -> %
       ++ construct(name,varlist,type,exp)
-  == add
+
+  Implementation ==> add
     Rep := Record(fn_name : Symbol,
-                  fn_args : List Union(String, SpadSymbolDecl(N)),
-                  fn_type : SpadType(N),
+                  fn_args : List Union(String, SpadNamedType(T)),
+                  fn_type : T,
                   fn_body : N)
 
     import OutputForm
     import ParserTools
-    import SpadSymbolDecl(N)
+    import SpadNamedType(T)
 
     elt(x, "name") == x.fn_name
     elt(x, "args") == x.fn_args
@@ -431,7 +402,7 @@ SpadFunction(N : SpadNodeCategory) : ParsableCategory with
     construct(fname, fargs, ftype, fbody) == 
       [fname, fargs, ftype, fbody] $ Rep
 
-    parse_arg : (SExpression, SExpression) -> Union(String, SpadSymbolDecl(N))
+    parse_arg : (SExpression, SExpression) -> Union(String, SpadNamedType(T))
     parse_arg(s, t) ==
       string? s =>
         string s
@@ -641,7 +612,7 @@ SpadNode() : SpadNodeCategory == add
       collect? ex or loop? ex =>
         [(parse ex) $ SpadLoop(%)]
 
-      record? ex or union? ex =>
+      record? ex or union? ex or progn? ex or signature? ex or attribute? ex =>
         [(parse ex) $ SpadType(%)]
 
       list? ex and #ex > 0 =>
