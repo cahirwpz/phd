@@ -126,12 +126,20 @@ SpadCtorModeMap() : SetCategory with
                (parse x.type)$T :: OutputForm])
 
 )abbrev domain SPCC SpadCtorCategory
-SpadCtorCategory() : SetCategory == add
+SpadCtorCategory() : Exports == Implementation where
+  T ==> SpadType(SpadNode)
+
+  Exports ==> SetCategory with
+    asType : % -> SpadType(SpadNode)
+
+  Implementation ==> add
     rep(x) ==> (x pretend SExpression)
-    T ==> SpadType(SpadNode)
+
+    asType x ==
+      parse rep(x)
 
     coerce x ==
-      (parse rep(x))$T :: OutputForm
+      (asType x) :: OutputForm
 
 )abbrev domain SPOP SpadOperation
 SpadOperation() : SetCategory == add
@@ -226,17 +234,45 @@ SpadDatabase() : with
       sex pretend String
 
 )abbrev package STMEXP SpadTreeMacroExpander
-SpadTreeMacroExpander() : Type with 
-    rewrite : SpadType(SpadNode) -> SpadType(SpadNode)
-    rewrite : SpadNode -> SpadNode
-    rewrite : SpadFunctor -> SpadFunctor
-  == add
-    N ==> SpadNode
-    T ==> SpadType(N)
+SpadTreeMacroExpander() : Exports == Implementation where
+  N ==> SpadNode
+  T ==> SpadType(N)
+  F ==> SpadFunctor
+  M ==> SpadMacro(N)
+  MD ==> Record(m_name : Symbol, m_arity : NonNegativeInteger)
+  AL ==> AssociationList(MD, M)
 
+  Exports ==> Type with 
+    rewrite : T -> T
+    rewrite : N -> N 
+    rewrite : F -> F
+
+  Implementation ==> add
     import OutputForm
 
-    env : AssociationList(Symbol, SpadMacro(N)) := table()
+    env : Stack AL := stack [table()]
+
+    reset : () -> Void
+    reset () == env := stack [table()]
+
+    newCtx : () -> Void
+    newCtx () == push!(table(), env)
+
+    discardCtx : () -> Void
+    discardCtx () == pop! env
+
+    addMacro : M -> Void
+    addMacro m ==
+      key := [m.name, #m.args]$MD
+      ctx := top env
+      ctx(key) := m
+
+    findMacro : MD -> Union(M, "failed")
+    findMacro md ==
+      for ctx in parts env repeat
+        if key?(md, ctx) then
+          return ctx(md)
+      "failed"
 
     rewrite (t : T) : T ==
       sum := sumTypeOf t
@@ -259,12 +295,12 @@ SpadTreeMacroExpander() : Type with
       
       ftor := functorTypeOf t
       ftor case SpadFunctorType(T) =>
-        fsym := ftor.name
-        key?(fsym, env) =>
-          #ftor.args > 0 =>
+        m := findMacro [ftor.name :: Symbol, #ftor.args]
+        m case M =>
+          #m.args > 0 =>
             print "Parametrized macros not supported!"
             return t
-          rewrite (parse env(fsym).body)$T
+          rewrite (parse m.body)$T
         [[ftor.name, [rewrite arg for arg in ftor.args]]]
 
       fun := mappingTypeOf t
@@ -282,7 +318,11 @@ SpadTreeMacroExpander() : Type with
     rewrite (n : N) : N ==
       seq := sequenceOf n
       seq case SpadSequence(N) =>
-        [[seq.kind, [rewrite ex for ex in seq.list]]]
+        newCtx()
+        seq' := [[seq.kind, [rewrite ex for ex in seq.list]]]
+        --print (env :: OutputForm)
+        discardCtx()
+        seq'
 
       lambda := lambdaOf n
       lambda case SpadLambda(N) =>
@@ -291,9 +331,11 @@ SpadTreeMacroExpander() : Type with
       apply := applyOf n
       apply case SpadApply(N) =>
         funsym := symbolOf apply.function
-        funsym case Symbol and key?(funsym, env) and #apply.args > 0 =>
-          print "Parametrized macros not supported!"
-          return n
+        if funsym case Symbol then
+          m := findMacro [funsym :: Symbol, #apply.args]
+          if m case M and #apply.args > 0 then
+            print "Parametrized macros not supported!"
+            return n
         [[rewrite apply.function, [rewrite arg for arg in apply.args]]$SpadApply(N)]
 
       assign := assignOf n
@@ -311,7 +353,7 @@ SpadTreeMacroExpander() : Type with
       scond case SpadConditional(N) =>
         c := rewrite scond.cond
         t := rewrite scond.truebr
-        f := (scond.falsebr case N => rewrite (scond.falsebr :: N); "empty")
+        f : Union(N, "empty") := (scond.falsebr case N => rewrite (scond.falsebr :: N); "empty")
         [[c, t, f]$SpadConditional(N)]
 
       func := functionOf n
@@ -325,8 +367,7 @@ SpadTreeMacroExpander() : Type with
 
       smacro := macroOf n
       smacro case SpadMacro(N) =>
-        s := smacro.name
-        env(s) := smacro
+        addMacro smacro
         emptyNode()
 
       stype := typeOf n
@@ -352,16 +393,16 @@ SpadTreeMacroExpander() : Type with
 
       sym := symbolOf n
       sym case Symbol =>
-        s := sym :: Symbol
-        not key?(s, env) => n
-        parse env(s).body
+        m := findMacro [sym :: Symbol, 0]
+        m case "failed" => n
+        rewrite parse m.body
 
       -- no need to rewrite float, integer and string values
       -- just return unchanged
       n
 
     rewrite (f : SpadFunctor) : SpadFunctor ==
-      env := table()
+      reset()
       ncapsule := rewrite f.capsule
       print (env :: OutputForm)
       [f.name, f.args, f.type, f.extends, ncapsule]
