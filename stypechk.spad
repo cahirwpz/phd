@@ -1,69 +1,7 @@
 )boot $LINELENGTH := 180
 )compile ParserTools.spad
-)compile SpadCategories.spad
-)compile SpadType.spad
+)compile SpadNodeCategory.spad
 )compile SpadNode.spad
-
-)abbrev package SPFTOR SpadFunctor
-++ SPAD functor representation
-SpadFunctor() : Exports == Implementation where
-  N ==> SpadNode
-  T ==> SpadType(SpadNode)
-
-  Exports ==> ParsableCategory with
-    elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List SpadNamedType(T)
-    elt : (%, "type") -> T
-    elt : (%, "extends") -> T
-    elt : (%, "capsule") -> N
-    construct : (Symbol, List SpadNamedType(T), T, T, N) -> %
-  
-  Implementation ==> add
-    Rep := Record(f_name : Symbol,
-                  f_args : List SpadNamedType(T),
-                  f_type : T,
-                  f_extends : T,
-                  f_capsule : N)
-
-    import OutputForm
-    import ParserTools
-    import SpadNode
-
-    construct(n,al,t,e,c) == [n,al,t,e,c]$Rep
-
-    elt(x,"name") == x.f_name
-    elt(x,"args") == x.f_args
-    elt(x,"type") == x.f_type
-    elt(x,"extends") == x.f_extends
-    elt(x,"capsule") == x.f_capsule
-
-    parse ex ==
-      --print (hconcat ["functor: ", ex :: OutputForm])
-
-      functor? ex =>
-        arg_names := destruct cdr(ex.2)
-        arg_types := destruct cdr(ex.3)
-        fname := symbol car(ex.2)
-        ftype := car ex.3
-        fbody := ex.5
-        fargs : List SpadNamedType(T) :=
-          [ [symbol s, parse t] for s in arg_names for t in arg_types ]
-        fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
-        fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
-        fcapsule := convert cons(convert 'SEQ, destruct cdr fcapsule)
-        construct(fname, fargs, parse ftype, parse fextends, parse fcapsule)
-
-      print "------"
-      print (ex :: OutputForm)
-      error "not a functor"
-
-    coerce f ==
-      blankSeparate(
-        [f.f_name :: OutputForm,
-         paren [arg :: OutputForm for arg in f.f_args], ":", 
-         hconcat [hspace 2, f.f_type :: OutputForm],
-         "==", f.f_extends :: OutputForm, "add",
-         f.f_capsule :: OutputForm])
 
 )abbrev domain SPCMM SpadCtorModeMap
 SpadCtorModeMap() : SetCategory with
@@ -75,9 +13,9 @@ SpadCtorModeMap() : SetCategory with
   == add
     import OutputForm
     import SExpression
+    import SpadNode
 
     rep(x) ==> (x pretend SExpression)
-    T ==> SpadType(SpadNode)
 
     elt (x, "name") == (car car car rep(x)) pretend Symbol
     elt (x, "sig") == (cdr car car rep(x)) pretend List Symbol
@@ -87,31 +25,28 @@ SpadCtorModeMap() : SetCategory with
     construct x == x pretend %
 
     coerce x ==
-      fsig := [hconcat [s :: OutputForm, " : ", (parse a)$T :: OutputForm] for s in x.sig for a in x.args]
+      fsig := [hconcat [s :: OutputForm, " : ", (parse a) :: OutputForm] for s in x.sig for a in x.args]
       hconcat([x.name :: OutputForm, paren fsig, " : ",
-               (parse x.type)$T :: OutputForm])
+               (parse x.type) :: OutputForm])
 
 )abbrev domain SPCC SpadCtorCategory
-SpadCtorCategory() : Exports == Implementation where
-  T ==> SpadType(SpadNode)
-
-  Exports ==> SetCategory with
-    asType : % -> SpadType(SpadNode)
-
-  Implementation ==> add
+SpadCtorCategory() : SetCategory with
+    asNode : % -> SpadNode
+  == add
     rep(x) ==> (x pretend SExpression)
 
-    asType x ==
+    asNode x ==
       parse rep(x)
 
     coerce x ==
-      (asType x) :: OutputForm
+      (asNode x) :: OutputForm
 
 )abbrev domain SPOP SpadOperation
 SpadOperation() : SetCategory == add
     rep(x) ==> (x pretend SExpression)
-    T ==> SpadType(SpadNode)
+    N ==> SpadNode
 
+    import SpadNode
     import OutputForm
     import SExpression
 
@@ -120,15 +55,15 @@ SpadOperation() : SetCategory == add
       --print (sex :: OutputForm)
       opname := symbol sex.1
       sig := destruct sex.2
-      tl := [(parse t)$T for t in destruct sig.1]
+      tl := [parse t for t in destruct sig.1]
       if #sig >= 4 then
-        tl := concat(tl, [(parse (convert 'constant))$T])
-      mt : SpadMappingType(T) :=
+        tl := concat(tl, [parse (convert 'constant)])
+      mt : SpadMappingType(N) :=
         if #tl = 1 then
           [[], tl.1]
         else
           [rest tl, first tl]
-      type := [opname, [mt]]$SpadNamedType(T)
+      type := [opname, [mt]]$SpadNamedType(N)
       op :=
         if #sig >= 3 and not (symbol? sig.3 and symbol sig.3 = 'T)
           then
@@ -202,24 +137,19 @@ SpadDatabase() : with
 )abbrev package STMEXP SpadTreeMacroExpander
 SpadTreeMacroExpander() : Exports == Implementation where
   N ==> SpadNode
-  T ==> SpadType(N)
   F ==> SpadFunctor
   M ==> SpadMacro(N)
   MD ==> Record(m_name : Symbol, m_arity : NonNegativeInteger)
   AL ==> AssociationList(MD, M)
 
   Exports ==> Type with 
-    rewrite : T -> T
+    init : () -> Void
     rewrite : N -> N 
-    rewrite : F -> F
 
   Implementation ==> add
     import OutputForm
 
     env : Stack AL := stack [table()]
-
-    reset : () -> Void
-    reset () == env := stack [table()]
 
     newCtx : () -> Void
     newCtx () == push!(table(), env)
@@ -240,59 +170,51 @@ SpadTreeMacroExpander() : Exports == Implementation where
           return ctx(md)
       "failed"
 
-    rewrite (t : T) : T ==
-      sum := sumTypeOf t
-      sum case SpadSumType(T) =>
-        [[sum.kind, [rewrite typ for typ in sum.types]]]
-
-      record := recordTypeOf t
-      record case SpadRecordType(T) =>
-        [[[[field.name, rewrite field.type] for field in record.fields]]]
-        
-      union := unionTypeOf t
-      union case SpadUnionType(T) =>
-        varl : List Union(T, SpadNamedType(T)) := []
-        for var in union.variants repeat
-          var case T =>
-            varl := [rewrite var, :varl]
-          var case SpadNamedType(T) =>
-            varl := [[var.name, rewrite var.type], :varl]
-        [[reverse varl]]
-      
-      ftor := functorTypeOf t
-      ftor case SpadFunctorType(T) =>
-        m := findMacro [ftor.name :: Symbol, #ftor.args]
-        m case M =>
-          #m.args > 0 =>
-            print "Parametrized macros not supported!"
-            return t
-          rewrite (parse m.body)$T
-        [[ftor.name, [rewrite arg for arg in ftor.args]]]
-
-      fun := mappingTypeOf t
-      fun case SpadMappingType(T) =>
-        [[[rewrite arg for arg in fun.args], rewrite fun.type]]
-
-      named := namedTypeOf t
-      named case SpadNamedType(T) =>
-        [[named.name, rewrite named.type] $ SpadNamedType(T)]
-
-      -- no need to rewrite singleton type
-      -- just return unchanged
-      t
+    init () ==
+      env := stack [table()]
 
     rewrite (n : N) : N ==
+      ftor := functorOf n
+      ftor case SpadFunctor(N) =>
+        [[ftor.name, ftor.args, ftor.type, ftor.extends, rewrite ftor.capsule] $ SpadFunctor(N)]
+
+      sum := sumTypeOf n
+      sum case SpadSumType(N) =>
+        [[sum.kind, [rewrite typ for typ in sum.types]] $ SpadSumType(N)]
+
+      record := recordTypeOf n
+      record case SpadRecordType(N) =>
+        [[[[field.name, rewrite field.type] for field in record.fields]] $ SpadRecordType(N)]
+        
+      union := unionTypeOf n
+      union case SpadUnionType(N) =>
+        varl : List Union(N, SpadNamedType(N)) := []
+        for var in union.variants repeat
+          var case N =>
+            varl := [rewrite var, :varl]
+          var case SpadNamedType(N) =>
+            varl := [[var.name, rewrite var.type], :varl]
+        [[reverse varl] $ SpadUnionType(N)]
+      
+      fun := mappingTypeOf n
+      fun case SpadMappingType(N) =>
+        [[[rewrite arg for arg in fun.args], rewrite fun.type] $ SpadMappingType(N)]
+
+      named := namedTypeOf n
+      named case SpadNamedType(N) =>
+        [[named.name, rewrite named.type] $ SpadNamedType(N)]
+
       seq := sequenceOf n
       seq case SpadSequence(N) =>
         newCtx()
-        seq' := [[seq.kind, [rewrite ex for ex in seq.list]]]
+        seq' := [[seq.kind, [rewrite ex for ex in seq.list]] $ SpadSequence(N)]
         --print (env :: OutputForm)
         discardCtx()
         seq'
 
       lambda := lambdaOf n
       lambda case SpadLambda(N) =>
-        [[lambda.args, rewrite lambda.type, rewrite lambda.body]$SpadLambda(N)]
+        [[lambda.args, rewrite lambda.type, rewrite lambda.body] $ SpadLambda(N)]
 
       apply := applyOf n
       apply case SpadApply(N) =>
@@ -302,51 +224,48 @@ SpadTreeMacroExpander() : Exports == Implementation where
           if m case M and #apply.args > 0 then
             print "Parametrized macros not supported!"
             return n
-        [[rewrite apply.function, [rewrite arg for arg in apply.args]]$SpadApply(N)]
+        [[rewrite apply.function, [rewrite arg for arg in apply.args]] $ SpadApply(N)]
 
       assign := assignOf n
       assign case SpadAssign(N) =>
-        [[rewrite assign.lvalue, rewrite assign.rvalue]$SpadAssign(N)]
+        [[rewrite assign.lvalue, rewrite assign.rvalue] $ SpadAssign(N)]
 
       loop := loopOf n
       loop case SpadLoop(N) =>
         -- BUG: parser ma problemy z listami rozrzuconymi po liniach
-        nitors := [[itor.var, rewrite itor.seq] for itor in loop.itors]
+        nitors : List SpadIterator(N) :=
+          [[itor.var, rewrite itor.seq] for itor in loop.itors]
         nguards := [rewrite guard for guard in loop.guards]
-        [[loop.kind, nitors, nguards, rewrite loop.body]]
+        [[loop.kind, nitors, nguards, rewrite loop.body] $ SpadLoop(N)]
 
       scond := conditionalOf n
       scond case SpadConditional(N) =>
         c := rewrite scond.cond
         t := rewrite scond.truebr
         f : Union(N, "empty") := (scond.falsebr case N => rewrite (scond.falsebr :: N); "empty")
-        [[c, t, f]$SpadConditional(N)]
+        [[c, t, f] $ SpadConditional(N)]
 
       func := functionOf n
       func case SpadFunction(N) =>
-        argl : List Union(String, SpadNamedType(T)) := []
+        argl : List Union(String, SpadNamedType(N)) := []
         for arg in func.args repeat
-          argl := if arg case SpadNamedType(T)
+          argl := if arg case SpadNamedType(N)
             then [[arg.name, rewrite arg.type], :argl]
             else [arg, :argl]
-        [[func.name, reverse argl, rewrite func.type, rewrite func.body]]
+        [[func.name, reverse argl, rewrite func.type, rewrite func.body] $ SpadFunction(N)]
 
       smacro := macroOf n
       smacro case SpadMacro(N) =>
         addMacro smacro
         emptyNode()
 
-      stype := typeOf n
-      stype case SpadType(N) =>
-        [rewrite (stype :: SpadType(N))]
-
       simport := importOf n
       simport case SpadImport(N) =>
-        [[rewrite simport.type]$SpadImport(N)]
+        [[rewrite simport.type] $ SpadImport(N)]
 
       typexpr := typeExprOf n
       typexpr case SpadTypeExpr(N) =>
-        [[typexpr.kind, rewrite typexpr.expr, rewrite typexpr.type]$SpadTypeExpr(N)]
+        [[typexpr.kind, rewrite typexpr.expr, rewrite typexpr.type] $ SpadTypeExpr(N)]
 
       segment := segmentOf n
       segment case SpadSegment(N) =>
@@ -366,12 +285,6 @@ SpadTreeMacroExpander() : Exports == Implementation where
       -- no need to rewrite float, integer and string values
       -- just return unchanged
       n
-
-    rewrite (f : SpadFunctor) : SpadFunctor ==
-      reset()
-      ncapsule := rewrite f.capsule
-      print (env :: OutputForm)
-      [f.name, f.args, f.type, f.extends, ncapsule]
 
 )abbrev package SPTYPCHK SpadTypeChecker
 ++ Author: Krystian Baclawski
@@ -384,12 +297,13 @@ SpadTypeChecker() : with
       ++ check(sex) runs type checker for parse tree
   == add
     import OutputForm
-    import SpadFunctor
+    import SpadNode
     import SpadTreeMacroExpander
 
     check e ==
       --print (e :: OutputForm)
-      ftor : SpadFunctor := parse e
-      print (ftor :: OutputForm)
-      nftor := rewrite ftor
-      print (nftor :: OutputForm)
+      n : SpadNode := parse e
+      print (n :: OutputForm)
+      init()
+      n' := rewrite n 
+      print (n' :: OutputForm)

@@ -1,0 +1,69 @@
+)abbrev category SPNODEC SpadNodeCategory
+SpadNodeCategory() : Category == ParsableCategory with
+  construct : SpadApply(%) -> %
+  construct : SpadAssign(%) -> %
+  construct : SpadConditional(%) -> %
+  construct : SpadFunction(%) -> %
+  construct : SpadFunctor(%) -> %
+  construct : SpadImport(%) -> %
+  construct : SpadLambda(%) -> %
+  construct : SpadLoop(%) -> %
+  construct : SpadMacro(%) -> %
+  construct : SpadMappingType(%) -> %
+  construct : SpadNamedType(%) -> %
+  construct : SpadRecordType(%) -> %
+  construct : SpadSegment(%) -> %
+  construct : SpadSequence(%) -> %
+  construct : SpadSumType(%) -> %
+  construct : SpadTypeExpr(%) -> %
+  construct : SpadUnionType(%) -> %
+  construct : DoubleFloat -> %
+  construct : Integer -> %
+  construct : String -> %
+  construct : Symbol -> %
+
+  emptyNode : () -> %
+  emptyNode? : % -> Boolean
+
+  apply? : % -> Boolean
+  applyOf : % -> Union(SpadApply(%), "failed")
+  assign? : % -> Boolean
+  assignOf : % -> Union(SpadAssign(%), "failed")
+  conditional? : % -> Boolean
+  conditionalOf: % -> Union(SpadConditional(%), "failed")
+  float? : % -> Boolean
+  floatOf : % -> Union(DoubleFloat, "failed")
+  function? : % -> Boolean
+  functionOf : % -> Union(SpadFunction(%), "failed")
+  functor? : % -> Boolean
+  functorOf : % -> Union(SpadFunctor(%), "failed")
+  import? : % -> Boolean
+  importOf : % -> Union(SpadImport(%), "failed")
+  integer? : % -> Boolean
+  integerOf : % -> Union(Integer, "failed")
+  lambda? : % -> Boolean
+  lambdaOf : % -> Union(SpadLambda(%), "failed")
+  loop? : % -> Boolean
+  loopOf : % -> Union(SpadLoop(%), "failed")
+  macro? : % -> Boolean
+  macroOf : % -> Union(SpadMacro(%), "failed")
+  mappingType? : % -> Boolean
+  mappingTypeOf : % -> Union(SpadMappingType(%), "failed")
+  namedType? : % -> Boolean
+  namedTypeOf : % -> Union(SpadNamedType(%), "failed")
+  recordType? : % -> Boolean
+  recordTypeOf : % -> Union(SpadRecordType(%), "failed")
+  segment? : % -> Boolean
+  segmentOf : % -> Union(SpadSegment(%), "failed")
+  sequence? : % -> Boolean
+  sequenceOf : % -> Union(SpadSequence(%), "failed")
+  string? : % -> Boolean
+  stringOf : % -> Union(String, "failed")
+  sumType? : % -> Boolean
+  sumTypeOf : % -> Union(SpadSumType(%), "failed")
+  symbol? : % -> Boolean
+  symbolOf : % -> Union(Symbol, "failed")
+  typeExpr? : % -> Boolean
+  typeExprOf : % -> Union(SpadTypeExpr(%), "failed")
+  unionType? : % -> Boolean
+  unionTypeOf : % -> Union(SpadUnionType(%), "failed")
