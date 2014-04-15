@@ -69,16 +69,17 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
       pile [hconcat["{", pile ts], "}"]
 
 )abbrev domain SPTNAMED SpadNamedType
-SpadNamedType(T : SpadNodeCategory) : ParsableCategory with
+SpadNamedType(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "type") -> T
-    construct : (Symbol, T) -> %
+    elt : (%, "type") -> N
+    construct : (Symbol, N) -> %
       ++ construct(name,type)
     construct : Symbol -> %
       ++ construct(name)
   == add
-    Rep := Record(n_name : Symbol, n_type : T)
+    Rep := Record(n_name : Symbol, n_type : N)
 
+    import SExpression
     import ParserTools
 
     elt(x, "name") == x.n_name
@@ -90,18 +91,18 @@ SpadNamedType(T : SpadNodeCategory) : ParsableCategory with
     parse ex ==
       -- (: field Type)
       var? ex =>
-        [ symbol ex.2, (parse ex.3) $ T ]
+        [symbol ex.2, parseNonNull ex.3]
       symbol? ex =>
-        [ symbol ex ]
+        [symbol ex]
 
       signature? ex =>
         -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
         -- (SIGNATURE name Type constant)
-        res : T := parse(car ex.3)
-        targs : List(T) := if #ex = 3
-          then [ parse e for e in destruct(cdr ex.3) ]
-          else [ parse ex.4 ]
-        [ symbol ex.2, [[targs, res] $ SpadMappingType(T)] ]
+        res : N := parse car ex.3
+        targs : List(N) := if #ex = 3
+          then [parse e for e in destruct cdr ex.3]
+          else [parse ex.4 ]
+        [symbol ex.2, [[targs, res] $ SpadMappingType(N)]]
 
       error "Cannot parse named type!"
 
@@ -586,23 +587,16 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
     parse_arg(s, t) ==
       string? s =>
         string s
-      construct(symbol s, parse t)
+      [symbol s, parseNonNull t]
 
     parse ex ==
-      -- print (hconcat ["function: ", ex :: OutputForm])
-
-      function? ex =>
-        fname := symbol car(ex.2)
-        arg_names := destruct cdr(ex.2)
-        arg_types := destruct cdr(ex.3)
-        fargs := [ parse_arg(s, t) for s in arg_names for t in arg_types ]
-        ftype := car ex.3
-        fbody := convert [ex.5]
-        construct(fname, fargs, parse ftype, parse fbody)
-
-      print "------"
-      print (ex :: OutputForm)
-      error "not a function"
+      fname := symbol car(ex.2)
+      arg_names := destruct cdr(ex.2)
+      arg_types := destruct cdr(ex.3)
+      fargs := [ parse_arg(s, t) for s in arg_names for t in arg_types ]
+      ftype := car ex.3
+      fbody := convert [ex.5]
+      [fname, fargs, parseNonNull ftype, parse fbody]
 
     coerce fn ==
       fargs := [ arg :: OutputForm for arg in fn.fn_args ]
@@ -619,13 +613,13 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
 SpadMacro(N : SpadNodeCategory) : ParsableCategory with
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List Symbol
-    elt : (%, "body") -> SExpression
-    construct : (Symbol, List Symbol, SExpression) -> %
+    elt : (%, "body") -> N
+    construct : (Symbol, List Symbol, N) -> %
       ++ construct(name,args,exp)
   == add
     Rep := Record(md_name : Symbol,
                   md_args : List Symbol,
-                  md_body : SExpression)
+                  md_body : N)
 
     import OutputForm
     import ParserTools
@@ -638,17 +632,10 @@ SpadMacro(N : SpadNodeCategory) : ParsableCategory with
       [mname, margs, mbody]$Rep
 
     parse ex ==
-      --print (hconcat ["macro: ", ex :: OutputForm])
-
-      macro? ex =>
-        mname := symbol car(ex.2)
-        margs := [ symbol s for s in destruct(cdr(ex.2)) ]
-        mbody := ex.5
-        construct(mname, margs, mbody)
-
-      print "------"
-      print (ex :: OutputForm)
-      error "not a macro definition"
+      mname := symbol car(ex.2)
+      margs := [ symbol s for s in destruct(cdr(ex.2)) ]
+      mbody : N := parse ex.5
+      [mname, margs, mbody]
 
     coerce m ==
       margs := 
@@ -697,7 +684,7 @@ SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
       fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
       fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
       fcapsule := convert cons(convert 'SEQ, destruct cdr fcapsule)
-      construct(fname, fargs, parse ftype, parse fextends, parse fcapsule)
+      [fname, fargs, parse ftype, parseNonNull fextends, parse fcapsule]
 
     coerce f ==
       blankSeparate(
@@ -788,6 +775,10 @@ SpadNode() : SpadNodeCategory == add
     construct (n : Integer) : % == [n]$Rep
     construct (n : String) : % == [n]$Rep
     construct (n : Symbol) : % == [n]$Rep
+
+    parseNonNull ex ==
+      null? ex => emptyNode()
+      parse ex
 
     parse ex ==
       -- print (hconcat ["expression: ", ex :: OutputForm])

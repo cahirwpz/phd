@@ -67,3 +67,5 @@ SpadNodeCategory() : Category == ParsableCategory with
   typeExprOf : % -> Union(SpadTypeExpr(%), "failed")
   unionType? : % -> Boolean
   unionTypeOf : % -> Union(SpadUnionType(%), "failed")
+
+  parseNonNull : SExpression -> %

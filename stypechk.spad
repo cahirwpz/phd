@@ -139,8 +139,7 @@ SpadTreeMacroExpander() : Exports == Implementation where
   N ==> SpadNode
   F ==> SpadFunctor
   M ==> SpadMacro(N)
-  MD ==> Record(m_name : Symbol, m_arity : NonNegativeInteger)
-  AL ==> AssociationList(MD, M)
+  AL ==> AssociationList(Symbol, M)
 
   Exports ==> Type with 
     init : () -> Void
@@ -159,15 +158,14 @@ SpadTreeMacroExpander() : Exports == Implementation where
 
     addMacro : M -> Void
     addMacro m ==
-      key := [m.name, #m.args]$MD
       ctx := top env
-      ctx(key) := m
+      ctx(m.name) := m
 
-    findMacro : MD -> Union(M, "failed")
-    findMacro md ==
+    findMacro : Symbol -> Union(M, "failed")
+    findMacro name ==
       for ctx in parts env repeat
-        if key?(md, ctx) then
-          return ctx(md)
+        if key?(name, ctx) then
+          return ctx(name)
       "failed"
 
     init () ==
@@ -176,7 +174,7 @@ SpadTreeMacroExpander() : Exports == Implementation where
     rewrite (n : N) : N ==
       ftor := functorOf n
       ftor case SpadFunctor(N) =>
-        [[ftor.name, ftor.args, ftor.type, ftor.extends, rewrite ftor.capsule] $ SpadFunctor(N)]
+        [[ftor.name, ftor.args, rewrite ftor.type, rewrite ftor.extends, rewrite ftor.capsule] $ SpadFunctor(N)]
 
       sum := sumTypeOf n
       sum case SpadSumType(N) =>
@@ -220,10 +218,17 @@ SpadTreeMacroExpander() : Exports == Implementation where
       apply case SpadApply(N) =>
         funsym := symbolOf apply.function
         if funsym case Symbol then
-          m := findMacro [funsym :: Symbol, #apply.args]
-          if m case M and #apply.args > 0 then
-            print "Parametrized macros not supported!"
-            return n
+          m := findMacro (funsym :: Symbol)
+          if m case M then
+            #apply.args ~= #m.args =>
+              error(["Wrong number of arguments (", #apply.args, ") ",
+                     "passed to macro", m.name, "/", #m.args])
+            newCtx ()
+            for m_arg in m.args for arg in apply.args repeat
+              addMacro ([m_arg, [], arg] $ SpadMacro(N))
+            apply' := rewrite m.body
+            discardCtx()
+            return apply'
         [[rewrite apply.function, [rewrite arg for arg in apply.args]] $ SpadApply(N)]
 
       assign := assignOf n
@@ -278,9 +283,11 @@ SpadTreeMacroExpander() : Exports == Implementation where
 
       sym := symbolOf n
       sym case Symbol =>
-        m := findMacro [sym :: Symbol, 0]
+        m := findMacro (sym :: Symbol)
         m case "failed" => n
-        rewrite parse m.body
+        #m.args ~= 0 =>
+          error ["Attempted to apply arguments to parameterless macro ", m.name]
+        rewrite m.body
 
       -- no need to rewrite float, integer and string values
       -- just return unchanged
@@ -301,9 +308,9 @@ SpadTypeChecker() : with
     import SpadTreeMacroExpander
 
     check e ==
-      --print (e :: OutputForm)
+      init()
+      -- print (e :: OutputForm)
       n : SpadNode := parse e
       print (n :: OutputForm)
-      init()
-      n' := rewrite n 
-      print (n' :: OutputForm)
+      n := rewrite n 
+      print (n :: OutputForm)
