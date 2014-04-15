@@ -1,40 +1,6 @@
 )boot $LINELENGTH := 180
 )compile ParserTools.spad
 )compile SpadCategories.spad
-
-)abbrev package OUTFHELP OutputFormHelper
-++ Helper function for output form printing
-OutputFormHelper() : with
-    separateBy : (List OutputForm, OutputForm) -> OutputForm
-    spaces : List OutputForm -> OutputForm
-  == add
-    import OutputForm
-    import Integer
-
-    separateBy (l, sep) ==
-      empty? l => ""
-      max_width := "max"/[width i for i in l]
-      if max_width >= _$LINELENGTH$Lisp
-        then
-          j := 0
-          nl := #l - 1
-          res := []
-          for i in l repeat
-            res :=
-              if j < nl
-                then [hconcat [i, sep], :res]
-                else [i, :res]
-            j := j + 1
-          pile (reverse res)
-        else
-          res := [first l]
-          for i in rest l repeat
-            res := [i, sep, :res]
-          hconcat (reverse res)
-
-    spaces l ==
-      separateBy(l, " ")
-
 )compile SpadType.spad
 )compile SpadNode.spad
 

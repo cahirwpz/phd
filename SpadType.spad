@@ -17,6 +17,7 @@ SpadFunctorType(T : SpadTypeCategory) : ParsableCategory with
       [ symbol car ex, fargs ]
 
     coerce ftor ==
+      -- handle attribute as functor
       ftor.name = 'ATTRIBUTE => (first ftor.args) :: OutputForm
       fname := ftor.name :: OutputForm
       fargs := [ t :: OutputForm for t in ftor.args ]
@@ -52,13 +53,16 @@ SpadMappingType(T : SpadTypeCategory) : ParsableCategory with
       hconcat [src, " -> ", mpt.type :: OutputForm]
 
 )abbrev domain SPTSUM SpadSumType
-SpadSumType(T : SpadTypeCategory) : ParsableCategory with
+SpadSumType(T : SpadTypeCategory) : Exports == Implementation where
+  K ==> Union("join", "domain", "package", "list")
+
+  Exports ==> ParsableCategory with
     elt : (%, "types") -> List(T)
-    elt : (%, "kind") -> Union("join", "domain", "package", "list")
-    construct : (Union("join", "domain", "package", "list"), List(T)) -> %
-  == add
-    Rep :=
-      Record(s_kind : Union("join", "domain", "package", "list"), s_types : List(T))
+    elt : (%, "kind") -> K
+    construct : (K, List(T)) -> %
+
+  Implementation ==> add
+    Rep := Record(s_kind : K, s_types : List(T))
 
     import ParserTools
 
@@ -133,13 +137,17 @@ SpadNamedType(T : SpadTypeCategory) : ParsableCategory with
       hconcat [t.name :: OutputForm, " : ", typename]
 
 )abbrev domain SPTREC SpadRecordType
-SpadRecordType(T : SpadTypeCategory) : ParsableCategory with
-    elt : (%, "fields") -> List SpadNamedType(T)
-    construct : List SpadNamedType(T) -> %
-  == add
-    Rep := List SpadNamedType(T)
+SpadRecordType(T : SpadTypeCategory) : Exports == Implementation where
+  F ==> SpadNamedType(T)
 
-    elt(x, "fields") == x pretend List SpadNamedType(T)
+  Exports ==> ParsableCategory with
+    elt : (%, "fields") -> List F
+    construct : List F -> %
+
+  Implementation ==> add
+    Rep := List F
+
+    elt(x, "fields") == x pretend List F
 
     construct fl == fl pretend %
 
@@ -151,19 +159,23 @@ SpadRecordType(T : SpadTypeCategory) : ParsableCategory with
       hconcat ["Record", paren [f :: OutputForm for f in rect]]
 
 )abbrev domain SPTUNION SpadUnionType
-SpadUnionType(T : SpadTypeCategory) : ParsableCategory with
-    elt : (%, "variants") -> List Union(T, SpadNamedType(T))
-    construct : List Union(T, SpadNamedType(T)) -> %
-  == add
-    Rep := List Union(T, SpadNamedType(T))
+SpadUnionType(T : SpadTypeCategory) : Exports == Implementation where
+  V ==> Union(T, SpadNamedType(T))
+
+  Exports ==> ParsableCategory with
+    elt : (%, "variants") -> List V
+    construct : List V -> %
+
+  Implementation ==> add
+    Rep := List V
 
     import ParserTools
 
-    elt(x, "variants") == x pretend List Union(T, SpadNamedType(T))
+    elt(x, "variants") == x pretend List V
 
     construct fl == fl pretend %
 
-    parseUnionField : SExpression -> Union(T, SpadNamedType(T))
+    parseUnionField : SExpression -> V
     parseUnionField s ==
       var? s => construct(symbol s.2, parse s.3) $ SpadNamedType(T)
       (parse s) $ T
@@ -173,7 +185,7 @@ SpadUnionType(T : SpadTypeCategory) : ParsableCategory with
       -- (Union Type1 Type2 ...)
       construct [parseUnionField e for e in destruct cdr ex]
 
-    coerce_field : Union(T, SpadNamedType(T)) -> OutputForm
+    coerce_field : V -> OutputForm
     coerce_field f ==
       f case T => (f :: T) :: OutputForm
       (f :: SpadNamedType(T)) :: OutputForm
@@ -192,7 +204,7 @@ SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
                  named : SpadNamedType(%),
                  singleton : String,
                  expression : N,
-                 unknown : "unknown")
+                 unknown : "$UnknownType")
 
     import ParserTools
     import OutputForm
@@ -206,7 +218,7 @@ SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
     construct (t : SpadNamedType(%)) : % == [t]$Rep
 
     unknownType? t == t case unknown
-    unknownType == ["unknown"]
+    unknownType == ["$UnknownType"]
 
     sumTypeOf t == if t case sum then t.sum else "failed"
     recordTypeOf t == if t case record then t.record else "failed"
@@ -219,11 +231,11 @@ SpadType(N : SpadNodeCategory) : SpadTypeCategory == add
     parse ex ==
       --print (hconcat ["type: ", ex :: OutputForm])
 
-      null? ex => ["unknown"]
+      null? ex => unknownType
       string? ex => [string ex]
       symbol? ex =>
         s := symbol ex
-        -- BUG: czemu nie dziala to:
+        -- BUG: this doesn't work and no warning is issued...
         -- if s = '$ then s := '%
         if s = '$ then s := coerce "%"
         [[s, []] $ SpadFunctorType(%)]
