@@ -23,49 +23,53 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : Symbol -> %
 
   emptyNode : () -> %
-  emptyNode? : % -> Boolean
 
   apply? : % -> Boolean
-  applyOf : % -> Union(SpadApply(%), "failed")
   assign? : % -> Boolean
-  assignOf : % -> Union(SpadAssign(%), "failed")
   conditional? : % -> Boolean
-  conditionalOf: % -> Union(SpadConditional(%), "failed")
+  emptyNode? : % -> Boolean
   float? : % -> Boolean
-  floatOf : % -> Union(DoubleFloat, "failed")
   function? : % -> Boolean
-  functionOf : % -> Union(SpadFunction(%), "failed")
   functor? : % -> Boolean
-  functorOf : % -> Union(SpadFunctor(%), "failed")
   import? : % -> Boolean
-  importOf : % -> Union(SpadImport(%), "failed")
   integer? : % -> Boolean
-  integerOf : % -> Union(Integer, "failed")
   lambda? : % -> Boolean
-  lambdaOf : % -> Union(SpadLambda(%), "failed")
   loop? : % -> Boolean
-  loopOf : % -> Union(SpadLoop(%), "failed")
   macro? : % -> Boolean
-  macroOf : % -> Union(SpadMacro(%), "failed")
   mappingType? : % -> Boolean
-  mappingTypeOf : % -> Union(SpadMappingType(%), "failed")
   namedType? : % -> Boolean
-  namedTypeOf : % -> Union(SpadNamedType(%), "failed")
   recordType? : % -> Boolean
-  recordTypeOf : % -> Union(SpadRecordType(%), "failed")
   segment? : % -> Boolean
-  segmentOf : % -> Union(SpadSegment(%), "failed")
   sequence? : % -> Boolean
-  sequenceOf : % -> Union(SpadSequence(%), "failed")
   string? : % -> Boolean
-  stringOf : % -> Union(String, "failed")
   sumType? : % -> Boolean
-  sumTypeOf : % -> Union(SpadSumType(%), "failed")
   symbol? : % -> Boolean
-  symbolOf : % -> Union(Symbol, "failed")
   typeExpr? : % -> Boolean
-  typeExprOf : % -> Union(SpadTypeExpr(%), "failed")
   unionType? : % -> Boolean
-  unionTypeOf : % -> Union(SpadUnionType(%), "failed")
+
+  coerce : % -> DoubleFloat
+  coerce : % -> Integer
+  coerce : % -> SpadApply(%)
+  coerce : % -> SpadAssign(%)
+  coerce : % -> SpadConditional(%)
+  coerce : % -> SpadFunction(%)
+  coerce : % -> SpadFunctor(%)
+  coerce : % -> SpadImport(%)
+  coerce : % -> SpadLambda(%)
+  coerce : % -> SpadLoop(%)
+  coerce : % -> SpadMacro(%)
+  coerce : % -> SpadMappingType(%)
+  coerce : % -> SpadNamedType(%)
+  coerce : % -> SpadRecordType(%)
+  coerce : % -> SpadSegment(%)
+  coerce : % -> SpadSequence(%)
+  coerce : % -> SpadSumType(%)
+  coerce : % -> SpadTypeExpr(%)
+  coerce : % -> SpadUnionType(%)
+  coerce : % -> String
+  coerce : % -> Symbol
+
+  value? : % -> Boolean
+  constructor? : Symbol -> Boolean
 
   parseNonNull : SExpression -> %

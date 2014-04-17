@@ -232,11 +232,12 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
       fun := apply.function
       argl := [ a :: OutputForm for a in apply.args ]
 
-      funsym := symbolOf fun
-      funsym case "failed" =>
+      not symbol? fun =>
         funof := fun :: OutputForm
         #argl = 0 => funof
         hconcat [paren funof, paren argl]
+
+      funsym := fun :: Symbol
 
       funsym = 'QUOTE =>
         hconcat ["'", :argl]
@@ -254,15 +255,15 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
                           opstr :: OutputForm,
                           argl.2 :: OutputForm])
 
-      -- finally, every other function call
-      hconcat [funsym :: OutputForm, paren argl]
-
       -- handle attribute as functor
-      --ftor.name = 'ATTRIBUTE => (first ftor.args) :: OutputForm
-      --fname := ftor.name :: OutputForm
-      --fargs := [ t :: OutputForm for t in ftor.args ]
-      --empty? fargs => fname
-      --hconcat [ fname, paren fargs ]
+      funsym = 'ATTRIBUTE =>
+        argl.1 :: OutputForm
+
+      -- finally, process the application
+      fname := funsym :: OutputForm
+      (constructor? funsym) and (empty? argl) =>
+        fname
+      hconcat [fname, paren argl]
 
 )abbrev domain SPSEG SpadSegment
 SpadSegment(N : SpadNodeCategory) : ParsableCategory with
@@ -292,8 +293,7 @@ SpadSegment(N : SpadNodeCategory) : ParsableCategory with
       ofs : List OutputForm := [ rstart, ".." ]
       if not(range.end case "infinity") then
         ofs := concat(ofs, [rend])
-      i := integerOf range.step
-      if (i case Integer) and i ~= 1 then
+      if integer? range.step and (range.step :: Integer) ~= 1 then
         ofs := concat(ofs, ["by", rstep])
       infix(" ", ofs)
 
@@ -708,8 +708,8 @@ SpadNode() : SpadNodeCategory == add
                  record : SpadRecordType(%),
                  segment : SpadSegment(%),
                  seq : SpadSequence(%),
-                 functor : SpadFunctor(%),
-                 sfunction : SpadFunction(%),
+                 ftor : SpadFunctor(%),
+                 func : SpadFunction(%),
                  simport : SpadImport(%),
                  smacro : SpadMacro(%),
                  sum : SpadSumType(%),
@@ -724,34 +724,123 @@ SpadNode() : SpadNodeCategory == add
     import SExpression
     import ParserTools
 
-    applyOf n == if n case apply then n.apply else "failed"
-    assignOf n == if n case assign then n.assign else "failed"
-    conditionalOf n == if n case cond then n.cond else "failed"
-    functionOf n == if n case sfunction then n.sfunction else "failed"
-    functorOf n == if n case functor then n.functor else "failed"
-    importOf n == if n case simport then n.simport else "failed"
-    lambdaOf n == if n case lambda then n.lambda else "failed"
-    loopOf n == if n case loop then n.loop else "failed"
-    macroOf n == if n case smacro then n.smacro else "failed"
-    mappingTypeOf t == if t case mapping then t.mapping else "failed"
-    namedTypeOf t == if t case named then t.named else "failed"
-    recordTypeOf t == if t case record then t.record else "failed"
-    segmentOf n == if n case segment then n.segment else "failed"
-    sequenceOf n == if n case seq then n.seq else "failed"
-    sumTypeOf t == if t case sum then t.sum else "failed"
-    typeExprOf n == if n case typeexpr then n.typeexpr else "failed"
-    unionTypeOf t == if t case union then t.union else "failed"
-
-    floatOf n == if n case dfloat then n.dfloat else "failed"
-    integerOf n == if n case integer then n.integer else "failed"
-    symbolOf n == if n case symbol then n.symbol else "failed"
-    stringOf n == if n case string then n.string else "failed"
-
-    symbol? n == n case symbol
+    apply? n == n case apply
+    assign? n == n case assign
+    conditional? n == n case cond
+    float? n == n case dfloat
+    function? n == n case func
+    functor? n == n case ftor
+    import? n == n case simport
+    integer? n == n case integer
+    lambda? n == n case lambda
+    loop? n == n case loop 
+    macro? n == n case smacro 
+    mappingType? n == n case mapping 
+    namedType? n == n case named
+    recordType? n == n case record
+    segment? n == n case segment 
     sequence? n == n case seq
+    string? n == n case string
+    sumType? n == n case sum
+    symbol? n == n case symbol
+    typeExpr? n == n case typeexpr
+    unionType? n == n case union
+
+    CoerceError(t) ==>
+      error ["Cannot coerce SpadNode to", t, "!"]
+
+    coerce (n : %) : SpadApply(%) ==
+      apply? n => n.apply
+      CoerceError("SpadApply")
+
+    coerce (n : %) : SpadAssign(%) ==
+      assign? n => n.assign
+      CoerceError("SpadAssign")
+
+    coerce (n : %) : SpadConditional(%) ==
+      conditional? n => n.cond
+      CoerceError("SpadConditional")
+
+    coerce (n : %) : SpadFunction(%) ==
+      function? n => n.func
+      CoerceError("SpadFunction")
+
+    coerce (n : %) : SpadFunctor(%) ==
+      functor? n => n.ftor
+      CoerceError("SpadFunctor")
+
+    coerce (n : %) : SpadImport(%) ==
+      import? n => n.simport
+      CoerceError("SpadImport")
+
+    coerce (n : %) : SpadLambda(%) == 
+      lambda? n => n.lambda
+      CoerceError("SpadLambda")
+
+    coerce (n : %) : SpadLoop(%) ==
+      loop? n => n.loop
+      CoerceError("SpadLoop")
+
+    coerce (n : %) : SpadMacro(%) ==
+      macro? n => n.smacro
+      CoerceError("SpadMacro")
+
+    coerce (n : %) : SpadMappingType(%) == 
+      mappingType? n => n.mapping
+      CoerceError("SpadMappingType")
+
+    coerce (n : %) : SpadNamedType(%) ==
+      namedType? n => n.named
+      CoerceError("SpadNamedType")
+
+    coerce (n : %) : SpadRecordType(%) ==
+      recordType? n => n.record
+      CoerceError("SpadRecordType")
+
+    coerce (n : %) : SpadSegment(%) ==
+      segment? n => n.segment
+      CoerceError("SpadSegment")
+
+    coerce (n : %) : SpadSequence(%) ==
+      sequence? n => n.seq
+      CoerceError("SpadSequence")
+
+    coerce (n : %) : SpadSumType(%) ==
+      sumType? n => n.sum
+      CoerceError("SpadSumType")
+
+    coerce (n : %) : SpadTypeExpr(%) ==
+      typeExpr? n => n.typeexpr
+      CoerceError("SpadTypeExpr")
+
+    coerce (n : %) : SpadUnionType(%) ==
+      unionType? n => n.union
+      CoerceError("SpadUnionType")
+
+    coerce (n : %) : DoubleFloat ==
+      float? n => n.dfloat
+      CoerceError("DoubleFloat")
+
+    coerce (n : %) : Integer ==
+      integer? n => n.integer
+      CoerceError("Integer")
+
+    coerce (n : %) : Symbol ==
+      symbol? n => n.symbol
+      CoerceError("Symbol")
+
+    coerce (n : %) : String == 
+      string? n => n.string
+      CoerceError("String")
 
     emptyNode () == ["$EmptyNode"]$Rep
     emptyNode? n == n case empty
+
+    value? n == float? n or integer? n or string? n or symbol? n
+
+    constructor? s ==
+      sex : SExpression := GETDATABASE(s, 'ABBREVIATION)$Lisp
+      not null? sex
 
     construct (n : SpadApply(%)) : % == [n]$Rep
     construct (n : SpadAssign(%)) : % == [n]$Rep
@@ -884,28 +973,28 @@ SpadNode() : SpadNodeCategory == add
       print (ex :: OutputForm)
       error "SExpression not handled!"
 
-    coerce ex ==
-      ex case apply => ex.apply :: OutputForm
-      ex case assign => ex.assign :: OutputForm
-      ex case cond => ex.cond :: OutputForm
-      ex case functor => ex.functor :: OutputForm
-      ex case lambda => ex.lambda :: OutputForm
-      ex case loop => ex.loop :: OutputForm
-      ex case mapping => ex.mapping :: OutputForm
-      ex case named => ex.named :: OutputForm
-      ex case record => ex.record :: OutputForm
-      ex case segment => ex.segment :: OutputForm
-      ex case seq => ex.seq :: OutputForm
-      ex case sfunction => ex.sfunction :: OutputForm
-      ex case simport => ex.simport :: OutputForm
-      ex case smacro => ex.smacro :: OutputForm
-      ex case sum => ex.sum :: OutputForm
-      ex case typeexpr => ex.typeexpr :: OutputForm
-      ex case union => ex.union :: OutputForm
-      ex case string => ex.string :: OutputForm
-      ex case symbol => ex.symbol :: OutputForm
-      ex case dfloat => ex.dfloat :: OutputForm
-      ex case integer => ex.integer :: OutputForm
-      ex case empty => ""
+    coerce (n : %) : OutputForm ==
+      apply? n => (n :: SpadApply(%)) :: OutputForm
+      assign? n => (n :: SpadAssign(%)) :: OutputForm
+      conditional? n => (n :: SpadConditional(%)) :: OutputForm
+      float? n => (n :: DoubleFloat) :: OutputForm
+      function? n => (n :: SpadFunction(%)) :: OutputForm
+      functor? n => (n :: SpadFunctor(%)) :: OutputForm
+      import? n => (n :: SpadImport(%)) :: OutputForm
+      integer? n => (n :: Integer) :: OutputForm
+      lambda? n => (n :: SpadLambda(%)) :: OutputForm
+      loop? n => (n :: SpadLoop(%)) :: OutputForm
+      macro? n => (n :: SpadMacro(%)) :: OutputForm
+      mappingType? n => (n :: SpadMappingType(%)) :: OutputForm
+      namedType? n => (n :: SpadNamedType(%)) :: OutputForm
+      recordType? n => (n :: SpadRecordType(%)) :: OutputForm
+      segment? n => (n :: SpadSegment(%)) :: OutputForm
+      sequence? n => (n :: SpadSequence(%)) :: OutputForm
+      string? n => (n :: String) :: OutputForm
+      sumType? n => (n :: SpadSumType(%)) :: OutputForm
+      symbol? n => (n :: Symbol) :: OutputForm
+      typeExpr? n => (n :: SpadTypeExpr(%)) :: OutputForm
+      unionType? n => (n :: SpadUnionType(%)) :: OutputForm
+      emptyNode? n => ""
 
       error "coerce $ SpadNode: variant not handled!"

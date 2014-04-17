@@ -1,4 +1,4 @@
-)boot $LINELENGTH := 180
+)boot $LINELENGTH := 360
 )compile ParserTools.spad
 )compile SpadNodeCategory.spad
 )compile SpadNode.spad
@@ -134,20 +134,166 @@ SpadDatabase() : with
       null? sex => error "Unknown constructor!"
       sex pretend String
 
+)abbrev category STWALKC SpadTreeWalkerCategory
+SpadTreeWalkerCategory() : Category == Definition where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  ASS ==> SpadAssign(N)
+  CN ==> SpadConditional(N)
+  FN ==> SpadFunction(N)
+  FT ==> SpadFunctor(N)
+  IM ==> SpadImport(N)
+  LAM ==> SpadLambda(N)
+  LP ==> SpadLoop(N)
+  M ==> SpadMacro(N)
+  MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
+  RT ==> SpadRecordType(N)
+  SEG ==> SpadSegment(N)
+  SEQ ==> SpadSequence(N)
+  ST ==> SpadSumType(N)
+  TE ==> SpadTypeExpr(N)
+  UT ==> SpadUnionType(N)
+
+  Definition ==> with
+      gensym : () -> Symbol
+
+      rewrite : APP -> N
+      rewrite : ASS -> N
+      rewrite : CN -> N
+      rewrite : FN -> N
+      rewrite : FT -> N
+      rewrite : IM -> N
+      rewrite : LAM -> N
+      rewrite : LP -> N
+      rewrite : M -> N
+      rewrite : MT -> N
+      rewrite : NT -> N
+      rewrite : RT -> N
+      rewrite : SEG -> N
+      rewrite : SEQ -> N
+      rewrite : String -> N
+      rewrite : ST -> N
+      rewrite : Symbol -> N
+      rewrite : TE -> N
+      rewrite : UT -> N
+      rewrite : N -> N 
+    add
+      gensym() ==
+        GENSYM()$Lisp
+
+      rewrite (a : APP) : N ==
+        [[rewrite a.function, [rewrite arg for arg in a.args]] $ APP]
+
+      rewrite (a : ASS) : N ==
+        [[rewrite a.lvalue, rewrite a.rvalue] $ ASS]
+
+      rewrite (cn : CN) : N ==
+        f : Union(N, "empty")
+        c := rewrite cn.cond
+        t := rewrite cn.truebr
+        f := (cn.falsebr case N => rewrite (cn.falsebr :: N); "empty")
+        [[c, t, f] $ CN]
+
+      rewrite (fn : FN) : N ==
+        argl : List Union(String, NT) := []
+        for arg in fn.args repeat
+          argl := if arg case NT
+            then [[arg.name, rewrite arg.type], :argl]
+            else [arg, :argl]
+        [[fn.name, reverse argl, rewrite fn.type, rewrite fn.body] $ FN]
+
+      rewrite (ft : FT) : N ==
+        [[ft.name, ft.args, rewrite ft.type, rewrite ft.extends, rewrite ft.capsule] $ FT]
+
+      rewrite (im : IM) : N ==
+        [[rewrite im.type] $ IM]
+
+      rewrite (l : LAM) : N ==
+        [[l.args, rewrite l.type, rewrite l.body] $ LAM]
+
+      rewrite (lp : LP) : N ==
+        -- BUG: parser cannot accept a multi-line list constructor
+        nitors : List SpadIterator(N) :=
+          [[itor.var, rewrite itor.seq] for itor in lp.itors]
+        nguards := [rewrite guard for guard in lp.guards]
+        [[lp.kind, nitors, nguards, rewrite lp.body] $ LP]
+
+      rewrite (m : M) : N == [m]
+
+      rewrite (mt : MT) : N ==
+        [[[rewrite arg for arg in mt.args], rewrite mt.type] $ MT]
+
+      rewrite (nt : NT) : N ==
+        [[nt.name, rewrite nt.type] $ NT]
+
+      rewrite (rt : RT) : N ==
+        [[[[f.name, rewrite f.type] for f in rt.fields]] $ RT]
+
+      rewrite (seg : SEG) : N ==
+        b := rewrite seg.start
+        s := rewrite seg.step
+        nseg : SEG :=
+          seg.end case "infinity" => [b, s]
+          [b, rewrite (seg.end :: N), s]
+        [nseg]
+
+      rewrite (s : SEQ) : N ==
+        [[s.kind, [rewrite e for e in s.list]] $ SEQ]
+
+      rewrite (s : String) : N == [s]
+
+      rewrite (st : ST) : N ==
+        [[st.kind, [rewrite t for t in st.types]] $ ST]
+
+      rewrite (s : Symbol) : N == [s]
+
+      rewrite (te : TE) : N ==
+        [[te.kind, rewrite te.expr, rewrite te.type] $ TE]
+
+      rewrite (ut : UT) : N ==
+        varl : List Union(N, NT) := []
+        for var in ut.variants repeat
+          var case N =>
+            varl := [rewrite var, :varl]
+          var case NT =>
+            varl := [[var.name, rewrite var.type], :varl]
+        [[reverse varl] $ UT]
+
+      rewrite (n : N) : N ==
+        apply? n => rewrite (n :: APP)
+        assign? n => rewrite (n :: ASS)
+        conditional? n => rewrite (n :: CN)
+        function? n => rewrite (n :: FN)
+        functor? n => rewrite (n :: FT)
+        import? n => rewrite (n :: IM)
+        lambda? n => rewrite (n :: LAM)
+        loop? n => rewrite (n :: LP)
+        macro? n => rewrite (n :: M)
+        mappingType? n => rewrite (n :: MT)
+        namedType? n => rewrite (n :: NT)
+        recordType? n => rewrite (n :: RT)
+        segment? n => rewrite (n :: SEG)
+        sequence? n => rewrite (n :: SEQ)
+        string? n => rewrite (n :: String)
+        sumType? n => rewrite (n :: ST)
+        symbol? n => rewrite (n :: Symbol)
+        typeExpr? n => rewrite (n :: TE)
+        unionType? n => rewrite (n :: UT)
+        -- skip integer, float and empty node
+        integer? n or float? n or emptyNode? n => n
+        error "rewrite: variant not handled"
+
 )abbrev package STMEXP SpadTreeMacroExpander
 SpadTreeMacroExpander() : Exports == Implementation where
   N ==> SpadNode
-  F ==> SpadFunctor
   M ==> SpadMacro(N)
   AL ==> AssociationList(Symbol, M)
 
-  Exports ==> Type with 
+  Exports ==> SpadTreeWalkerCategory with 
     init : () -> Void
-    rewrite : N -> N 
 
   Implementation ==> add
-    import OutputForm
-
     env : Stack AL := stack [table()]
 
     newCtx : () -> Void
@@ -171,127 +317,75 @@ SpadTreeMacroExpander() : Exports == Implementation where
     init () ==
       env := stack [table()]
 
-    rewrite (n : N) : N ==
-      ftor := functorOf n
-      ftor case SpadFunctor(N) =>
-        [[ftor.name, ftor.args, rewrite ftor.type, rewrite ftor.extends, rewrite ftor.capsule] $ SpadFunctor(N)]
+    rewrite (seq : SpadSequence(N)) : N ==
+      newCtx()
+      seq' := [[seq.kind, [rewrite ex for ex in seq.list]] $ SpadSequence(N)]
+      --print (env :: OutputForm)
+      discardCtx()
+      seq'
 
-      sum := sumTypeOf n
-      sum case SpadSumType(N) =>
-        [[sum.kind, [rewrite typ for typ in sum.types]] $ SpadSumType(N)]
+    rewrite (app : SpadApply(N)) : N ==
+      if symbol? app.function then
+        m := findMacro (app.function :: Symbol)
+        if m case M then
+          #app.args ~= #m.args =>
+            error(["Wrong number of arguments (", #app.args, ") ",
+                   "passed to macro", m.name, "/", #m.args])
+          newCtx ()
+          for m_arg in m.args for arg in app.args repeat
+            addMacro ([m_arg, [], arg] $ SpadMacro(N))
+          app' := rewrite m.body
+          discardCtx()
+          return app'
+      [[rewrite app.function, [rewrite arg for arg in app.args]] $ SpadApply(N)]
 
-      record := recordTypeOf n
-      record case SpadRecordType(N) =>
-        [[[[field.name, rewrite field.type] for field in record.fields]] $ SpadRecordType(N)]
-        
-      union := unionTypeOf n
-      union case SpadUnionType(N) =>
-        varl : List Union(N, SpadNamedType(N)) := []
-        for var in union.variants repeat
-          var case N =>
-            varl := [rewrite var, :varl]
-          var case SpadNamedType(N) =>
-            varl := [[var.name, rewrite var.type], :varl]
-        [[reverse varl] $ SpadUnionType(N)]
-      
-      fun := mappingTypeOf n
-      fun case SpadMappingType(N) =>
-        [[[rewrite arg for arg in fun.args], rewrite fun.type] $ SpadMappingType(N)]
+    rewrite (m : SpadMacro(N)) : N ==
+      addMacro m
+      emptyNode()
 
-      named := namedTypeOf n
-      named case SpadNamedType(N) =>
-        [[named.name, rewrite named.type] $ SpadNamedType(N)]
+    rewrite (sym : Symbol) : N ==
+      m := findMacro sym
+      m case "failed" => [sym]
+      #m.args ~= 0 =>
+        error ["Attempted to apply arguments to parameterless macro ", m.name]
+      rewrite m.body
+
+)abbrev domain STRP1 SpadTreeRewritePhase1
+SpadTreeRewritePhase1() : SpadTreeWalkerCategory == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  ASS ==> SpadAssign(N)
+  SEQ ==> SpadSequence(N)
 
-      seq := sequenceOf n
-      seq case SpadSequence(N) =>
-        newCtx()
-        seq' := [[seq.kind, [rewrite ex for ex in seq.list]] $ SpadSequence(N)]
-        --print (env :: OutputForm)
-        discardCtx()
-        seq'
+  Implementation ==> add
+    -- compiler goes wild if we change the order of these functions...
+    rewrite (app : APP) : N ==
+      nexps : List(N) := []
+      nargs : List(N) := []
+      for arg in app.args repeat
+        narg := arg
+        if not value? arg then
+          narg := [gensym()]
+          nexps := [rewrite [[narg, arg] $ ASS], :nexps]
+        nargs := [rewrite narg, :nargs]
+      reverse! nexps
+      reverse! nargs
+      app' := [[rewrite app.function, nargs] $ APP]
+      empty? nexps => app'
+      [["prog", [:nexps, app']] $ SEQ]
 
-      lambda := lambdaOf n
-      lambda case SpadLambda(N) =>
-        [[lambda.args, rewrite lambda.type, rewrite lambda.body] $ SpadLambda(N)]
-
-      apply := applyOf n
-      apply case SpadApply(N) =>
-        funsym := symbolOf apply.function
-        if funsym case Symbol then
-          m := findMacro (funsym :: Symbol)
-          if m case M then
-            #apply.args ~= #m.args =>
-              error(["Wrong number of arguments (", #apply.args, ") ",
-                     "passed to macro", m.name, "/", #m.args])
-            newCtx ()
-            for m_arg in m.args for arg in apply.args repeat
-              addMacro ([m_arg, [], arg] $ SpadMacro(N))
-            apply' := rewrite m.body
-            discardCtx()
-            return apply'
-        [[rewrite apply.function, [rewrite arg for arg in apply.args]] $ SpadApply(N)]
-
-      assign := assignOf n
-      assign case SpadAssign(N) =>
-        [[rewrite assign.lvalue, rewrite assign.rvalue] $ SpadAssign(N)]
-
-      loop := loopOf n
-      loop case SpadLoop(N) =>
-        -- BUG: parser ma problemy z listami rozrzuconymi po liniach
-        nitors : List SpadIterator(N) :=
-          [[itor.var, rewrite itor.seq] for itor in loop.itors]
-        nguards := [rewrite guard for guard in loop.guards]
-        [[loop.kind, nitors, nguards, rewrite loop.body] $ SpadLoop(N)]
-
-      scond := conditionalOf n
-      scond case SpadConditional(N) =>
-        c := rewrite scond.cond
-        t := rewrite scond.truebr
-        f : Union(N, "empty") := (scond.falsebr case N => rewrite (scond.falsebr :: N); "empty")
-        [[c, t, f] $ SpadConditional(N)]
-
-      func := functionOf n
-      func case SpadFunction(N) =>
-        argl : List Union(String, SpadNamedType(N)) := []
-        for arg in func.args repeat
-          argl := if arg case SpadNamedType(N)
-            then [[arg.name, rewrite arg.type], :argl]
-            else [arg, :argl]
-        [[func.name, reverse argl, rewrite func.type, rewrite func.body] $ SpadFunction(N)]
-
-      smacro := macroOf n
-      smacro case SpadMacro(N) =>
-        addMacro smacro
-        emptyNode()
-
-      simport := importOf n
-      simport case SpadImport(N) =>
-        [[rewrite simport.type] $ SpadImport(N)]
-
-      typexpr := typeExprOf n
-      typexpr case SpadTypeExpr(N) =>
-        [[typexpr.kind, rewrite typexpr.expr, rewrite typexpr.type] $ SpadTypeExpr(N)]
-
-      segment := segmentOf n
-      segment case SpadSegment(N) =>
-        b := rewrite segment.start
-        s := rewrite segment.step
-        seg : SpadSegment(N) :=
-          segment.end case "infinity" => [b, s]
-          [b, rewrite (segment.end :: N), s]
-        [seg]
-
-      sym := symbolOf n
-      sym case Symbol =>
-        m := findMacro (sym :: Symbol)
-        m case "failed" => n
-        #m.args ~= 0 =>
-          error ["Attempted to apply arguments to parameterless macro ", m.name]
-        rewrite m.body
-
-      -- no need to rewrite float, integer and string values
-      -- just return unchanged
-      n
+    rewrite (seq : SEQ) : N == 
+      nodes : List(N) := [rewrite e for e in seq.list] 
+      if seq.kind = "prog" then
+        nodes' : List(N) := []
+        for node in nodes repeat
+          if sequence? node then
+            nseq := node :: SEQ
+            nseq.kind = "prog" =>
+              nodes' := concat(reverse nseq.list, nodes')
+          nodes' := [node, :nodes']
+        nodes := reverse nodes'
+      [[seq.kind, nodes] $ SEQ]
 
 )abbrev package SPTYPCHK SpadTypeChecker
 ++ Author: Krystian Baclawski
@@ -312,5 +406,5 @@ SpadTypeChecker() : with
       -- print (e :: OutputForm)
       n : SpadNode := parse e
       print (n :: OutputForm)
-      n := rewrite n 
+      n := (rewrite n) $ SpadTreeMacroExpander
       print (n :: OutputForm)
