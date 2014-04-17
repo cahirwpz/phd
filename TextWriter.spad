@@ -3,6 +3,8 @@ TextPrinter() : with
     stdout : constant -> %
 
     "<<" : (%, String) -> %
+    "<<" : (%, Integer) -> %
+    "<<" : (%, List String) -> %
 
     test : () -> Void
 
@@ -48,11 +50,19 @@ TextPrinter() : with
     cyan == csi "36m"
     white == csi "37m"
 
-    x << s == (SAY(s)$Lisp; x)
+    (x : %) << (s : String) ==
+      PRINTEXP(s, _$fricasOutput$Lisp)$Lisp
+      x
+
+    (x : %) << (i : Integer) ==
+      x << (string i)
+    (x : %) << (ls : List(String)) ==
+      for s in ls repeat
+        x << s
+      x
 
     test () ==
       stdout << "ala" << " " << "ma" << reset << " " << "kota" << eol
-      Void
 
 )abbrev category PRTCAT PrintableCategory
 PrintableCategory() : Category == with

@@ -319,10 +319,9 @@ SpadTreeMacroExpander() : Exports == Implementation where
 
     rewrite (seq : SpadSequence(N)) : N ==
       newCtx()
-      seq' := [[seq.kind, [rewrite ex for ex in seq.list]] $ SpadSequence(N)]
-      --print (env :: OutputForm)
+      seq := [seq.kind, [rewrite ex for ex in seq.list]]
       discardCtx()
-      seq'
+      [seq]
 
     rewrite (app : SpadApply(N)) : N ==
       if symbol? app.function then
@@ -333,7 +332,9 @@ SpadTreeMacroExpander() : Exports == Implementation where
                    "passed to macro", m.name, "/", #m.args])
           newCtx ()
           for m_arg in m.args for arg in app.args repeat
-            addMacro ([m_arg, [], arg] $ SpadMacro(N))
+            -- skip argument rewriting if it doesn't require renaming
+            if not(symbol? arg and (arg :: Symbol) = m_arg) then
+              addMacro ([m_arg, [], arg] $ SpadMacro(N))
           app' := rewrite m.body
           discardCtx()
           return app'

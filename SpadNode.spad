@@ -888,7 +888,7 @@ SpadNode() : SpadNodeCategory == add
 
       construct? ex =>
         lst : List % := [parse e for e in destruct cdr ex]
-        [["list", rest lst] $ SpadSequence(%)]
+        [["list", lst] $ SpadSequence(%)]
 
       lambda? ex =>
         [(parse ex) $ SpadLambda(%)]
