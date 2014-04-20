@@ -1,0 +1,151 @@
+)abbrev domain PRT Printer
+Printer() : with
+    stdout : constant -> %
+
+    print : (%, String) -> Void
+    newline : % -> Void
+    indent : (%, Integer) -> Void
+    unindent : (%, Integer) -> Void
+
+    "<<" : (%, String) -> %
+    "<<" : (%, Integer) -> %
+    "<<" : (%, Float) -> %
+  == add
+    Rep := Record(stream : SExpression,
+                  column : Integer,
+                  tabwidth : Integer,
+                  preindent : Integer)
+
+    import Character
+    import String
+
+    %stdout := [_$fricasOutput$Lisp,0,2,0]$Rep
+
+    stdout == %stdout
+
+    print(p, s) ==
+      PRINTEXP(s, p.stream)$Lisp
+
+    newline(p) ==
+      print(p, char 10 :: String)
+      p.column := p.preindent
+      if p.preindent > 0 then
+        s := new(p.preindent :: NonNegativeInteger, char " ")
+        print(p, s)
+
+    indent(p, n) ==
+      p.preindent := p.preindent + n
+
+    unindent(p, n) ==
+      n > p.preindent =>
+        p.preindent := 0
+      p.preindent := p.preindent - n
+
+    putstr : (%, String) -> %
+    putstr(p, s) ==
+      p.column := p.column + #s
+      print(p, s)
+      p
+
+    (p : %) << (s : String) ==
+      putstr(p, s)
+    (p : %) << (i : Integer) ==
+      putstr(p, string i)
+    (p : %) << (f : Float) ==
+      putstr(p, WRITE_-TO_-STRING(f :: DoubleFloat)$Lisp)
+
+)abbrev category PRTCAT PrintableCategory
+PrintableCategory() : Category == with
+  "<<" : (Printer, %) -> Printer
+
+)abbrev domain PRTCODE PrintableCode
+PrintableCode() : Exports == Implementation where
+  CODE ==> Union("eol", "reset", "bold", "underline", "italic", "inverse",
+                 "black", "red", "green", "yellow", "blue", "magenta",
+                 "cyan", "white")
+  CMD ==> Record(fn : Union("indent", "unindent"), arg : Integer)
+
+  Exports ==> PrintableCategory with
+    indent : Integer -> %
+    unindent : Integer -> %
+
+    eol : constant -> %
+    reset : constant -> %
+    bold : constant -> %
+    underline : constant -> %
+    italic : constant -> %
+    inverse : constant -> %
+    black : constant -> %
+    red : constant -> %
+    green : constant -> %
+    yellow : constant -> %
+    blue : constant -> %
+    magenta : constant -> %
+    cyan : constant -> %
+    white : constant -> %
+
+  Implementation ==> add
+    Rep := Union(ctrl : CODE, cmd : CMD)
+
+    indent x == [["indent", x]]
+    unindent x == [["unindent", x]]
+
+    eol == ["eol"]
+    reset == ["reset"]
+    bold == ["bold"]
+    underline == ["underline"]
+    italic == ["italic"]
+    inverse == ["inverse"]
+    black == ["black"]
+    red == ["red"]
+    green == ["green"]
+    yellow == ["yellow"]
+    blue == ["blue"]
+    magenta == ["magenta"]
+    cyan == ["cyan"]
+    white == ["white"]
+
+    import Character
+
+    csi : String -> String
+    csi s == concat [char 27 :: String, "[", s]
+
+    p << pc ==
+      pc case cmd =>
+        c := pc.cmd
+        c.fn case "indent" =>
+          (indent(p, c.arg); p)
+        c.fn case "unindent" => 
+          (unindent(p, c.arg); p)
+      pc case ctrl =>
+        c := pc.ctrl
+        c case "eol" =>
+          -- BUG: why parenthesis are required ?
+          (newline(p); p)
+        s : String :=
+          c case "reset" => csi "0m"
+          c case "bold" => csi "1m"
+          c case "italic" => csi "3m"
+          c case "underline" => csi "4m"
+          c case "inverse" => csi "7m"
+          c case "black" => csi "30m"
+          c case "red" => csi "31m"
+          c case "green" => csi "32m"
+          c case "yellow" => csi "33m"
+          c case "blue" => csi "34m"
+          c case "magenta" => csi "35m"
+          c case "cyan" => csi "36m"
+          c case "white" => csi "37m"
+          ""
+        print(p, s); p
+
+)abbrev package PRTTEST PrinterTest
+PrinterTest() : with
+    test : () -> Void
+  == add
+    import PrintableCode
+
+    test () ==
+      stdout << indent 2 << red << "ala" << reset << " " << "ma" << " " << green << "kota" << reset << eol
+      stdout << unindent 2 << "a" << " " << "kot" << " " << "ma" << " " << "ale" << eol
+      stdout << sqrt 2.0
