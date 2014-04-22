@@ -1,0 +1,11 @@
+)compile ParserTools.spad
+)compile SpadNode.spad
+)compile SpadDatabase.spad
+)compile SpadTreeWalker.spad
+)compile SpadTypeChecker.spad
+
+)read ncomp.boot
+)boot $LINELENGTH := 180
+)boot $PostParseHookFunction := "check"
+)boot $PostParseHookDomain := ["SpadTypeChecker"]
+)boot $PostParseHookEnable := true

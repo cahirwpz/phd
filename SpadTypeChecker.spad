@@ -1,9 +1,3 @@
-)boot $LINELENGTH := 180
-)compile ParserTools.spad
-)compile SpadNode.spad
-)compile SpadDatabase.spad
-)compile SpadTreeWalker.spad
-
 )abbrev package STCLEAN SpadTreeCleanUp
 SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
   N ==> SpadNode
