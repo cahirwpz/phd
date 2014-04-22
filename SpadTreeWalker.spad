@@ -1,0 +1,156 @@
+)abbrev category STWALKC SpadTreeWalkerCategory
+SpadTreeWalkerCategory() : Category == Definition where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  ASS ==> SpadAssign(N)
+  CN ==> SpadConditional(N)
+  FN ==> SpadFunction(N)
+  FT ==> SpadFunctor(N)
+  IM ==> SpadImport(N)
+  LAM ==> SpadLambda(N)
+  LP ==> SpadLoop(N)
+  M ==> SpadMacro(N)
+  MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
+  RT ==> SpadRecordType(N)
+  SEG ==> SpadSegment(N)
+  SEQ ==> SpadSequence(N)
+  ST ==> SpadSumType(N)
+  TE ==> SpadTypeExpr(N)
+  UT ==> SpadUnionType(N)
+  W ==> SpadWhere(N)
+
+  Definition ==> with
+      gensym : () -> Symbol
+
+      rewrite : APP -> N
+      rewrite : ASS -> N
+      rewrite : CN -> N
+      rewrite : FN -> N
+      rewrite : FT -> N
+      rewrite : IM -> N
+      rewrite : LAM -> N
+      rewrite : LP -> N
+      rewrite : M -> N
+      rewrite : MT -> N
+      rewrite : NT -> N
+      rewrite : RT -> N
+      rewrite : SEG -> N
+      rewrite : SEQ -> N
+      rewrite : String -> N
+      rewrite : ST -> N
+      rewrite : Symbol -> N
+      rewrite : TE -> N
+      rewrite : UT -> N
+      rewrite : W -> N
+      rewrite : N -> N 
+    add
+      gensym() ==
+        GENSYM()$Lisp
+
+      rewrite (a : APP) : N ==
+        [[rewrite a.function, [rewrite arg for arg in a.args]] $ APP]
+
+      rewrite (a : ASS) : N ==
+        [[rewrite a.lvalue, rewrite a.rvalue] $ ASS]
+
+      rewrite (cn : CN) : N ==
+        f : Union(N, "empty")
+        c := rewrite cn.cond
+        t := rewrite cn.truebr
+        f := (cn.falsebr case N => rewrite (cn.falsebr :: N); "empty")
+        [[c, t, f] $ CN]
+
+      rewrite (fn : FN) : N ==
+        argl : List Union(String, NT) := []
+        for arg in fn.args repeat
+          argl := if arg case NT
+            then [[arg.name, rewrite arg.type], :argl]
+            else [arg, :argl]
+        [[fn.name, reverse argl, rewrite fn.type, rewrite fn.body] $ FN]
+
+      rewrite (ft : FT) : N ==
+        [[ft.name, ft.args, rewrite ft.type, rewrite ft.extends, rewrite ft.capsule] $ FT]
+
+      rewrite (im : IM) : N ==
+        [[rewrite im.type] $ IM]
+
+      rewrite (l : LAM) : N ==
+        [[l.args, rewrite l.type, rewrite l.body] $ LAM]
+
+      rewrite (lp : LP) : N ==
+        -- BUG: parser cannot accept a multi-line list constructor
+        nitors : List SpadIterator(N) :=
+          [[itor.var, rewrite itor.seq] for itor in lp.itors]
+        nguards := [rewrite guard for guard in lp.guards]
+        [[lp.kind, nitors, nguards, rewrite lp.body] $ LP]
+
+      rewrite (m : M) : N ==
+        [[m.name, m.args, rewrite m.body] $ M]
+
+      rewrite (mt : MT) : N ==
+        [[[rewrite arg for arg in mt.args], rewrite mt.type] $ MT]
+
+      rewrite (nt : NT) : N ==
+        [[nt.name, rewrite nt.type] $ NT]
+
+      rewrite (rt : RT) : N ==
+        [[[[f.name, rewrite f.type] for f in rt.fields]] $ RT]
+
+      rewrite (seg : SEG) : N ==
+        b := rewrite seg.start
+        s := rewrite seg.step
+        nseg : SEG :=
+          seg.end case "infinity" => [b, s]
+          [b, rewrite (seg.end :: N), s]
+        [nseg]
+
+      rewrite (s : SEQ) : N ==
+        [[s.kind, [rewrite e for e in s.list]] $ SEQ]
+
+      rewrite (s : String) : N == [s]
+
+      rewrite (st : ST) : N ==
+        [[st.kind, [rewrite t for t in st.types]] $ ST]
+
+      rewrite (s : Symbol) : N == [s]
+
+      rewrite (te : TE) : N ==
+        [[te.kind, rewrite te.expr, rewrite te.type] $ TE]
+
+      rewrite (ut : UT) : N ==
+        varl : List Union(N, NT) := []
+        for var in ut.variants repeat
+          var case N =>
+            varl := [rewrite var, :varl]
+          var case NT =>
+            varl := [[var.name, rewrite var.type], :varl]
+        [[reverse varl] $ UT]
+
+      rewrite (w : W) : N ==
+        [[rewrite w.body, rewrite w.env] $ W]
+
+      rewrite (n : N) : N ==
+        apply? n => rewrite (n :: APP)
+        assign? n => rewrite (n :: ASS)
+        conditional? n => rewrite (n :: CN)
+        function? n => rewrite (n :: FN)
+        functor? n => rewrite (n :: FT)
+        import? n => rewrite (n :: IM)
+        lambda? n => rewrite (n :: LAM)
+        loop? n => rewrite (n :: LP)
+        macro? n => rewrite (n :: M)
+        mappingType? n => rewrite (n :: MT)
+        namedType? n => rewrite (n :: NT)
+        recordType? n => rewrite (n :: RT)
+        segment? n => rewrite (n :: SEG)
+        sequence? n => rewrite (n :: SEQ)
+        string? n => rewrite (n :: String)
+        sumType? n => rewrite (n :: ST)
+        symbol? n => rewrite (n :: Symbol)
+        typeExpr? n => rewrite (n :: TE)
+        unionType? n => rewrite (n :: UT)
+        where? n => rewrite (n :: W)
+        -- skip integer, float and empty node
+        integer? n or float? n or emptyNode? n => n
+        error "rewrite: variant not handled"

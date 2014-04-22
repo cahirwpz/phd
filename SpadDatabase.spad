@@ -1,0 +1,130 @@
+)abbrev domain SPCMM SpadCtorModeMap
+SpadCtorModeMap() : SetCategory with
+    elt : (%, "name") -> Symbol
+    elt : (%, "sig") -> List Symbol
+    elt : (%, "type") -> SExpression
+    elt : (%, "args") -> List SExpression
+    construct : SExpression -> %
+  == add
+    import OutputForm
+    import SExpression
+    import SpadNode
+
+    rep(x) ==> (x pretend SExpression)
+
+    elt (x, "name") == (car car car rep(x)) pretend Symbol
+    elt (x, "sig") == (cdr car car rep(x)) pretend List Symbol
+    elt (x, "type") == (car cdr car rep(x)) 
+    elt (x, "args") == (cdr cdr car rep(x)) pretend List SExpression
+
+    construct x == x pretend %
+
+    coerce x ==
+      fsig := [hconcat [s :: OutputForm, " : ", (parse a) :: OutputForm] for s in x.sig for a in x.args]
+      hconcat([x.name :: OutputForm, paren fsig, " : ",
+               (parse x.type) :: OutputForm])
+
+)abbrev domain SPCC SpadCtorCategory
+SpadCtorCategory() : SetCategory with
+    asNode : % -> SpadNode
+  == add
+    rep(x) ==> (x pretend SExpression)
+
+    asNode x ==
+      parse rep(x)
+
+    coerce x ==
+      (asNode x) :: OutputForm
+
+)abbrev domain SPOP SpadOperation
+SpadOperation() : SetCategory == add
+    rep(x) ==> (x pretend SExpression)
+    N ==> SpadNode
+
+    import SpadNode
+    import OutputForm
+    import SExpression
+
+    coerce x ==
+      sex : SExpression := rep(x)
+      --print (sex :: OutputForm)
+      opname := symbol sex.1
+      sig := destruct sex.2
+      tl := [parse t for t in destruct sig.1]
+      if #sig >= 4 then
+        tl := concat(tl, [parse (convert 'constant)])
+      mt : SpadMappingType(N) :=
+        if #tl = 1 then
+          [[], tl.1]
+        else
+          [rest tl, first tl]
+      type := [opname, [mt]]$SpadNamedType(N)
+      op :=
+        if #sig >= 3 and not (symbol? sig.3 and symbol sig.3 = 'T)
+          then
+            pile([type :: OutputForm,
+                  hconcat [hspace 2, "when"],
+                  hconcat [hspace 4, (parse sig.3)$SpadNode :: OutputForm]])
+          else
+            type :: OutputForm
+      op
+
+)abbrev domain SPDB SpadDatabase
+SpadDatabase() : with
+    getOperationList : Symbol -> List SpadOperation
+    getCtorArgs : Symbol -> List Symbol
+      ++ returns constructor argument names
+    getCtorArgsKind : Symbol -> List Boolean
+      ++ returns constructor argument kind: true when a type, false when a value
+    getCtorCategory : Symbol -> SpadCtorCategory
+    getCtorKind : Symbol -> Union("domain", "category", "package")
+      ++ returns constructor kind
+    getCtorModeMap : Symbol -> SpadCtorModeMap
+    getAbbrev : Symbol -> Symbol
+    getSourceFile : Symbol -> String
+  == add
+    import SExpression
+
+    getOperationList t ==
+      -- Integer
+      sex : SExpression := GETDATABASE(t, 'OPERATIONALIST)$Lisp
+      null? sex => error "Unknown constructor!"
+      sex pretend List SpadOperation
+
+    getCtorArgsKind t ==
+      sex : SExpression := GETDATABASE(t,'COSIG)$Lisp
+      null? sex => error "Unknown constructor!"
+      (cdr sex) pretend List Boolean
+
+    getCtorCategory t ==
+      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORCATEGORY)$Lisp
+      null? sex => error "Unknown constructor!"
+      sex pretend SpadCtorCategory
+
+    getCtorModeMap t ==
+      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
+      null? sex => error "Unknown constructor!"
+      sex pretend SpadCtorModeMap
+
+    getCtorArgs t ==
+      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORARGS)$Lisp
+      sex pretend List Symbol
+
+    getCtorKind t ==
+      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORKIND)$Lisp
+      null? sex => error "Unknown constructor!"
+      kind := symbol sex
+      kind = 'domain => "domain"
+      kind = 'category => "category"
+      kind = 'package => "package"
+      error "Unknown constructor kind!"
+
+    getAbbrev t ==
+      sex : SExpression := GETDATABASE(t, 'ABBREVIATION)$Lisp
+      null? sex => error "Unknown constructor!"
+      sex pretend Symbol
+
+    getSourceFile t ==
+      sex : SExpression := GETDATABASE(t, 'SOURCEFILE)$Lisp
+      null? sex => error "Unknown constructor!"
+      sex pretend String
