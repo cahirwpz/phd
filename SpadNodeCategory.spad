@@ -17,6 +17,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadSumType(%) -> %
   construct : SpadTypeExpr(%) -> %
   construct : SpadUnionType(%) -> %
+  construct : SpadWhere(%) -> %
   construct : DoubleFloat -> %
   construct : Integer -> %
   construct : String -> %
@@ -46,6 +47,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   symbol? : % -> Boolean
   typeExpr? : % -> Boolean
   unionType? : % -> Boolean
+  where? : % -> Boolean
 
   coerce : % -> DoubleFloat
   coerce : % -> Integer
@@ -66,6 +68,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadSumType(%)
   coerce : % -> SpadTypeExpr(%)
   coerce : % -> SpadUnionType(%)
+  coerce : % -> SpadWhere(%)
   coerce : % -> String
   coerce : % -> Symbol
 

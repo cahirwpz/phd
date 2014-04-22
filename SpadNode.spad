@@ -347,18 +347,21 @@ SpadTypeExpr(N : SpadNodeCategory) : ParsableCategory with
                   ex.type :: OutputForm])
 
 )abbrev domain SPLOOP SpadLoop
-SpadLoop(N : SpadNodeCategory) : ParsableCategory with
-    elt : (%, "kind") -> Union("loop", "collect")
+SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
+  K ==> Union("loop", "collect", "repeat")
+
+  Exports ==> ParsableCategory with
+    elt : (%, "kind") -> K
     elt : (%, "itors") -> List SpadIterator(N)
     elt : (%, "guards") -> List N
     elt : (%, "body") -> N
-    construct : (Union("loop", "collect"), List SpadIterator(N), List N, N) -> %
-  == add
-    Rep := 
-      Record(lp_kind : Union("loop", "collect"),
-             lp_itors : List SpadIterator(N),
-             lp_guards : List N,
-             lp_body : N)
+    construct : (K, List SpadIterator(N), List N, N) -> %
+
+  Implementation ==> add
+    Rep := Record(lp_kind : K,
+                  lp_itors : List SpadIterator(N),
+                  lp_guards : List N,
+                  lp_body : N)
 
     import ParserTools
     import OutputForm
@@ -371,6 +374,9 @@ SpadLoop(N : SpadNodeCategory) : ParsableCategory with
     construct(k,il,gl,b) == [k,il,gl,b]$Rep
 
     parse ex ==
+      repeat? ex =>
+        ["repeat", [], [], parse cdr ex]
+
       lst := destruct cdr ex
       l_body := parse(last lst) $ N
       lst := reverse(rest(reverse(lst)))
@@ -426,6 +432,8 @@ SpadLoop(N : SpadNodeCategory) : ParsableCategory with
                   hconcat [hspace 1, "repeat ", b]])
       ex.kind case "collect" =>
         infix(" ", ["[", b, :concat(il, gl), "]"])
+      ex.kind case "repeat" =>
+        hconcat ["repeat", b]
 
 )abbrev domain SPLAM SpadLambda
 SpadLambda(N : SpadNodeCategory) : ParsableCategory with
@@ -510,7 +518,7 @@ SpadSequence(N : SpadNodeCategory) : ParsableCategory with
 
     coerce ex ==
       lst := [ e :: OutputForm for e in ex.list | not emptyNode? e ]
-      ex.kind case "prog" => hconcat [hspace 2, pile lst]
+      ex.kind case "prog" => pile lst
       ex.kind case "list" => bracket lst
       ex.kind case "tuple" => paren lst
 
@@ -645,6 +653,28 @@ SpadMacro(N : SpadNodeCategory) : ParsableCategory with
       hconcat([m.md_name :: OutputForm,
                margs, " ==> ", pile [m.md_body :: OutputForm]])
 
+)abbrev package SPWHERE SpadWhere
+SpadWhere(N : SpadNodeCategory) : ParsableCategory with
+    elt : (%, "body") -> N
+    elt : (%, "env") -> N
+    construct : (N, N) -> %
+  == add
+    Rep := Record(w_body : N, w_env : N)
+
+    import OutputForm
+    import ParserTools
+
+    construct(d,e) == [d,e]$Rep
+
+    elt(x, "body") == x.w_body
+    elt(x, "env") == x.w_env
+
+    parse ex ==
+      [(parse ex.2) $ N, (parse ex.3) $ N]
+
+    coerce w ==
+      hconcat [w.body :: OutputForm, " where ", w.env :: OutputForm]
+
 )abbrev package SPFTOR SpadFunctor
 ++ SPAD functor representation
 SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
@@ -687,12 +717,11 @@ SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
       [fname, fargs, parse ftype, parseNonNull fextends, parse fcapsule]
 
     coerce f ==
-      blankSeparate(
-        [f.f_name :: OutputForm,
-         paren [arg :: OutputForm for arg in f.f_args], ":", 
-         hconcat [hspace 2, f.f_type :: OutputForm],
-         "==", f.f_extends :: OutputForm, "add",
-         f.f_capsule :: OutputForm])
+      hconcat([f.f_name :: OutputForm,
+               paren [arg :: OutputForm for arg in f.f_args], ":", 
+               hconcat [hspace 2, f.f_type :: OutputForm],
+               "== ", f.f_extends :: OutputForm, " add ",
+               hconcat [hspace 2, f.f_capsule :: OutputForm]])
 
 )abbrev domain SPNODE SpadNode
 ++ SPAD generic expression
@@ -713,6 +742,7 @@ SpadNode() : SpadNodeCategory == add
                  simport : SpadImport(%),
                  smacro : SpadMacro(%),
                  sum : SpadSumType(%),
+                 swhere : SpadWhere(%),
                  typeexpr : SpadTypeExpr(%),
                  union : SpadUnionType(%),
                  dfloat : DoubleFloat,
@@ -745,9 +775,10 @@ SpadNode() : SpadNodeCategory == add
     symbol? n == n case symbol
     typeExpr? n == n case typeexpr
     unionType? n == n case union
+    where? n == n case swhere
 
-    CoerceError(t) ==>
-      error ["Cannot coerce SpadNode to", t, "!"]
+    CoerceError(T) ==>
+      error concat ["Cannot coerce SpadNode to ", T, "!"]
 
     coerce (n : %) : SpadApply(%) ==
       apply? n => n.apply
@@ -817,6 +848,10 @@ SpadNode() : SpadNodeCategory == add
       unionType? n => n.union
       CoerceError("SpadUnionType")
 
+    coerce (n : %) : SpadWhere(%) ==
+      where? n => n.swhere
+      CoerceError("SpadWhere")
+
     coerce (n : %) : DoubleFloat ==
       float? n => n.dfloat
       CoerceError("DoubleFloat")
@@ -854,11 +889,12 @@ SpadNode() : SpadNodeCategory == add
     construct (n : SpadSegment(%)) : % == [n]$Rep
     construct (n : SpadSequence(%)) : % == [n]$Rep
     construct (n : SpadTypeExpr(%)) : % == [n]$Rep
-    construct (t : SpadMappingType(%)) : % == [t]$Rep
-    construct (t : SpadNamedType(%)) : % == [t]$Rep
-    construct (t : SpadRecordType(%)) : % == [t]$Rep
-    construct (t : SpadSumType(%)) : % == [t]$Rep
-    construct (t : SpadUnionType(%)) : % == [t]$Rep
+    construct (n : SpadMappingType(%)) : % == [n]$Rep
+    construct (n : SpadNamedType(%)) : % == [n]$Rep
+    construct (n : SpadRecordType(%)) : % == [n]$Rep
+    construct (n : SpadSumType(%)) : % == [n]$Rep
+    construct (n : SpadUnionType(%)) : % == [n]$Rep
+    construct (n : SpadWhere(%)) : % == [n]$Rep
 
     construct (n : DoubleFloat) : % == [n]$Rep
     construct (n : Integer) : % == [n]$Rep
@@ -879,6 +915,9 @@ SpadNode() : SpadNodeCategory == add
         -- {sequence of expressions}
         -- (SEQ expr1 expr2 ...)
         [(parse cdr ex) $ SpadSequence(%)]
+
+      where? ex =>
+        [(parse ex) $ SpadWhere(%)]
 
       tuple? ex =>
         -- {tuple constructor}
@@ -929,11 +968,11 @@ SpadNode() : SpadNodeCategory == add
         -- {if-then-else expression of if-then statement}
         [(parse ex) $ SpadConditional(%)]
 
-      collect? ex or loop? ex =>
+      collect? ex or loop? ex or repeat? ex =>
         [(parse ex) $ SpadLoop(%)]
 
       mapping? ex => 
-        -- var? ex
+        -- TODO: var? ex is missing after collapsing Node and Type
         [(parse ex) $ SpadMappingType(%)]
 
       domain? ex or package? ex or join? ex or progn? ex =>
@@ -995,6 +1034,7 @@ SpadNode() : SpadNodeCategory == add
       symbol? n => (n :: Symbol) :: OutputForm
       typeExpr? n => (n :: SpadTypeExpr(%)) :: OutputForm
       unionType? n => (n :: SpadUnionType(%)) :: OutputForm
+      where? n => (n :: SpadWhere(%)) :: OutputForm
       emptyNode? n => ""
 
       error "coerce $ SpadNode: variant not handled!"

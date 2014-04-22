@@ -34,6 +34,7 @@ ParserTools() : with
     progn? : SExpression -> Boolean
     quote? : SExpression -> Boolean
     record? : SExpression -> Boolean
+    repeat? : SExpression -> Boolean
     retsel? : SExpression -> Boolean
     segment? : SExpression -> Boolean
     seq? : SExpression -> Boolean
@@ -42,6 +43,7 @@ ParserTools() : with
     tuple? : SExpression -> Boolean
     union? : SExpression -> Boolean
     var? : SExpression -> Boolean
+    where? : SExpression -> Boolean
     while? : SExpression -> Boolean
   == add
     firstSymbol? (ex, sym) ==
@@ -85,14 +87,15 @@ ParserTools() : with
     collect? ex == list_of_ge?(ex, 'COLLECT, 3)
     construct? ex == list_of_ge?(ex, 'construct, 1)
     domain? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'domain
+    domsel? ex == list_of_eq?(ex, 'Sel, 3)
     exit? ex == list_of_eq?(ex, 'exit, 3)
     function? ex == list_of_eq?(ex, 'DEF, 5)
-    itor? ex == list_of_eq?(ex, 'IN, 3)
     guard? ex == list_of_eq?(ex, '|, 2)
     has? ex == list_of_eq?(ex, 'has, 3)
     ifelse? ex == list_of_eq?(ex, 'IF, 4)
     import? ex == list_of_eq?(ex, 'import, 2)
     is? ex == list_of_eq?(ex, 'is, 3)
+    itor? ex == list_of_eq?(ex, 'IN, 3)
     join? ex == list_of_ge?(ex, 'Join, 2)
     lambda? ex == list_of_eq?(ex, '+->, 3)
     let? ex == list_of_eq?(ex, 'LET, 3)
@@ -105,15 +108,16 @@ ParserTools() : with
     progn? ex == list_of_ge?(ex, 'PROGN, 2)
     quote? ex == list_of_eq?(ex, 'QUOTE, 2)
     record? ex == list_of_ge?(ex, 'Record, 3)
+    repeat? ex == list_of_eq?(ex, 'REPEAT, 2)
+    retsel? ex == list_of_eq?(ex, '@, 3)
     segment? ex == list_of_eq?(ex, 'SEGMENT, 3)
     seq? ex == list_of_ge?(ex, 'SEQ, 2)
     signature? ex == list_of_eq?(ex, 'SIGNATURE, 3) or list_of_eq?(ex, 'SIGNATURE, 4)
     step? ex == list_of_eq?(ex, 'STEP, 4) or list_of_eq?(ex, 'STEP, 5)
     tuple? ex == list_of_ge?(ex, '_@Tuple, 3)
-    retsel? ex == list_of_eq?(ex, '@, 3)
-    domsel? ex == list_of_eq?(ex, 'Sel, 3)
     union? ex == list_of_ge?(ex, 'Union, 3)
     var? ex == list_of_eq?(ex, ':, 3)
+    where? ex == list_of_eq?(ex, 'where, 3)
     while? ex == list_of_eq?(ex, 'WHILE, 2)
 
 )abbrev category PRSCAT ParsableCategory

@@ -1,4 +1,4 @@
-)boot $LINELENGTH := 360
+)boot $LINELENGTH := 180
 )compile ParserTools.spad
 )compile SpadNodeCategory.spad
 )compile SpadNode.spad
@@ -154,6 +154,7 @@ SpadTreeWalkerCategory() : Category == Definition where
   ST ==> SpadSumType(N)
   TE ==> SpadTypeExpr(N)
   UT ==> SpadUnionType(N)
+  W ==> SpadWhere(N)
 
   Definition ==> with
       gensym : () -> Symbol
@@ -177,6 +178,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : Symbol -> N
       rewrite : TE -> N
       rewrite : UT -> N
+      rewrite : W -> N
       rewrite : N -> N 
     add
       gensym() ==
@@ -219,7 +221,8 @@ SpadTreeWalkerCategory() : Category == Definition where
         nguards := [rewrite guard for guard in lp.guards]
         [[lp.kind, nitors, nguards, rewrite lp.body] $ LP]
 
-      rewrite (m : M) : N == [m]
+      rewrite (m : M) : N ==
+        [[m.name, m.args, rewrite m.body] $ M]
 
       rewrite (mt : MT) : N ==
         [[[rewrite arg for arg in mt.args], rewrite mt.type] $ MT]
@@ -260,6 +263,9 @@ SpadTreeWalkerCategory() : Category == Definition where
             varl := [[var.name, rewrite var.type], :varl]
         [[reverse varl] $ UT]
 
+      rewrite (w : W) : N ==
+        [[rewrite w.body, rewrite w.env] $ W]
+
       rewrite (n : N) : N ==
         apply? n => rewrite (n :: APP)
         assign? n => rewrite (n :: ASS)
@@ -280,26 +286,45 @@ SpadTreeWalkerCategory() : Category == Definition where
         symbol? n => rewrite (n :: Symbol)
         typeExpr? n => rewrite (n :: TE)
         unionType? n => rewrite (n :: UT)
+        where? n => rewrite (n :: W)
         -- skip integer, float and empty node
         integer? n or float? n or emptyNode? n => n
         error "rewrite: variant not handled"
+
+)abbrev package STCLEAN SpadTreeCleanUp
+SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+
+  Implementation ==> add
+    rewrite (a : APP) : N ==
+      -- replace "exit(1, node)" with "node"
+      fn := a.function
+      symbol? fn and (fn :: Symbol) = 'exit and (a.args.1 :: Integer) = 1 =>
+        rewrite a.args.2
+      [[rewrite a.function, [rewrite arg for arg in a.args]] $ APP]
 
 )abbrev package STMEXP SpadTreeMacroExpander
 SpadTreeMacroExpander() : Exports == Implementation where
   N ==> SpadNode
   M ==> SpadMacro(N)
   AL ==> AssociationList(Symbol, M)
+  SEQ ==> SpadSequence(N)
 
   Exports ==> SpadTreeWalkerCategory with 
     init : () -> Void
 
   Implementation ==> add
     env : Stack AL := stack [table()]
+    lastCtx : AL := table()
 
     newCtx : () -> Void
     newCtx () == push!(table(), env)
 
-    discardCtx : () -> Void
+    addCtx : AL -> Void
+    addCtx ctx == push!(ctx, env)
+
+    discardCtx : () -> AL
     discardCtx () == pop! env
 
     addMacro : M -> Void
@@ -316,20 +341,28 @@ SpadTreeMacroExpander() : Exports == Implementation where
 
     init () ==
       env := stack [table()]
+      lastCtx := table()
 
-    rewrite (seq : SpadSequence(N)) : N ==
+    rewrite (seq : SEQ) : N ==
+      seq.kind ~= "prog" =>
+        [[seq.kind, [rewrite ex for ex in seq.list]] $ SEQ]
+
       newCtx()
-      seq := [seq.kind, [rewrite ex for ex in seq.list]]
-      discardCtx()
-      [seq]
+      nodes := [rewrite ex for ex in seq.list]
+      lastCtx := discardCtx()
+
+      -- eliminate leftovers after consumed macros
+      nodes := [node for node in nodes | not emptyNode? node]
+      empty? nodes => emptyNode()
+      [[seq.kind, nodes] $ SEQ]
 
     rewrite (app : SpadApply(N)) : N ==
       if symbol? app.function then
         m := findMacro (app.function :: Symbol)
-        if m case M then
+        m case M and #m.args > 0 =>
           #app.args ~= #m.args =>
-            error(["Wrong number of arguments (", #app.args, ") ",
-                   "passed to macro", m.name, "/", #m.args])
+            error concat(["Wrong number of arguments (", string(#app.args), ") ",
+                          "passed to macro ", string(m.name), " (", string(#m.args), ")"])
           newCtx ()
           for m_arg in m.args for arg in app.args repeat
             -- skip argument rewriting if it doesn't require renaming
@@ -344,11 +377,22 @@ SpadTreeMacroExpander() : Exports == Implementation where
       addMacro m
       emptyNode()
 
+    rewrite (w : SpadWhere(N)) : N ==
+      wenv := rewrite w.env
+      -- because w.env is always (?) a sequence it produces a valid lastCtx environment
+      addCtx(lastCtx)
+      wbody := rewrite w.body
+      discardCtx ()
+      -- reduce where statement if environment contained only macros
+      emptyNode? wenv => wbody
+      
+      [[wbody, wenv] $ SpadWhere(N)]
+
     rewrite (sym : Symbol) : N ==
       m := findMacro sym
       m case "failed" => [sym]
       #m.args ~= 0 =>
-        error ["Attempted to apply arguments to parameterless macro ", m.name]
+        error concat ["Attempted to apply arguments to parameterless macro '", string m.name, "'"]
       rewrite m.body
 
 )abbrev domain STRP1 SpadTreeRewritePhase1
@@ -359,7 +403,6 @@ SpadTreeRewritePhase1() : SpadTreeWalkerCategory == Implementation where
   SEQ ==> SpadSequence(N)
 
   Implementation ==> add
-    -- compiler goes wild if we change the order of these functions...
     rewrite (app : APP) : N ==
       nexps : List(N) := []
       nargs : List(N) := []
@@ -376,7 +419,7 @@ SpadTreeRewritePhase1() : SpadTreeWalkerCategory == Implementation where
       [["prog", [:nexps, app']] $ SEQ]
 
     rewrite (seq : SEQ) : N == 
-      nodes : List(N) := [rewrite e for e in seq.list] 
+      nodes : List(N) := [rewrite e for e in seq.list]
       if seq.kind = "prog" then
         nodes' : List(N) := []
         for node in nodes repeat
@@ -403,9 +446,15 @@ SpadTypeChecker() : with
     import SpadTreeMacroExpander
 
     check e ==
-      init()
-      -- print (e :: OutputForm)
+      --print (e :: OutputForm)
+
+      -- BUG: type annotation below is necessary otherwise compiler chooses
+      -- "parse" function that fails to parse functor
       n : SpadNode := parse e
+
+      n := rewrite(n) $ SpadTreeCleanUp
       print (n :: OutputForm)
-      n := (rewrite n) $ SpadTreeMacroExpander
+      
+      init() -- initalize macro expander
+      n := rewrite(n) $ SpadTreeMacroExpander
       print (n :: OutputForm)
