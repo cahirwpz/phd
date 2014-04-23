@@ -52,7 +52,7 @@ SpadOperation() : SetCategory == add
       sig := destruct sex.2
       tl := [parse t for t in destruct sig.1]
       if #sig >= 4 then
-        tl := concat(tl, [parse (convert 'constant)])
+        tl := concat(tl, [['constant]])
       mt : SpadMappingType(N) :=
         if #tl = 1 then
           [[], tl.1]

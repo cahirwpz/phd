@@ -144,8 +144,9 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce sum ==
       ts := [ t :: OutputForm for t in sum.types ]
-      sum.kind case "Join" => hconcat ["Join(", pile ts, ")"]
-      pile [hconcat["{", pile ts], "}"]
+      sum.kind case "Join" =>
+        hconcat ["Join(", infix(", ", ts), ")"]
+      hconcat [" with ", hconcat [hspace 2, pile ts]]
 
 )abbrev domain SPTNAMED SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : ParsableCategory with
@@ -796,11 +797,11 @@ SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
       [fname, fargs, parse ftype, parseNonNull fextends, parse fcapsule]
 
     coerce f ==
-      hconcat([f.f_name :: OutputForm,
-               paren [arg :: OutputForm for arg in f.f_args], ":", 
-               hconcat [hspace 2, f.f_type :: OutputForm],
-               "== ", f.f_extends :: OutputForm, " add ",
-               hconcat [hspace 2, f.f_capsule :: OutputForm]])
+      hconcat([f.name :: OutputForm,
+               paren [arg :: OutputForm for arg in f.args], " : ", 
+               f.type :: OutputForm, " == ",
+               f.extends :: OutputForm, " add ",
+               hconcat [hspace 2, f.capsule :: OutputForm]])
 
 )abbrev domain SPNODE SpadNode
 ++ SPAD generic expression
