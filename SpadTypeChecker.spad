@@ -145,13 +145,13 @@ SpadTreeRewritePhase1() : SpadTreeWalkerCategory == Implementation where
 ++ Description:
 ++ Experimental type checker with bottom-up approach.
 SpadFrameworkTest() : with
-    test : SExpression -> Void 
+    run : SExpression -> Void 
   == add
     import OutputForm
     import SpadNode
     import SpadTreeMacroExpander
 
-    test e ==
+    run e ==
       --print (e :: OutputForm)
 
       -- BUG: type annotation below is necessary otherwise compiler chooses

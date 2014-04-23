@@ -1,11 +1,22 @@
 )compile ParserTools.spad
 )compile SpadNode.spad
 )compile SpadDatabase.spad
+)compile SpadEnvironment.spad
 )compile SpadTreeWalker.spad
 )compile SpadTypeChecker.spad
 
-)read ncomp.boot
+-- Set up OutputForm renderer.
 )boot $LINELENGTH := 180
-)boot $PostParseHookFunction := "check"
-)boot $PostParseHookDomain := ["SpadTypeChecker"]
+
+-- Install PostParseHook handling.
+)read ncomp.boot
+
+-- Configure PostParseHook.
+)boot $PostParseHookFunction := "run"
+)boot $PostParseHookDomain := ["SpadFrameworkTest"]
 )boot $PostParseHookEnable := true
+
+-- Configure compiler's environment handling routines:
+-- addDomain, get, getModemap, put, etc.
+)boot $forceAdd := true
+)boot $compErrorMessageStack := []
