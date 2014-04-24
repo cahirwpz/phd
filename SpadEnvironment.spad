@@ -1,56 +1,73 @@
 )abbrev domain SPMM SpadModeMap
-SpadModeMap() : SetCategory == add
-    rep(x) ==> (x pretend SExpression)
-    N ==> SpadNode
-    OF ==> OutputForm
+SpadModeMap() : Exports == Implementation where
+  N ==> SpadNode
+  OF ==> OutputForm
+  MT ==> SpadMappingType(N)
+  SEX ==> SExpression
+
+  Exports ==> SetCategory with
+    elt : (%, "origin") -> N
+    elt : (%, "type") -> MT
+    elt : (%, "constraint") -> N
+    elt : (%, "template") -> Record(type : MT, arg : N)
+
+  Implementation ==> add
+    Rep := List List SEX
 
     import SpadNode
     import OutputForm
     import SExpression
 
+    elt(x, "origin") ==
+      parse x.1.1
+
+    elt(x, "type") ==
+      tl := [parse t for t in rest x.1]
+      if #tl = 1 then [[], tl.1] else [rest tl, first tl]
+
+    elt(x, "constraint") ==
+      parse x.2.1
+      
+    elt(x, "template") ==
+      tmplpart := destruct x.2.2
+      tl := [parse t for t in destruct tmplpart.3]
+      tmpl := if #tl = 1 then [[], tl.1] else [rest tl, first tl]
+      targ := parse tmplpart.2
+      [tmpl, targ]
+
     coerce x ==
-      sex : SExpression := rep(x)
-      sig := sex.1
-      cond := sex.2.1
-      tmpl := sex.2.2
-      impl := parse car sig
-      tl := [parse t for t in destruct cdr sig]
-      mt : SpadMappingType(N) :=
-        if #tl = 1 then
-          [[], tl.1]
-        else
-          [rest tl, first tl]
-      tl2 := [parse t for t in destruct tmpl.3]
-      st : SpadMappingType(N) := [rest tl2, first tl2]
-      of1 := pile([hconcat [impl :: OF, " implements :"],
-                   hconcat [hspace 4, mt :: OF]])
+      of1 := pile([hconcat [x.origin :: OF, " implements :"],
+                   hconcat [hspace 4, x.type :: OF]])
       of2 := pile([hconcat [hspace 2, "when :"],
-                   hconcat [hspace 4, (parse cond) :: OF]])
+                   hconcat [hspace 4, x.constraint :: OF]])
       of3 := pile(["Original signature: ",
-                   hconcat [hspace 4, st :: OF],
-                   hconcat [hspace 2, "with % = ", (parse tmpl.2) :: OF]])
-      symbol? cond and symbol cond = 'T =>
+                   hconcat [hspace 4, x.template.type :: OF],
+                   hconcat [hspace 2, "with % = ", x.template.arg :: OF]])
+      (symbol? x.constraint) and (x.constraint :: Symbol) = 'T =>
         pile [of1, of3]
       pile [of1, of2, of3]
 
 )abbrev domain SPENV SpadEnvironment
 SpadEnvironment() : Exports == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
   OF ==> OutputForm
   SEX ==> SExpression
-  ENV ==> List Record(name : Symbol,
-                      properties : List Record(kind : Symbol, value : SEX))
-  rep(x) ==> (x pretend %)
+  PROP ==> Record(kind : Symbol, value : SEX)
 
   Exports ==> SetCategory with
     new : () -> %
-    addDomain : (SEX, %) -> %
+    addDomain : (APP, %) -> %
     getModemap : (Symbol, %) -> List(SpadModeMap)
 
     test : () -> Void
 
   Implementation ==> add
+    Rep := Stack List Record(name : Symbol, properties : List PROP)
+
     import SExpression
     import OutputForm
+    import SpadNode
 
     saveMode : () -> Boolean
     saveMode() ==
@@ -62,12 +79,36 @@ SpadEnvironment() : Exports == Implementation where
     restoreMode m ==
       _$InteractiveMode := m
 
-    -- create empty environment
-    new () == rep(convert [])
+    convert : APP -> Union(SEX, "failed")
+    convert (app : APP) : Union(SEX, "failed") ==
+      not symbol? app.function =>
+        "failed"
+      fst : SEX := convert (app.function :: Symbol)
+      lst : List SEX := []
+      for arg in app.args repeat
+        print( arg :: OF)
+        sex :=
+          symbol? arg =>
+            convert [convert (arg :: Symbol)]
+          apply? arg =>
+            subapp := convert (arg :: APP)
+            subapp case "failed" => return "failed"
+            subapp :: SEX
+          return "failed"
+        lst := [sex, :lst]
+      lst := reverse lst
+      convert [fst, :lst]
 
-    addDomain(dom, env) ==
+    -- create empty environment
+    new() == empty()
+
+    addDomain(typ, env) ==
+      dom := convert typ
+      dom case "failed" =>
+        error "Failed to convert type!"
+
       m := saveMode()
-      res : % := addDomain(dom, env)$Lisp
+      res : % := addDomain(dom :: SEX, env)$Lisp
       restoreMode(m)
       res
 
@@ -78,10 +119,8 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     coerce env ==
-      sex := car car (env pretend SEX)
-      env : ENV := sex pretend ENV
       entries : List(OF) := []
-      for entry in env repeat
+      for entry in top env repeat
         props : List(OF) := []
         for prop in entry.properties repeat
           val :=
@@ -100,12 +139,12 @@ SpadEnvironment() : Exports == Implementation where
       _$compErrorMessageStack := convert []
 
       env := new()
-      dom1 : SEX := convert [convert 'Polynomial, convert [convert 'Integer]]
-      dom2 : SEX := convert [convert 'Integer]
+      dom1 := [['Polynomial], [['Integer]]] $ APP
+      dom2 := [['Integer], []] $ APP
       env := addDomain(dom1, env)
       env := addDomain(dom2, env)
       modemaps := getModemap('*, env)
       for modemap in modemaps repeat
         print (modemap :: OF)
         print ""
-      -- print (env :: OF)
+      --print (env :: OF)
