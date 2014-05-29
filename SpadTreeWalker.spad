@@ -52,14 +52,10 @@ SpadTreeWalkerCategory() : Category == Definition where
         [[rewrite a.function, [rewrite arg for arg in a.args]] $ APP]
 
       rewrite (a : ASS) : N ==
-        [[rewrite a.lvalue, rewrite a.rvalue] $ ASS]
+        [[rewrite a.lval, rewrite a.rval] $ ASS]
 
       rewrite (cn : CN) : N ==
-        f : Union(N, "empty")
-        c := rewrite cn.cond
-        t := rewrite cn.truebr
-        f := (cn.falsebr case N => rewrite (cn.falsebr :: N); "empty")
-        [[c, t, f] $ CN]
+        [[rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr] $ CN]
 
       rewrite (fn : FN) : N ==
         argl : List Union(String, NT) := []
@@ -98,12 +94,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         [[[[f.name, rewrite f.type] for f in rt.fields]] $ RT]
 
       rewrite (seg : SEG) : N ==
-        b := rewrite seg.start
-        s := rewrite seg.step
-        nseg : SEG :=
-          seg.end case "infinity" => [b, s]
-          [b, rewrite (seg.end :: N), s]
-        [nseg]
+        [[rewrite seg.start, rewrite seg.end, rewrite seg.step] $ SEG]
 
       rewrite (s : SEQ) : N ==
         [[s.kind, [rewrite e for e in s.list]] $ SEQ]
@@ -119,13 +110,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         [[te.kind, rewrite te.expr, rewrite te.type] $ TE]
 
       rewrite (ut : UT) : N ==
-        varl : List Union(N, NT) := []
-        for var in ut.variants repeat
-          var case N =>
-            varl := [rewrite var, :varl]
-          var case NT =>
-            varl := [[var.name, rewrite var.type], :varl]
-        [[reverse varl] $ UT]
+        [[[rewrite v for v in ut.variants]] $ UT]
 
       rewrite (w : W) : N ==
         [[rewrite w.body, rewrite w.env] $ W]

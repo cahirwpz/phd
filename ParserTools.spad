@@ -8,7 +8,6 @@ ParserTools() : with
     case? : SExpression -> Boolean
     coerce? : SExpression -> Boolean
     collect? : SExpression -> Boolean
-    construct? : SExpression -> Boolean
     domain? : SExpression -> Boolean
     domsel? : SExpression -> Boolean
     exit? : SExpression -> Boolean
@@ -85,7 +84,6 @@ ParserTools() : with
     case? ex == list_of_eq?(ex, 'case, 3)
     coerce? ex == list_of_eq?(ex, '::, 3)
     collect? ex == list_of_ge?(ex, 'COLLECT, 3)
-    construct? ex == list_of_ge?(ex, 'construct, 1)
     domain? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'domain
     domsel? ex == list_of_eq?(ex, 'Sel, 3)
     exit? ex == list_of_eq?(ex, 'exit, 3)
@@ -123,3 +121,4 @@ ParserTools() : with
 )abbrev category PRSCAT ParsableCategory
 ParsableCategory() : Category == SetCategory with
   parse : SExpression -> %
+  convert : % -> SExpression
