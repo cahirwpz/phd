@@ -40,9 +40,10 @@ SpadModeMap() : Exports == Implementation where
                    hconcat [hspace 4, x.type :: OF]])
       of2 := pile([hconcat [hspace 2, "when :"],
                    hconcat [hspace 4, x.constraint :: OF]])
-      of3 := pile(["Original signature: ",
-                   hconcat [hspace 4, x.template.type :: OF],
-                   hconcat [hspace 2, "with % = ", x.template.arg :: OF]])
+      of3 := "?" :: OF
+      --of3 := pile(["Original signature: ",
+      --             hconcat [hspace 4, x.template.type :: OF],
+      --             hconcat [hspace 2, "with % = ", x.template.arg :: OF]])
       (symbol? x.constraint) and (x.constraint :: Symbol) = 'T =>
         pile [of1, of3]
       pile [of1, of2, of3]
@@ -57,8 +58,20 @@ SpadEnvironment() : Exports == Implementation where
 
   Exports ==> SetCategory with
     new : () -> %
+
     addDomain : (APP, %) -> %
+    addModemapsFromCategory : (N, N, %) -> %
+
+    addModemap : (Symbol, APP, SEX, %) -> %
     getModemap : (Symbol, %) -> List(SpadModeMap)
+
+    putMode : (Symbol, N, %) -> %
+    getMode : (Symbol, %) -> N
+
+    putValue : (Symbol, N, %) -> %
+    getValue : (Symbol, %) -> N
+
+    definedSymbols : % -> List(Symbol)
 
     test : () -> Void
 
@@ -71,13 +84,13 @@ SpadEnvironment() : Exports == Implementation where
 
     saveMode : () -> Boolean
     saveMode() ==
-      -- how to recover old value of $InteractiveMode?
-      _$InteractiveMode := false
-      true
+      m : Boolean := _$InteractiveMode $ Lisp
+      SETF(_$InteractiveMode $ Lisp, false) $ Lisp
+      m
 
     restoreMode : Boolean -> Void
     restoreMode m ==
-      _$InteractiveMode := m
+      SETF(_$InteractiveMode $ Lisp, m) $ Lisp
 
     convert : APP -> Union(SEX, "failed")
     convert (app : APP) : Union(SEX, "failed") ==
@@ -100,15 +113,41 @@ SpadEnvironment() : Exports == Implementation where
       convert [fst, :lst]
 
     -- create empty environment
-    new() == empty()
+    new() ==
+      _$compiler_InteractiveFrame $ Lisp
 
-    addDomain(typ, env) ==
-      dom := convert typ
-      dom case "failed" =>
-        error "Failed to convert type!"
+    addModemapsFromCategory(dom, cat, env) ==
+      print hconcat ["EnvAddModemapsFromCategory", paren [dom :: OF, cat :: OF]]
+      sdom := convert dom
+      scat := convert cat
 
       m := saveMode()
-      res : % := addDomain(dom :: SEX, env)$Lisp
+      -- augModemapsFromCategory(domainName, domainView, functorForm, categoryForm, e)
+      res : % := augModemapsFromCategory(sdom, sdom, sdom, scat, env)$Lisp
+      restoreMode(m)
+      res
+
+    addDomain(dom, env) ==
+      print hconcat ["EnvAddDomain", paren [dom :: OF]]
+
+      sdom := convert dom
+      sdom case "failed" =>
+        error "addDomain: failed to convert domain type!"
+
+      m := saveMode()
+      res : % := addDomain(sdom :: SEX, env)$Lisp
+      restoreMode(m)
+      res
+
+    addModemap(op, dom, sig, env) ==
+      print hconcat ["EnvAddModeMap", paren [op :: OF, dom :: OF, sig :: OF]]
+      
+      sdom := convert dom
+      sdom case "failed" =>
+        error "addModemap: failed to convert domain type"
+
+      m := saveMode()
+      res : % := addModemap(op, dom, sig, 'T, 'NIL, env)$Lisp
       restoreMode(m)
       res
 
@@ -118,8 +157,39 @@ SpadEnvironment() : Exports == Implementation where
       restoreMode(m)
       res
 
+    putMode(name, type, env) ==
+      print hconcat ["EnvPutMode", paren [name :: OF, type :: OF]]
+      m := saveMode()
+      res : % := put(name, 'mode, convert type, env)$Lisp
+      restoreMode(m)
+      res
+
+    getMode(name, env) ==
+      m := saveMode()
+      res : SExpression := get(name, 'mode, env)$Lisp
+      restoreMode(m)
+      parse res
+
+    putValue(name, value, env) ==
+      print hconcat ["EnvPutValue", paren [name :: OF, value :: OF]]
+      m := saveMode()
+      res : % := put(name, 'value, convert value, env)$Lisp
+      restoreMode(m)
+      res
+
+    getValue(name, env) ==
+      m := saveMode()
+      res : SExpression := get(name, 'value, env)$Lisp
+      restoreMode(m)
+      parse res
+
+    definedSymbols(env) ==
+      empty? env => []
+      removeDuplicates [entry.name for entry in top env]
+
     coerce env ==
       entries : List(OF) := []
+      empty? env => "()"
       for entry in top env repeat
         props : List(OF) := []
         for prop in entry.properties repeat
@@ -127,6 +197,12 @@ SpadEnvironment() : Exports == Implementation where
             prop.kind = 'modemap =>
               mml := prop.value pretend List(SpadModeMap)
               pile [mm :: OF for mm in mml]
+            prop.kind = 'value =>
+              v := parse prop.value
+              v :: OF
+            prop.kind = 'mode =>
+              t := parse prop.value
+              t :: OF
             prop.value :: OF
           of := hconcat [prop.kind :: OF, " => ", val]
           props := [of, :props]

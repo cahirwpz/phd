@@ -1,0 +1,49 @@
+)abbrev package SCTEST SpadCompilerTest
+++ Author: Krystian Baclawski
+++ Date Created: December 2013
+++ Date Last Updated: January 2014
+++ Description:
+++ Experimental type checker with bottom-up approach.
+SpadCompilerTest() : with
+    run : SExpression -> Void 
+    run2 : SExpression -> Void 
+  == add
+    import Character
+    import OutputForm
+    import SpadNode
+    import SpadTreeMacroExpander
+    import TCNodeArrayOps
+
+    run e ==
+      -- print (e :: OutputForm)
+
+      -- BUG: type annotation below is necessary otherwise compiler chooses
+      -- "parse" function that fails to parse functor
+      n : SpadNode := parse e
+
+      n := rewrite(n) $ SpadTreeCleanUp
+      print (n :: OutputForm)
+      
+      init() $ SpadMacroExpander
+      n := rewrite(n) $ SpadMacroExpander
+      print (n :: OutputForm)
+
+    run2 e ==
+      print (e :: OutputForm)
+      print ""
+
+      n : SpadNode := parse e
+      n := rewrite(n) $ SpadTreeCleanUp
+      
+      init() $ SpadMacroExpander
+      n := rewrite(n) $ SpadMacroExpander
+      print (n :: OutputForm)
+      print (convert n :: OutputForm)
+      print ""
+
+      narr : TCNodeArray := nodeArray []
+      env : SpadEnvironment := new ()
+
+      walk(n, narr, env) $ SpadTypeChecker
+
+      print (narr :: OutputForm)

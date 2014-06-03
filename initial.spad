@@ -4,6 +4,8 @@
 )compile SpadEnvironment.spad
 )compile SpadTreeWalker.spad
 )compile SpadTypeChecker.spad
+)compile SpadCompilerPasses.spad
+)compile SpadCompilerTest.spad
 
 -- Set up OutputForm renderer.
 )boot $LINELENGTH := 180
@@ -12,8 +14,8 @@
 )read ncomp.boot
 
 -- Configure PostParseHook.
-)boot $PostParseHookFunction := "run"
-)boot $PostParseHookDomain := ["SpadFrameworkTest"]
+)boot $PostParseHookFunction := "run2"
+)boot $PostParseHookDomain := ["SpadCompilerTest"]
 )boot $PostParseHookEnable := true
 
 -- Configure compiler's environment handling routines:

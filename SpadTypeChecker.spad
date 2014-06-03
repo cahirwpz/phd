@@ -1,166 +1,244 @@
-)abbrev package STCLEAN SpadTreeCleanUp
-SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
+)abbrev domain TCNI TCNodeInfo
+TCNodeInfo() : Exports == Implementation where
+  OF ==> OutputForm
+  NNI ==> NonNegativeInteger
+  ENV ==> SpadEnvironment
   N ==> SpadNode
-  APP ==> SpadApply(N)
+
+  Exports ==> CoercibleTo(OutputForm) with
+    elt : (%, "index") -> NNI
+    elt : (%, "children") -> List(NNI)
+    elt : (%, "node") -> N
+    elt : (%, "env") -> ENV
+    setelt! : (%, "index", NNI) -> NNI
+    setelt! : (%, "env", ENV) -> ENV
+
+    addChild! : (NNI, %) -> Void
+    nodeInfo : (N, ENV) -> %
 
   Implementation ==> add
-    rewrite (a : APP) : N ==
-      -- replace "exit(1, node)" with "node"
-      fn := a.function
-      symbol? fn and (fn :: Symbol) = 'exit and (a.args.1 :: Integer) = 1 =>
-        rewrite a.args.2
-      [[rewrite a.function, [rewrite arg for arg in a.args]] $ APP]
-
-)abbrev package STMEXP SpadTreeMacroExpander
-SpadTreeMacroExpander() : Exports == Implementation where
-  N ==> SpadNode
-  M ==> SpadMacro(N)
-  AL ==> AssociationList(Symbol, M)
-  SEQ ==> SpadSequence(N)
+    Rep := Record(ni_index : NNI,
+                  ni_children : List(NNI),
+                  ni_node : N,
+                  ni_env : ENV)
 
-  Exports ==> SpadTreeWalkerCategory with 
-    init : () -> Void
+    elt (x, "index") == x.ni_index
+    elt (x, "children") == reverse x.ni_children
+    elt (x, "node") == x.ni_node
+    elt (x, "env") == x.ni_env
+
+    setelt! (x, "index", i) ==
+      x.ni_index := i
+    setelt! (x, "env", env) ==
+      x.ni_env := env
+
+    addChild! (index, x) ==
+      x.ni_children := [index, :x.ni_children]
+
+    nodeInfo (n, e) ==
+      [0, [], n, e] $ Rep
+
+    coerce ni ==
+      cl : OF :=
+        if not empty? ni.children then
+          commaSeparate [hconcat ["#", c :: OF] for c in ni.children]
+        else
+          "()"
+      hconcat ["#", ni.index :: OF, " <- ", cl]
+
+
+)abbrev package TCNA TCNodeArray
+TCNodeArray() : Exports == Implementation where
+  NNI ==> NonNegativeInteger
+  NI ==> TCNodeInfo
+  OF ==> OutputForm
+  N ==> SpadNode
+  ENV ==> SpadEnvironment
+
+  Exports ==> CoercibleTo(OutputForm) with
+    nodeArray : List(NI) -> %
+    lastNode : % -> NI
+    lastIndex : % -> NNI
+    addNode! : (N, ENV, %) -> Void
 
   Implementation ==> add
-    env : Stack AL := stack [table()]
-    lastCtx : AL := table()
+    Rep := FlexibleArray(TCNodeInfo)
 
-    newCtx : () -> Void
-    newCtx () == push!(table(), env)
+    import TCNodeInfo
 
-    addCtx : AL -> Void
-    addCtx ctx == push!(ctx, env)
+    nodeArray lst ==
+      for e in lst for i in 1..#lst repeat
+        e.index := i
+      flexibleArray lst
+        
+    coerce na ==
+      pile [ni :: OF for ni in entries na]
 
-    discardCtx : () -> AL
-    discardCtx () == pop! env
+    lastNode na == na(#na)
 
-    addMacro : M -> Void
-    addMacro m ==
-      ctx := top env
-      ctx(m.name) := m
+    lastIndex na == #na
 
-    findMacro : Symbol -> Union(M, "failed")
-    findMacro name ==
-      for ctx in parts env repeat
-        if key?(name, ctx) then
-          return ctx(name)
-      "failed"
-
-    init () ==
-      env := stack [table()]
-      lastCtx := table()
-
-    rewrite (seq : SEQ) : N ==
-      seq.kind ~= "prog" =>
-        [[seq.kind, [rewrite ex for ex in seq.list]] $ SEQ]
-
-      newCtx()
-      nodes := [rewrite ex for ex in seq.list]
-      lastCtx := discardCtx()
-
-      -- eliminate leftovers after consumed macros
-      nodes := [node for node in nodes | not emptyNode? node]
-      empty? nodes => emptyNode()
-      [[seq.kind, nodes] $ SEQ]
-
-    rewrite (app : SpadApply(N)) : N ==
-      if symbol? app.function then
-        m := findMacro (app.function :: Symbol)
-        m case M and #m.args > 0 =>
-          #app.args ~= #m.args =>
-            error concat(["Wrong number of arguments (", string(#app.args), ") ",
-                          "passed to macro ", string(m.name), " (", string(#m.args), ")"])
-          newCtx ()
-          for m_arg in m.args for arg in app.args repeat
-            -- skip argument rewriting if it doesn't require renaming
-            if not(symbol? arg and (arg :: Symbol) = m_arg) then
-              addMacro ([m_arg, [], arg] $ SpadMacro(N))
-          app' := rewrite m.body
-          discardCtx()
-          return app'
-      [[rewrite app.function, [rewrite arg for arg in app.args]] $ SpadApply(N)]
-
-    rewrite (m : SpadMacro(N)) : N ==
-      addMacro m
-      emptyNode()
-
-    rewrite (w : SpadWhere(N)) : N ==
-      wenv := rewrite w.env
-      -- because w.env is always (?) a sequence it produces a valid lastCtx environment
-      addCtx(lastCtx)
-      wbody := rewrite w.body
-      discardCtx ()
-      -- reduce where statement if environment contained only macros
-      emptyNode? wenv => wbody
-      
-      [[wbody, wenv] $ SpadWhere(N)]
-
-    rewrite (sym : Symbol) : N ==
-      m := findMacro sym
-      m case "failed" => [sym]
-      #m.args ~= 0 =>
-        error concat ["Attempted to apply arguments to parameterless macro '", string m.name, "'"]
-      rewrite m.body
+    addNode! (n, env, na) ==
+      ni := nodeInfo(n, env)
+      ni.index := #na + 1 
+      concat!(na, ni)
 
-)abbrev domain STRP1 SpadTreeRewritePhase1
-SpadTreeRewritePhase1() : SpadTreeWalkerCategory == Implementation where
+)abbrev package STYPCHK SpadTypeChecker
+SpadTypeChecker() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
+  CN ==> SpadConditional(N)
+  FN ==> SpadFunction(N)
+  FT ==> SpadFunctor(N)
+  IM ==> SpadImport(N)
+  LAM ==> SpadLambda(N)
+  LP ==> SpadLoop(N)
+  M ==> SpadMacro(N)
+  MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
+  RT ==> SpadRecordType(N)
+  SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
+  ST ==> SpadSumType(N)
+  TE ==> SpadTypeExpr(N)
+  UT ==> SpadUnionType(N)
+  W ==> SpadWhere(N)
+
+  OF ==> OutputForm
+  ENV ==> SpadEnvironment
+  CTX ==> TCNodeArray
+
+  Exports ==> with
+    walk : (APP, CTX, ENV) -> ENV
+    walk : (ASS, CTX, ENV) -> ENV
+    walk : (CN, CTX, ENV) -> ENV
+    walk : (FN, CTX, ENV) -> ENV
+    walk : (FT, CTX, ENV) -> ENV
+    walk : (IM, CTX, ENV) -> ENV
+    walk : (LAM, CTX, ENV) -> ENV
+    walk : (LP, CTX, ENV) -> ENV
+    walk : (SEG, CTX, ENV) -> ENV
+    walk : (SEQ, CTX, ENV) -> ENV
+    walk : (Symbol, CTX, ENV) -> ENV
+
+    walkL : (List(N), CTX, ENV) -> ENV
+    walk : (N, CTX, ENV) -> ENV
+
+    print : List(OF) -> Void
 
   Implementation ==> add
-    rewrite (app : APP) : N ==
-      nexps : List(N) := []
-      nargs : List(N) := []
-      for arg in app.args repeat
-        narg := arg
-        if not value? arg then
-          narg := [gensym()]
-          nexps := [rewrite [[narg, arg] $ ASS], :nexps]
-        nargs := [rewrite narg, :nargs]
-      reverse! nexps
-      reverse! nargs
-      app' := [[rewrite app.function, nargs] $ APP]
-      empty? nexps => app'
-      [["prog", [:nexps, app']] $ SEQ]
-
-    rewrite (seq : SEQ) : N == 
-      nodes : List(N) := [rewrite e for e in seq.list]
-      if seq.kind = "prog" then
-        nodes' : List(N) := []
-        for node in nodes repeat
-          if sequence? node then
-            nseq := node :: SEQ
-            nseq.kind = "prog" =>
-              nodes' := concat(reverse nseq.list, nodes')
-          nodes' := [node, :nodes']
-        nodes := reverse nodes'
-      [[seq.kind, nodes] $ SEQ]
-
-)abbrev package SFWTEST SpadFrameworkTest
-++ Author: Krystian Baclawski
-++ Date Created: December 2013
-++ Date Last Updated: January 2014
-++ Description:
-++ Experimental type checker with bottom-up approach.
-SpadFrameworkTest() : with
-    run : SExpression -> Void 
-  == add
+    import SpadEnvironment
+    import SExpression
     import OutputForm
-    import SpadNode
-    import SpadTreeMacroExpander
 
-    run e ==
-      --print (e :: OutputForm)
+    print (l : List(OF)) : Void ==
+      print hconcat l
 
-      -- BUG: type annotation below is necessary otherwise compiler chooses
-      -- "parse" function that fails to parse functor
-      n : SpadNode := parse e
+    coerce : List(N) -> OF
+    coerce (nodes : List(N)) : OF ==
+      pile [hconcat [i :: OF, " : ", n :: OF] for n in nodes for i in 1..#nodes]
 
-      n := rewrite(n) $ SpadTreeCleanUp
-      print (n :: OutputForm)
-      
-      init() -- initalize macro expander
-      n := rewrite(n) $ SpadTreeMacroExpander
-      print (n :: OutputForm)
+    walk (a : APP, ctx : CTX, env : ENV) : ENV ==
+      walkL ([a.function, :a.args], ctx, env)
+
+    walk (a : ASS, ctx : CTX, env : ENV) : ENV ==
+      walkL ([a.lval, a.rval], ctx, env)
+
+    walk (cn : CN, ctx : CTX, env : ENV) : ENV ==
+      walkL ([cn.cond, cn.truebr, cn.falsebr], ctx, env)
+
+    walk (fn : FN, ctx : CTX, env : ENV) : ENV ==
+      print ["[*] Processing function ", string(fn.name) :: OF]
+
+      sig := concat [string(fn.name),"/",string(#fn.args)]
+
+      -- fetch signatures from domain's definition
+      mappings := [mm.type for mm in getModemap(fn.name, env) |
+                   (#mm.type.args) = (#fn.args)]
+      print(["Found ", sig :: OF, " with signatures : ",
+             bracket [mt :: OF for mt in mappings]])
+
+      for mt in mappings repeat
+        print ["[*] Assume ", sig :: OF, " has type : ", mt :: OF]
+
+        env' := addDomain(mt.type :: APP, env)
+        for arg in fn.args for argt in mt.args repeat
+          env' := addDomain(argt :: APP, env')
+          env' := putMode((arg :: NT).name, argt, env')
+
+        ctx' := nodeArray [nodeInfo([fn], env')]
+
+        walkL ([fn.body], ctx', env')
+
+        print ""
+        print (ctx' :: OF)
+
+      env
+
+    walk (ft : FT, ctx : CTX, env : ENV) : ENV ==
+      sig := signature ft
+      print ["[*] Processing functor : ", sig :: OF]
+      env := putMode(sig.name, sig.type, env)
+      env := putMode("$" :: Symbol, ft.type, env)
+      env := addModemapsFromCategory(["$" :: Symbol], ft.type, env)
+      walkL ([ft.capsule], ctx, env)
+
+    walk (im : IM, ctx : CTX, env : ENV) : ENV ==
+      print ["[*] Importing ", im.type :: OF]
+      env := addDomain(im.type :: APP, env)
+      (lastNode ctx).env := env
+      env
+
+    walk (l : LAM, ctx : CTX, env : ENV) : ENV ==
+      walkL ([l.body], ctx, env)
+
+    walk (lp : LP, ctx : CTX, env : ENV) : ENV ==
+      walkL (concat [[itor.seq for itor in lp.itors], lp.guards, [lp.body]], ctx, env)
+
+    walk (seg : SEG, ctx : CTX, env : ENV) : ENV ==
+      walkL ([seg.start, seg.end, seg.step], ctx, env)
+
+    walk (s : SEQ, ctx : CTX, env : ENV) : ENV ==
+      walkL (s.list, ctx, env)
+
+    walk (s : Symbol, ctx : CTX, env : ENV) : ENV ==
+      print ["[*] Symbol lookup for ", string(s) :: OF]
+      types : List(N) := [[mm.type] for mm in getModemap(s, env)]
+      mode := getMode(s, env)
+      if not emptyNode? mode then
+        types := [mode, :types]
+      if empty? types then
+        print ["Not found!"]
+      else
+        print(["Found ", string(s) :: OF, " with type : ",
+               bracket [t :: OF for t in types]])
+      env
+
+    walk (n : N, ctx : CTX, env : ENV) : ENV ==
+      addNode!(n, env, ctx)
+
+      apply? n => walk(n :: APP, ctx, env)
+      assign? n => walk(n :: ASS, ctx, env)
+      conditional? n => walk(n :: CN, ctx, env)
+      function? n => walk(n :: FN, ctx, env)
+      functor? n => walk(n :: FT, ctx, env)
+      import? n => walk(n :: IM, ctx, env)
+      lambda? n => walk(n :: LAM, ctx, env)
+      loop? n => walk(n :: LP, ctx, env)
+      segment? n => walk(n :: SEG, ctx, env)
+      sequence? n => walk(n :: SEQ, ctx, env)
+      symbol? n => walk(n :: Symbol, ctx, env)
+      -- namedType, mappingType, recordType, sumType, unionType
+      -- macro, import, string, symbol, integer, float, emptyNode
+      -- typeExpr, where
+      env
+
+    walkL (nodes : List(N), ctx : CTX, env : ENV) : ENV ==
+      parent := lastNode ctx
+
+      for node in nodes repeat
+        addChild! (lastIndex ctx + 1, parent)
+        env := walk(node, ctx, env)
+
+      env

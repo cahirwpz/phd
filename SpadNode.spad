@@ -170,7 +170,8 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
       ts := [ t :: OutputForm for t in sum.types ]
       sum.kind case "Join" =>
         hconcat ["Join(", infix(", ", ts), ")"]
-      hconcat [" with ", hconcat [hspace 2, pile ts]]
+      -- hconcat [" with ", hconcat [hspace 2, pile ts]]
+      brace ts
 
 )abbrev domain SPTNAMED SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : ParsableCategory with
@@ -867,16 +868,22 @@ SpadWhere(N : SpadNodeCategory) : ParsableCategory with
 
 )abbrev package SPFTOR SpadFunctor
 ++ SPAD functor representation
-SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
+SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
+  NT ==> SpadNamedType(N)
+  MT ==> SpadMappingType(N)
+
+  Exports ==> ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List SpadNamedType(N)
+    elt : (%, "args") -> List NT
     elt : (%, "type") -> N
     elt : (%, "extends") -> N
     elt : (%, "capsule") -> N
-    construct : (Symbol, List SpadNamedType(N), N, N, N) -> %
-  == add
+    construct : (Symbol, List NT, N, N, N) -> %
+    signature : % -> NT
+
+  Implementation ==> add
     Rep := Record(f_name : Symbol,
-                  f_args : List SpadNamedType(N),
+                  f_args : List NT,
                   f_type : N,
                   f_extends : N,
                   f_capsule : N)
@@ -902,7 +909,7 @@ SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
       fname := symbol car(ex.2)
       ftype := car ex.3
       fbody := ex.5
-      fargs : List SpadNamedType(N) :=
+      fargs : List NT :=
         [[symbol s, parse t] for s in arg_names for t in arg_types]
       fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
       fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
@@ -923,6 +930,9 @@ SpadFunctor(N : SpadNodeCategory) : ParsableCategory with
                f.type :: OutputForm, " == ",
                f.extends :: OutputForm, " add ",
                hconcat [hspace 2, f.capsule :: OutputForm]])
+
+    signature ft ==
+      [ft.name, [[[arg.type for arg in ft.args], ft.type] $ MT]]
 
 )abbrev domain SPNODE SpadNode
 ++ SPAD generic expression
