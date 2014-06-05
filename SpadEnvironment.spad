@@ -65,7 +65,7 @@ SpadEnvironment() : Exports == Implementation where
     addModemap : (Symbol, APP, SEX, %) -> %
     getModemap : (Symbol, %) -> List(SpadModeMap)
 
-    putMode : (Symbol, N, %) -> %
+    addMode : (Symbol, N, %) -> %
     getMode : (Symbol, %) -> N
 
     putValue : (Symbol, N, %) -> %
@@ -157,8 +157,8 @@ SpadEnvironment() : Exports == Implementation where
       restoreMode(m)
       res
 
-    putMode(name, type, env) ==
-      print hconcat ["EnvPutMode", paren [name :: OF, type :: OF]]
+    addMode(name, type, env) ==
+      print hconcat ["EnvAddMode", paren [name :: OF, type :: OF]]
       m := saveMode()
       res : % := put(name, 'mode, convert type, env)$Lisp
       restoreMode(m)

@@ -11,6 +11,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadMacro(%) -> %
   construct : SpadMappingType(%) -> %
   construct : SpadNamedType(%) -> %
+  construct : SpadNodeRef(%) -> %
   construct : SpadRecordType(%) -> %
   construct : SpadSegment(%) -> %
   construct : SpadSequence(%) -> %
@@ -40,6 +41,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   macro? : % -> Boolean
   mappingType? : % -> Boolean
   namedType? : % -> Boolean
+  nodeRef? : % -> Boolean
   recordType? : % -> Boolean
   segment? : % -> Boolean
   sequence? : % -> Boolean
@@ -63,6 +65,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadMacro(%)
   coerce : % -> SpadMappingType(%)
   coerce : % -> SpadNamedType(%)
+  coerce : % -> SpadNodeRef(%)
   coerce : % -> SpadRecordType(%)
   coerce : % -> SpadSegment(%)
   coerce : % -> SpadSequence(%)
@@ -79,6 +82,29 @@ SpadNodeCategory() : Category == ParsableCategory with
   constructor? : Symbol -> Boolean
 
   parseNonNull : SExpression -> %
+
+)abbrev domain SPNREF SpadNodeRef
+SpadNodeRef(N : SpadNodeCategory) : Exports == Implementation where
+  NNI ==> NonNegativeInteger
+
+  Exports ==> SetCategory with
+    elt : (%, "index") -> NNI
+    elt : (%, "node") -> N
+    construct : (NNI, N) -> %
+
+  Implementation ==> add
+    Rep := Record(r_index : NNI, r_node : N)
+
+    import OutputForm
+    import ParserTools
+
+    elt(x, "index") == x.r_index
+    elt(x, "node") == x.r_node
+
+    construct(i, n) == [i, n]$Rep
+
+    coerce r ==
+      hconcat ["#", r.index :: OutputForm]
 
 )abbrev domain SPTMAP SpadMappingType
 SpadMappingType(N : SpadNodeCategory) : ParsableCategory with
@@ -357,6 +383,11 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
     coerce apply ==
       fun := apply.function
       argl := [ a :: OutputForm for a in apply.args ]
+
+      if nodeRef? fun then
+        nr := fun :: SpadNodeRef(N)
+        s := concat ["#", string nr.index]
+        fun := [s :: Symbol]
 
       not symbol? fun =>
         funof := fun :: OutputForm
@@ -775,7 +806,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       arg_types := destruct cdr(ex.3)
       fargs := [parse_arg(s, t) for s in arg_names for t in arg_types]
       ftype := car ex.3
-      fbody := convert [ex.5]
+      fbody := ex.5
       [fname, fargs, parseNonNull ftype, parse fbody]
 
     convert x ==
@@ -956,6 +987,7 @@ SpadNode() : SpadNodeCategory == add
                  swhere : SpadWhere(%),
                  typeexpr : SpadTypeExpr(%),
                  union : SpadUnionType(%),
+                 ref : SpadNodeRef(%),
                  dfloat : DoubleFloat,
                  integer : Integer,
                  string : String,
@@ -978,6 +1010,7 @@ SpadNode() : SpadNodeCategory == add
     macro? n == n case smacro 
     mappingType? n == n case mapping 
     namedType? n == n case named
+    nodeRef? n == n case ref
     recordType? n == n case record
     segment? n == n case segment 
     sequence? n == n case seq
@@ -1063,6 +1096,10 @@ SpadNode() : SpadNodeCategory == add
       where? n => n.swhere
       CoerceError("SpadWhere")
 
+    coerce (n : %) : SpadNodeRef(%) ==
+      nodeRef? n => n.ref
+      CoerceError("SpadNodeRef")
+
     coerce (n : %) : DoubleFloat ==
       float? n => n.dfloat
       CoerceError("DoubleFloat")
@@ -1106,6 +1143,7 @@ SpadNode() : SpadNodeCategory == add
     construct (n : SpadSumType(%)) : % == [n]$Rep
     construct (n : SpadUnionType(%)) : % == [n]$Rep
     construct (n : SpadWhere(%)) : % == [n]$Rep
+    construct (n : SpadNodeRef(%)) : % == [n]$Rep
 
     construct (n : DoubleFloat) : % == [n]$Rep
     construct (n : Integer) : % == [n]$Rep
@@ -1237,7 +1275,8 @@ SpadNode() : SpadNodeCategory == add
       typeExpr? n => (n :: SpadTypeExpr(%)) :: OutputForm
       unionType? n => (n :: SpadUnionType(%)) :: OutputForm
       where? n => (n :: SpadWhere(%)) :: OutputForm
-      emptyNode? n => ""
+      nodeRef? n => (n :: SpadNodeRef(%)) :: OutputForm
+      emptyNode? n => "?"
 
       error "coerce $ SpadNode: variant not handled!"
 

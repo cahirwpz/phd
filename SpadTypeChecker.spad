@@ -1,87 +1,331 @@
-)abbrev domain TCNI TCNodeInfo
-TCNodeInfo() : Exports == Implementation where
+)abbrev package OFEXT OutputFormExt
+OutputFormExt() : Exports == Implementation where
+  OF ==> OutputForm
+  N ==> SpadNode
+
+  Exports ==> with
+    number : Integer -> Symbol
+    funsig : (Symbol, Integer) -> Symbol
+    spaces : List(OF) -> OF
+    print : List(OF) -> Void
+    coerce : List(N) -> OF
+
+  Implementation ==> add
+    import String
+    import OutputForm
+
+    number i ==
+      coerce concat ["#", string i]
+
+    funsig (name, args) ==
+      coerce concat [string name, "/", string args]
+
+    spaces lst ==
+      lst' := [first lst]
+      for e in rest lst repeat
+        lst' := [e, " ", :lst']
+      hconcat reverse lst'
+
+    print (lst : List(OF)) : Void ==
+      print spaces lst
+
+    coerce (nodes : List(N)) : OF ==
+      pile [hconcat [i :: OF, " : ", n :: OF] for n in nodes for i in 1..#nodes]
+
+)abbrev domain TCNODE TCNode
+TCNode() : Exports == Implementation where
   OF ==> OutputForm
   NNI ==> NonNegativeInteger
   ENV ==> SpadEnvironment
   N ==> SpadNode
+  NR ==> SpadNodeRef(N)
 
   Exports ==> CoercibleTo(OutputForm) with
+    elt : (%, "parent") -> NNI
     elt : (%, "index") -> NNI
     elt : (%, "children") -> List(NNI)
     elt : (%, "node") -> N
+    elt : (%, "rule") -> N
+    elt : (%, "types") -> List(N)
     elt : (%, "env") -> ENV
+    setelt! : (%, "parent", NNI) -> NNI
     setelt! : (%, "index", NNI) -> NNI
     setelt! : (%, "env", ENV) -> ENV
+    setelt! : (%, "rule", N) -> N
+    setelt! : (%, "types", List(N)) -> List(N)
 
     addChild! : (NNI, %) -> Void
+    addType! : (N, %) -> Void
     nodeInfo : (N, ENV) -> %
 
   Implementation ==> add
     Rep := Record(ni_index : NNI,
+                  ni_parent : NNI,
                   ni_children : List(NNI),
                   ni_node : N,
+                  ni_rule : N,
+                  ni_types : List(N),
                   ni_env : ENV)
 
+    import SpadNode
+    import SpadNodeRef
+    import OutputForm
+
+    elt (x, "parent") == x.ni_parent
     elt (x, "index") == x.ni_index
     elt (x, "children") == reverse x.ni_children
     elt (x, "node") == x.ni_node
+    elt (x, "rule") == x.ni_rule
+    elt (x, "types") == reverse x.ni_types
     elt (x, "env") == x.ni_env
 
     setelt! (x, "index", i) ==
       x.ni_index := i
-    setelt! (x, "env", env) ==
-      x.ni_env := env
+    setelt! (x, "parent", i) ==
+      x.ni_parent := i
+    setelt! (x, "env", e) ==
+      x.ni_env := e
+    setelt! (x, "rule", r) ==
+      x.ni_rule := r
+    setelt! (x, "types", ts) ==
+      x.ni_types := ts
 
-    addChild! (index, x) ==
-      x.ni_children := [index, :x.ni_children]
+    addChild! (child, x) ==
+      x.ni_children := [child, :x.ni_children]
+
+    addType! (type, x) ==
+      x.ni_types :=
+        emptyNode? (first x.ni_types) => [type]
+        [type, :x.ni_types]
 
     nodeInfo (n, e) ==
-      [0, [], n, e] $ Rep
+      [0, 0, [], n, emptyNode(), [emptyNode()], e] $ Rep
 
-    coerce ni ==
-      cl : OF :=
-        if not empty? ni.children then
-          commaSeparate [hconcat ["#", c :: OF] for c in ni.children]
-        else
-          "()"
-      hconcat ["#", ni.index :: OF, " <- ", cl]
+    coerce x ==
+      par := right(hconcat ["#", x.parent :: OF], 4)
+      num := right(hconcat ["#", x.index :: OF], 4)
+      ts := if #x.types = 1 then (first x.types) :: OF else x.types :: OF
+      emptyNode? x.rule =>
+        hconcat [num, " is ", ts]
+      hconcat [num, " <- {", x.rule :: OF, "} is ", ts]
 
+)abbrev package TUNIFY TypeUnifier
+TypeUnifier() : Exports == Implementation where
+  OF ==> OutputForm
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  MT ==> SpadMappingType(N)
+
+  Exports ==> with
+    unifyType : (Symbol, N) -> Union(N, "failed")
+    unifyType : (APP, N) -> Union(N, "failed")
+    unifyType : (MT, N) -> Union(N, "failed")
+    unifyType : (N, N) -> Union(N, "failed")
+    unifyTypes : (N, List(N)) -> List(N)
+
+    failed? : Union(N, "failed") -> Boolean 
+
+  Implementation ==> add
+    import SpadNode
+    import OutputFormExt
+
+    failed? t ==
+      t case "failed"
+
+    unifyType(s : Symbol, n : N) : Union(N, "failed") ==
+      not symbol? n => "failed"
+      s' := n :: Symbol
+      s = s' => [s]
+      "failed"
+
+    unifyType(app : APP, n : N) : Union(N, "failed") ==
+      not apply? n => "failed"
+      app' := n :: APP
+      #(app.args) ~= #(app'.args) => "failed"
+      ts := []
+      for t in [app.function, :app.args]
+        for t' in [app'.function, :app'.args] repeat
+          ures := unifyType(t, t')
+          failed? ures => return "failed"
+          ts := [ures :: N, :ts]
+      ts := reverse ts
+      [[first ts, rest ts]$APP]
+
+    unifyType(mt : MT, n : N) : Union(N, "failed") ==
+      not mappingType? n => "failed"
+      mt' := n :: MT
+      #(mt.args) ~= #(mt'.args) => "failed"
+      ts := []
+      for t in [mt.type, :mt.args]
+        for t' in [mt'.type, :mt'.args] repeat
+          ures := unifyType(t, t')
+          failed? ures => return "failed"
+          ts := [ures :: N, :ts]
+      ts := reverse ts
+      [[rest ts, first ts]$MT]
+
+    unifyType(n : N, candidate : N) : Union(N, "failed") ==
+      print [hspace 2, brace(n :: OF), "~", brace(candidate :: OF)]
+
+      emptyNode? candidate => n
+      mappingType? n => unifyType(n :: MT, candidate)
+      apply? n => unifyType(n :: APP, candidate)
+      symbol? n => unifyType(n :: Symbol, candidate)
+      emptyNode? n => candidate
+      "failed"
+
+    unifyTypes(t : N, candidates : List(N)) : List(N) ==
+      print ["[*] Unification of", brace(t :: OF), "with", brace([c :: OF for c in candidates])]
+      ts : List(N) := []
+      for candidate in candidates repeat
+        t' := unifyType(t, candidate)
+        not failed? t' =>
+          ts := [t' :: N, :ts]
+      reverse ts
 
 )abbrev package TCNA TCNodeArray
 TCNodeArray() : Exports == Implementation where
   NNI ==> NonNegativeInteger
-  NI ==> TCNodeInfo
+  TCN ==> TCNode
   OF ==> OutputForm
   N ==> SpadNode
+  APP ==> SpadApply(N)
+  ASS ==> SpadAssign(N)
+  CN ==> SpadConditional(N)
   ENV ==> SpadEnvironment
+  MT ==> SpadMappingType(N)
+  NR ==> SpadNodeRef(N)
 
   Exports ==> CoercibleTo(OutputForm) with
-    nodeArray : List(NI) -> %
-    lastNode : % -> NI
+    nodeArray : List(TCN) -> %
+    lastNode : % -> TCN
     lastIndex : % -> NNI
     addNode! : (N, ENV, %) -> Void
+    newTypeVar! : % -> Symbol
+    nodeRef : (NNI, %) -> N
+    elt : (%, NNI) -> TCN
+
+    inferType : (APP, TCN, %) -> Boolean
+    inferType : (ASS, TCN, %) -> Boolean
+    inferType : (CN, TCN, %) -> Boolean
+    inferType : (NR, TCN, %) -> Boolean
+    inferType : (NNI, %) -> Boolean
+
+    check : % -> Void
 
   Implementation ==> add
-    Rep := FlexibleArray(TCNodeInfo)
+    Rep := Record(nodes : FlexibleArray(TCN), counter : NNI)
 
-    import TCNodeInfo
+    import TCNode
+    import SpadNode
+    import TypeUnifier
+    import OutputFormExt
 
     nodeArray lst ==
       for e in lst for i in 1..#lst repeat
         e.index := i
-      flexibleArray lst
-        
-    coerce na ==
-      pile [ni :: OF for ni in entries na]
+      [flexibleArray lst, 0]
 
-    lastNode na == na(#na)
+    coerce x ==
+      coercetv(i : NNI, tv : List(N)) : OF ==
+        num := right(hconcat ["%", i :: OF], 4)
+        ts := if #tv = 1 then (first tv) :: OF else tv :: OF
+        hconcat [num, " is ", ts]
 
-    lastIndex na == #na
+      pile ["Nodes : ", :[ni :: OF for ni in entries x.nodes]]
 
-    addNode! (n, env, na) ==
+    elt (x, i) ==
+      (x.nodes)(i)
+
+    lastNode x ==
+      ns := x.nodes
+      ns(#ns)
+
+    lastIndex x == #(x.nodes)
+
+    addNode! (n, env, x) ==
       ni := nodeInfo(n, env)
-      ni.index := #na + 1 
-      concat!(na, ni)
+      ni.index := #(x.nodes) + 1 
+      concat!(x.nodes, ni)
+
+    newTypeVar! x ==
+      x.counter := x.counter + 1
+      coerce concat ["%", string(x.counter)]
+
+    nodeRef(i, x) ==
+      [[i, x(i).node]$NR]
+
+    inferType(rule : APP, n : TCN, ns : %) : Boolean ==
+      ifun := first n.children
+      iargs := rest n.children
+      ts : List(N) := []
+      for type in n.types repeat
+        mt : MT := [[ns(i).types.1 for i in iargs], type]
+        ts := concat(unifyTypes([mt], ns(ifun).types), ts)
+      empty? ts => false
+      n.types := [(u :: MT).type for u in removeDuplicates ts]
+      true
+
+    inferType(rule : ASS, n : TCN, ns : %) : Boolean ==
+      ilval := n.children.1
+      irval := n.children.2
+
+      ts : List(N) := []
+      for lt in ns(ilval).types repeat
+        for rt in ns(irval).types repeat
+          t := unifyType(rt, lt)
+          not failed? t =>
+            ts := [t :: N, :ts]
+      empty? ts => false
+      n.types := removeDuplicates ts
+      true
+
+    inferType(rule : CN, n : TCN, ns : %) : Boolean ==
+      icond := n.children.1
+      itrue := n.children.2
+      ifalse := n.children.3
+
+      ts : List(N) := []
+      for lt in ns(itrue).types repeat
+        for rt in ns(ifalse).types repeat
+          t := unifyType(rt, lt)
+          not failed? t =>
+            ts := [t :: N, :ts]
+      empty? ts => false
+      n.types := removeDuplicates ts
+      -- must check type of cond node
+      true
+
+    inferType(rule : NR, n : TCN, ns : %) : Boolean ==
+      ts : List(N) := []
+      for lt in n.types repeat
+        for rt in ns(rule.index).types repeat
+          t := unifyType(rt, lt)
+          not failed? t =>
+            ts := [t :: N, :ts]
+      empty? ts => false
+      n.types := removeDuplicates ts
+      true
+
+    inferType(i : NNI, ns : %) : Boolean ==
+      n := ns(i)
+      emptyNode? n.rule => true
+      print ["[*] Run type inference for", number(i) :: OF]
+      apply? n.rule => inferType(n.rule :: APP, n, ns)
+      assign? n.rule => inferType(n.rule :: ASS, n, ns)
+      conditional? n.rule => inferType(n.rule :: CN, n, ns)
+      nodeRef? n.rule => inferType(n.rule :: NR, n, ns)
+      if integer? n.rule then print "integer?"
+      if symbol? n.rule then print "symbol?"
+      if float? n.rule then print "float?"
+      if string? n.rule then print "string?"
+      false
+
+    check x ==
+      for i in #(x.nodes)..1 by -1 repeat
+        if not inferType(i, x) then
+          print ["[*] Failed!"]
+      print (x :: OF)
 
 )abbrev package STYPCHK SpadTypeChecker
 SpadTypeChecker() : Exports == Implementation where
@@ -104,6 +348,7 @@ SpadTypeChecker() : Exports == Implementation where
   TE ==> SpadTypeExpr(N)
   UT ==> SpadUnionType(N)
   W ==> SpadWhere(N)
+  NR ==> SpadNodeRef(N)
 
   OF ==> OutputForm
   ENV ==> SpadEnvironment
@@ -120,72 +365,103 @@ SpadTypeChecker() : Exports == Implementation where
     walk : (LP, CTX, ENV) -> ENV
     walk : (SEG, CTX, ENV) -> ENV
     walk : (SEQ, CTX, ENV) -> ENV
+    walk : (DoubleFloat, CTX, ENV) -> ENV
+    walk : (Integer, CTX, ENV) -> ENV
+    walk : (String, CTX, ENV) -> ENV
     walk : (Symbol, CTX, ENV) -> ENV
+    walk : (TE, CTX, ENV) -> ENV
 
     walkL : (List(N), CTX, ENV) -> ENV
     walk : (N, CTX, ENV) -> ENV
 
-    print : List(OF) -> Void
 
   Implementation ==> add
     import SpadEnvironment
     import SExpression
-    import OutputForm
+    import String
+    import TCNode
+    import OutputFormExt
 
-    print (l : List(OF)) : Void ==
-      print hconcat l
-
-    coerce : List(N) -> OF
-    coerce (nodes : List(N)) : OF ==
-      pile [hconcat [i :: OF, " : ", n :: OF] for n in nodes for i in 1..#nodes]
+    integerType := [[["Integer" :: Symbol], []]$APP]
+    floatType := [[["Float" :: Symbol], []]$APP]
+    stringType := [[["String" :: Symbol], []]$APP]
 
     walk (a : APP, ctx : CTX, env : ENV) : ENV ==
-      walkL ([a.function, :a.args], ctx, env)
+      node := lastNode ctx
+      env := walkL ([a.function, :a.args], ctx, env)
+      nl := [nodeRef(i,ctx) for i in node.children]
+      node.rule := [[first nl, rest nl]$APP]
+      env
 
     walk (a : ASS, ctx : CTX, env : ENV) : ENV ==
-      walkL ([a.lval, a.rval], ctx, env)
+      -- handle "symbol : Type := value"
+      typeExpr? a.lval =>
+        te := a.lval :: TE
+        env := walk(te, ctx, env)
+        walk([te.expr, a.rval]$ASS, ctx, env)
+
+      node := lastNode ctx
+
+      if symbol? a.lval then
+        s := a.lval :: Symbol
+        if emptyNode? getMode(s, env) then
+          print ["[*] Processing fresh assignment", string(s) :: OF]
+          env := addMode(s, [newTypeVar! ctx], env)
+        
+      env := walkL ([a.lval, a.rval], ctx, env)
+      nl := [nodeRef(i,ctx) for i in node.children]
+      node.rule := [[nl.1, nl.2]$ASS]
+      env
 
     walk (cn : CN, ctx : CTX, env : ENV) : ENV ==
-      walkL ([cn.cond, cn.truebr, cn.falsebr], ctx, env)
+      node := lastNode ctx
+      env := walkL ([cn.cond, cn.truebr, cn.falsebr], ctx, env)
+      nl := [nodeRef(i,ctx) for i in node.children]
+      node.rule := [[nl.1, nl.2, nl.3]$CN]
+      env
 
     walk (fn : FN, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Processing function ", string(fn.name) :: OF]
+      print ["[*] Processing function", string(fn.name) :: OF]
 
-      sig := concat [string(fn.name),"/",string(#fn.args)]
+      sig := funsig(fn.name, #fn.args)
 
       -- fetch signatures from domain's definition
       mappings := [mm.type for mm in getModemap(fn.name, env) |
                    (#mm.type.args) = (#fn.args)]
-      print(["Found ", sig :: OF, " with signatures : ",
+      print(["Found", string(sig) :: OF, "with signatures :",
              bracket [mt :: OF for mt in mappings]])
 
       for mt in mappings repeat
-        print ["[*] Assume ", sig :: OF, " has type : ", mt :: OF]
+        print ["[*] Assume", sig :: OF, "has type :", mt :: OF]
 
         env' := addDomain(mt.type :: APP, env)
         for arg in fn.args for argt in mt.args repeat
           env' := addDomain(argt :: APP, env')
-          env' := putMode((arg :: NT).name, argt, env')
+          env' := addMode((arg :: NT).name, argt, env')
 
         ctx' := nodeArray [nodeInfo([fn], env')]
-
+        node := lastNode ctx'
         walkL ([fn.body], ctx', env')
+        node.rule := nodeRef(2, ctx')
+        addType!(mt.type, node)
 
-        print ""
+        print "[*] Tree ready for unification : " 
         print (ctx' :: OF)
+        print ""
+        check ctx'
 
       env
 
     walk (ft : FT, ctx : CTX, env : ENV) : ENV ==
       sig := signature ft
-      print ["[*] Processing functor : ", sig :: OF]
-      env := putMode(sig.name, sig.type, env)
-      env := putMode("$" :: Symbol, ft.type, env)
+      print ["[*] Processing functor :", sig :: OF]
+      env := addMode(sig.name, sig.type, env)
+      env := addMode("$" :: Symbol, ft.type, env)
       env := addModemapsFromCategory(["$" :: Symbol], ft.type, env)
       walkL ([ft.capsule], ctx, env)
 
     walk (im : IM, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Importing ", im.type :: OF]
+      print ["[*] Importing", im.type :: OF]
       env := addDomain(im.type :: APP, env)
       (lastNode ctx).env := env
       env
@@ -200,22 +476,68 @@ SpadTypeChecker() : Exports == Implementation where
       walkL ([seg.start, seg.end, seg.step], ctx, env)
 
     walk (s : SEQ, ctx : CTX, env : ENV) : ENV ==
-      walkL (s.list, ctx, env)
+      node := lastNode ctx
+      env := walkL (s.list, ctx, env)
+      i := last node.children
+      node.rule := nodeRef(i,ctx)
+      env
 
     walk (s : Symbol, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Symbol lookup for ", string(s) :: OF]
+      print ["[*] Symbol lookup for", string(s) :: OF]
       types : List(N) := [[mm.type] for mm in getModemap(s, env)]
+      for mode in types repeat
+        addType!(mode, lastNode ctx)
       mode := getMode(s, env)
       if not emptyNode? mode then
         types := [mode, :types]
+        addType!(mode, lastNode ctx)
       if empty? types then
         print ["Not found!"]
       else
-        print(["Found ", string(s) :: OF, " with type : ",
+        print(["Found", string(s) :: OF, "with type :",
                bracket [t :: OF for t in types]])
       env
 
+    walk (te : TE, ctx : CTX, env : ENV) : ENV ==
+      te.kind = '_: => 
+        print ["[*] Expression", te.expr :: OF, "has type", te.type :: OF]
+
+        -- type definition for a symbol
+        -- add it to the environment or crash if already defined
+        symbol? te.expr =>
+          s := te.expr :: Symbol
+          emptyNode? getMode(s, env) =>
+            addMode(s, te.type, env)
+          print [s :: OF, "already defined as", getMode(s, env) :: OF]
+          error "Type checker failed!"
+
+        addNode!(te.expr, env, ctx)
+        node := lastNode ctx
+        env := walkL([te.expr], ctx, env)
+        addType!(te.type, node)
+        env
+      error "Not handled!"
+
+    walk (i : Integer, ctx : CTX, env : ENV) : ENV ==
+      print ["[*]", i :: OF, "is", integerType :: OF, ":)"]
+      addType!(integerType, lastNode ctx)
+      env
+
+    walk (f : DoubleFloat, ctx : CTX, env : ENV) : ENV ==
+      print ["[*]", f :: OF, "is", integerType :: OF, ":)"]
+      addType!(floatType, lastNode ctx)
+      env
+
+    walk (s : String, ctx : CTX, env : ENV) : ENV ==
+      print ["[*]", s :: OF, "is", stringType :: OF, ":)"]
+      addType!(stringType, lastNode ctx)
+      env
+
     walk (n : N, ctx : CTX, env : ENV) : ENV ==
+      typeExpr? n =>
+        print (n :: OF)
+        walk(n :: TE, ctx, env)
+
       addNode!(n, env, ctx)
 
       apply? n => walk(n :: APP, ctx, env)
@@ -229,16 +551,20 @@ SpadTypeChecker() : Exports == Implementation where
       segment? n => walk(n :: SEG, ctx, env)
       sequence? n => walk(n :: SEQ, ctx, env)
       symbol? n => walk(n :: Symbol, ctx, env)
-      -- namedType, mappingType, recordType, sumType, unionType
-      -- macro, import, string, symbol, integer, float, emptyNode
-      -- typeExpr, where
+      integer? n => walk(n :: Integer, ctx, env)
+      float? n => walk(n :: DoubleFloat, ctx, env)
+      string? n => walk(n :: String, ctx, env)
+      -- namedType, mappingType, recordType, sumType, unionType, macro,
+      -- emptyNode, where
       env
 
     walkL (nodes : List(N), ctx : CTX, env : ENV) : ENV ==
-      parent := lastNode ctx
+      p := lastNode ctx
 
       for node in nodes repeat
-        addChild! (lastIndex ctx + 1, parent)
+        nindex := lastIndex ctx + 1
+        addChild! (nindex, p)
         env := walk(node, ctx, env)
+        ctx(nindex).parent := p.index
 
       env
