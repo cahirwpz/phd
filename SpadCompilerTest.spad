@@ -41,7 +41,7 @@ SpadCompilerTest() : with
       print (convert n :: OutputForm)
       print ""
 
-      narr : TCNodeArray := nodeArray []
+      narr : TCNodeArray := nodeArray ()
       env : SpadEnvironment := new ()
 
       walk(n, narr, env) $ SpadTypeChecker

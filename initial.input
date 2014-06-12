@@ -8,7 +8,7 @@
 )compile SpadCompilerTest.spad
 
 -- Set up OutputForm renderer.
-)boot $LINELENGTH := 180
+)boot $LINELENGTH := 160
 
 -- Install PostParseHook handling.
 )read ncomp.boot

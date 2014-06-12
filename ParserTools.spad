@@ -27,6 +27,7 @@ ParserTools() : with
     loop? : SExpression -> Boolean
     macro? : SExpression -> Boolean
     mapping? : SExpression -> Boolean
+    marker? : SExpression -> Boolean
     nobranch? : SExpression -> Boolean
     package? : SExpression -> Boolean
     pretend? : SExpression -> Boolean
@@ -101,6 +102,7 @@ ParserTools() : with
     loop? ex == list_of_ge?(ex, 'REPEAT, 3)
     macro? ex == list_of_eq?(ex, 'MDEF, 5)
     mapping? ex == list_of_ge?(ex, 'Mapping, 2)
+    marker? ex == list_of_eq?(ex, '_@Marker, 3)
     package? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'package
     pretend? ex == list_of_eq?(ex, 'pretend, 3)
     progn? ex == list_of_ge?(ex, 'PROGN, 2)

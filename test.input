@@ -1,0 +1,7 @@
+)boot $PostParseHookEnable := false
+)compile SpadEnvironment.spad
+)compile SpadTypeChecker.spad
+)compile SpadCompilerTest.spad
+)boot $PostParseHookEnable := true
+)compile Test1.spad
+)boot $PostParseHookEnable := false

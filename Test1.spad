@@ -1,0 +1,37 @@
+)abbrev domain TEST1 Test1
+Test1() : Exports == Implementation where
+  I ==> Integer
+  F ==> Float
+  S ==> String
+
+  Exports ==> with
+    foo : I -> I
+    foo : S -> F
+    foo : (F, I) -> S
+    --sum : List(I) -> I
+
+  Implementation ==> add
+    --import List(I)
+
+    import String
+    import PositiveInteger
+    import NonNegativeInteger
+    import Float
+ 
+    -- foo : Integer -> Float
+    bar : (Integer, String) -> Float
+
+    foo(a : I) ==
+      a2 := a * a
+      ma := - a
+      if a >= 0
+        then ma
+        else a2
+
+    -- baz : (NonNegativeInteger, Integer) -> String
+
+    --sum (l : List(I)) : I ==
+    --  s := 0
+    --  for i in l repeat
+    --    s := s + i
+    --  s
