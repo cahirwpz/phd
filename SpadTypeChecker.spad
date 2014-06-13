@@ -67,6 +67,9 @@ TypeUnifier() : Exports == Implementation where
   Exports ==> with
     failed? : URES -> Boolean 
 
+    occurs? : (MR, N) -> Boolean
+    unbound? : N -> Boolean
+
     substitute : (N, MR, N) -> N
     substitute : (N, SUBST) -> N
 
@@ -82,6 +85,32 @@ TypeUnifier() : Exports == Implementation where
     import OutputFormExt
 
     failed? t == t case "failed"
+
+    occurs? (tvar, n) ==
+      import List(N)
+
+      apply? n =>
+        app := n :: APP
+        any?(m +-> occurs?(tvar, m), [app.function, :app.args])
+      mappingType? n =>
+        mt := n :: MT
+        any?(m +-> occurs?(tvar, m), [mt.type, :mt.args])
+      typeVar? n =>
+        (n :: MR) = tvar
+      false
+
+    unbound? n ==
+      import List(N)
+
+      apply? n =>
+        app := n :: APP
+        any?(unbound?, [app.function, :app.args])
+      mappingType? n =>
+        mt := n :: MT
+        any?(unbound?, [mt.type, :mt.args])
+      typeVar? n or emptyNode? n =>
+        true
+      false
 
     substitute(n : N, var : MR, term : N) : N ==
       apply? n =>
@@ -111,12 +140,15 @@ TypeUnifier() : Exports == Implementation where
       typeVar? n1 and typeVar? n2 =>
         mr1 := n1 :: MR
         mr2 := n2 :: MR
-        if mr1.id > mr2.id then [[[mr1, [n2]]]] else [[[mr2, [n1]]]]
+        mr1 = mr2 => "failed"
+        if mr1.id > mr2.id
+          then [[[mr1, [n2]]]]
+          else [[[mr2, [n1]]]]
       typeVar? n1 =>
-        -- TODO: occurence check
+        occurs? (n1 :: MR, n2) => "failed"
         [[[n1 :: MR, [n2]]]]
       typeVar? n2 =>
-        -- TODO: occurence check
+        occurs? (n2 :: MR, n1) => "failed"
         [[[n2 :: MR, [n1]]]]
 
       -- both nodes can be represented as lists of terms and variables
@@ -162,7 +194,7 @@ TypeUnifier() : Exports == Implementation where
         for t2 in ts2 repeat
           lst := [unifyType(t1, t2), :lst]
       ures := mergeSubstitutions reverse lst
-      print [hspace 2, ts1 :: OF, "~", ts2 :: OF, "=>", ures :: OF]
+      --print [hspace 2, ts1 :: OF, "~", ts2 :: OF, "=>", ures :: OF]
       ures
 
     mergeSubstitutions(ureslst : List(URES)) : URES ==
@@ -272,9 +304,11 @@ TCNodeArray() : Exports == Implementation where
     addTypeVar! : % -> N
 
     node : (NNI, %) -> TCN
+    alias? : (MR, %) -> Boolean
+    done? : (MR, %) -> Boolean
 
     coerce : AssociationList(MR, List(N)) -> OutputForm
-    check : % -> Void
+    check : % -> Boolean
 
   Implementation ==> add
     Rep := Record(nodes : FlexibleArray(TCN),
@@ -303,12 +337,7 @@ TCNodeArray() : Exports == Implementation where
       pile ["Type variables :", :tvs]
 
     coerce (x : %) : OutputForm ==
-      ns := pile ["Nodes :", :[ni :: OF for ni in entries x.nodes]]
-      ts := x.typevars :: OF
-      pile [ns, ts]
-
-    node (i, x) ==
-      (x.nodes)(i)
+      pile ["Nodes :", :[ni :: OF for ni in entries x.nodes]]
 
     lastNode x ==
       ns := x.nodes
@@ -338,35 +367,87 @@ TCNodeArray() : Exports == Implementation where
       typevars(tvar :: MR) := [emptyNode()]
       tvar
 
+    node (i, x) ==
+      (x.nodes)(i)
+
+    alias?(tvar, x) ==
+      types := (x.typevars)(tvar)
+      #types > 1 => false
+      typeVar? types.1
+
+    done?(tvar, x) ==
+      types := (x.typevars)(tvar)
+      #types > 1 => false
+      not unbound? types.1
+
     apply! : (SUBST, %) -> Void
     emptyType? : List(N) -> Boolean
     fetch : (N, %) -> List(N)
+    rewriteTypeVars! : (MR, List(N), AssociationList(MR, List(N))) -> Void
+    rewriteNodes! : (MR, N, FlexibleArray(TCN)) -> Void
     inferApplyType : (TCN, %) -> Boolean
     inferAssignType : (TCN, %) -> Boolean
     inferConditionalType : (TCN, %) -> Boolean
     inferTypeVar : (TCN, %) -> Boolean
-    inferType : (NNI, %) -> Boolean
+    inferType : (TCN, %) -> Boolean
+
+    rewriteTypeVars! (var, terms, typevars) ==
+      -- if type variable has no value then set it to whatever we've inferred
+      emptyType? typevars(var) =>
+        typevars(var) := terms
+
+      -- unify proposed values with already stored in the variable
+      -- store only matching ones
+      types : List(N) := []
+      for t in typevars(var) repeat
+        ures := unifyTypes([t], terms)
+        not failed? ures =>
+          types := [t, :types]
+      typevars(var) := types
+
+    rewriteNodes! (var, term, nodes) ==
+      for n in entries nodes | occurs?(var, n.type) repeat
+        n.type := substitute(n.type, var, term)
+        print ["[*] Rewrote :", n :: OF]
 
     apply!(substitutions, x) ==
       typevars := x.typevars
+      nodes := x.nodes
 
       for s in entries substitutions repeat
-        emptyType? typevars(s.key) =>
-          -- type variable has no value => set it to whatever we've got
-          typevars(s.key) := s.entry
+        print ["[*] Modyfing", s.key :: OF, "type variable."]
+        rewriteTypeVars!(s.key, s.entry, typevars)
 
-        -- unify proposed values with already stored in the variable
-        -- store only matching ones
-        types := []
-        for t in typevars(s.key) repeat
-          ures := unifyTypes([t], s.entry)
-          not failed? ures =>
-            types := [t, :types]
-        typevars(s.key) := types
+      --print [">>>>> substitutions:", substitutions :: OF]
+      --print [">>>>> type variables:" , typevars :: OF]
 
-      -- BUG: very likely this will cause a problem, but ignore it for now
-      for key in keys typevars repeat
-        typevars(key) := [substitute(t, substitutions) for t in typevars(key)]
+      -- remove aliases and rework substitution list
+      for var in keys substitutions | alias?(var, x) repeat
+        value := first(typevars(var) :: List(N))
+        print ["[*] Found alias :", var :: OF, "=>", value :: OF]
+        -- 1) rewrite the alias
+        for s in entries typevars repeat
+          s.entry := [substitute(n, var, value) for n in s.entry]
+        rewriteNodes!(var, value, nodes)
+        -- 2) check if aliased values needs to be rewritten
+        alias := value :: MR
+        if done?(alias, x) then
+          remove!(var, substitutions)
+          values := typevars(alias) :: List(N)
+          substitutions := concat(substitutions, [alias, values])
+          for s in entries typevars repeat
+            if s.entry = [value] then
+              substitutions := concat(substitutions, [s.key, values])
+            s.entry := [substitute(n, alias, values.1) for n in s.entry]
+
+      --print ["<<<<< substitutions:", substitutions :: OF]
+      --print ["<<<<< type variables:" , typevars :: OF]
+
+      -- remove type variables which we consider to be done
+      for var in keys substitutions | done?(var, x) repeat
+        value := first(remove!(var, typevars) :: List(N))
+        print ["[*] Type inferred for", var :: OF, ":", value :: OF]
+        rewriteNodes!(var, value, nodes)
 
     emptyType? nl ==
       #nl = 1 and emptyNode?(first nl)
@@ -388,14 +469,17 @@ TCNodeArray() : Exports == Implementation where
       survivors : List(N) := []
       ureslst : List(URES) := []
       for fun in funs repeat
-        ures := unifyTypes(sigs, [fun])
+        ures := unifyTypes([fun], sigs)
         if not failed? ures then
           survivors := [fun, :survivors]
           ureslst := [ures, :ureslst]
       ures := mergeSubstitutions(ureslst)
       print([hspace 2, "=>", ures :: OF])
       failed? ures => false
-      subst := concat(ures :: SUBST, [nfun.type :: MR, survivors])
+      subst := ures :: SUBST
+      if typeVar? nfun.type then
+        subst := concat(subst, [nfun.type :: MR, survivors])
+      print ["<<<<", subst :: OF]
       apply!(subst, x)
       true
 
@@ -404,9 +488,18 @@ TCNodeArray() : Exports == Implementation where
       rn := node(n.children.2, x) -- right node
 
       -- unify the type of lvalue with the type of rvalue
-      ures := unifyTypes(fetch(ln.type, x), fetch(rn.type, x))
+      survivors : List(N) := []
+      rvalue := fetch(rn.type, x)
+      ureslst : List(URES) := []
+      for lvalue in fetch(ln.type, x) repeat
+        ures := unifyTypes([lvalue], rvalue)
+        if not failed? ures then
+          survivors := [lvalue, :survivors]
+          ureslst := [ures, :ureslst]
+      ures := mergeSubstitutions(ureslst)
       failed? ures => false
-      apply!(ures :: SUBST, x)
+      subst := concat(ures :: SUBST, [ln.type :: MR, survivors])
+      apply!(subst, x)
       true
 
     inferConditionalType(n, x) ==
@@ -434,10 +527,9 @@ TCNodeArray() : Exports == Implementation where
       apply!(ures :: SUBST, x)
       true
 
-    inferType(i, x) ==
-      n := node(i, x)
+    inferType(n, x) ==
       emptyNode? n.rule => true
-      print ["[*] Run type inference for", number(i) :: OF]
+      print ["[*] Run type inference for", number(n.index) :: OF]
       res := 
         apply? n.rule => inferApplyType(n, x)
         assign? n.rule => inferAssignType(n, x)
@@ -452,10 +544,13 @@ TCNodeArray() : Exports == Implementation where
       res
 
     check x ==
-      for i in #(x.nodes)..1 by -1 repeat
-        if not inferType(i, x) then
+      for n in reverse entries x.nodes | unbound? n.type repeat
+        if not inferType(n, x) then
           print ["[*] Failed!"]
+          print (x :: OF)
+          return false
       print (x :: OF)
+      true
 
 )abbrev package STYPCHK SpadTypeChecker
 SpadTypeChecker() : Exports == Implementation where
@@ -600,7 +695,7 @@ SpadTypeChecker() : Exports == Implementation where
           env' := addMode((arg :: NT).name, argt, env')
 
         ctx' := nodeArray ctx
-        node := addNode! (mt.type, ctx')
+        node := addNode! ([mt.type], ctx')
         walkL ([fn.body], ctx', env')
         node.rule := nodeRef(2)
 
@@ -625,8 +720,7 @@ SpadTypeChecker() : Exports == Implementation where
     walk (im : IM, ctx : CTX, env : ENV) : ENV ==
       print ["[*] Importing", im.type :: OF]
       env := addDomain(im.type :: APP, env)
-      node := addNode!(voidType, ctx)
-      node.rule := [im]
+      addNode!(voidType, ctx)
       env
 
     --walk (l : LAM, ctx : CTX, env : ENV) : ENV ==

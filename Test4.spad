@@ -1,0 +1,22 @@
+)abbrev package TEST4 Test4
+Test4 : Exports == Implementation where
+  F ==> Fraction(Integer)
+
+  Exports ==> with
+   iWeierstrassPGrad2 : List F -> F
+   iWeierstrassPGrad2 : List F -> I
+
+  Implementation ==> add
+   weierstrassP : (F, F, F) -> F
+   weierstrassPPrime : (F, F, F) -> F
+   weierstrassZeta : (F, F, F) -> F
+
+   iWeierstrassPGrad2(l : List F) : F ==
+        g2 := first l
+        g3 := second l
+        x := third l
+        wp := weierstrassP(g2, g3, x)
+        (weierstrassPPrime(g2, g3, x)*(3*g2*weierstrassZeta(g2, g3, x)
+          - 9*g3*x) + 6*g2*wp^2 - 9*g3*wp-g2^2)/(g2^3 - 27*g3^2)
+        --(weierstrassPPrime(g2, g3, x)*(3*g2*weierstrassZeta(g2, g3, x)
+        --  - 9*(1/2)*g3*x) + 6*g2*wp^2 - 9*g3*wp-g2^2)/(g2^3 - 27*g3^2)
