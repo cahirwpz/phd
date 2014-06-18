@@ -590,7 +590,9 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       l_guards : List N := []
 
       for e in lst repeat
-        -- upewnić się ze strażnikami, w collect też może być while
+        -- TODO:
+        -- 1) make sure guards are handled well
+        -- 2) a while statement can occur inside collect statement
         itor? e =>
           -- (IN item sequence)
           l_itors := cons([symbol e.2, parse e.3], l_itors)

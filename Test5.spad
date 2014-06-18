@@ -1,0 +1,18 @@
+)abbrev package TEST5 Test5
+Test5(S : OrderedSet) : Exports == Implementation where
+
+  Exports ==> with
+    merge : (List(S), List(S), List(S)) -> List(S)
+    -- required unless S from domain functor is handled properly
+    _< : (S, S) -> Boolean
+
+  Implementation ==> add
+    merge(l1, l2, res) ==
+      empty?(l1) =>
+        empty?(l2) => res
+        merge(l1, rest(l2), cons(first(l2), res))
+      e1 := first(l1)
+      empty?(l2) => merge(rest(l1), l2, cons(e1, res))
+      e2 := first(l2)
+      e1 < e2 => merge(rest(l1), l2, cons(e1, res))
+      merge(l1, rest(l2), cons(first(l2), res))
