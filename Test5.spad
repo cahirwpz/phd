@@ -3,8 +3,6 @@ Test5(S : OrderedSet) : Exports == Implementation where
 
   Exports ==> with
     merge : (List(S), List(S), List(S)) -> List(S)
-    -- required unless S from domain functor is handled properly
-    _< : (S, S) -> Boolean
 
   Implementation ==> add
     merge(l1, l2, res) ==

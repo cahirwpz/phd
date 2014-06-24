@@ -120,7 +120,6 @@ SpadEnvironment() : Exports == Implementation where
       print hconcat ["EnvAddModemapsFromCategory", paren [dom :: OF, cat :: OF]]
       sdom := convert dom
       scat := convert cat
-
       m := saveMode()
       -- augModemapsFromCategory(domainName, domainView, functorForm, categoryForm, e)
       res : % := augModemapsFromCategory(sdom, sdom, sdom, scat, env)$Lisp
@@ -129,25 +128,19 @@ SpadEnvironment() : Exports == Implementation where
 
     addDomain(dom, env) ==
       print hconcat ["EnvAddDomain", paren [dom :: OF]]
-
-      sdom := convert dom
-      sdom case "failed" =>
-        error "addDomain: failed to convert domain type!"
-
+      sdom := convert [dom]$N
       m := saveMode()
-      res : % := addDomain(sdom :: SEX, env)$Lisp
+      res : % := addDomain(sdom, env)$Lisp
       restoreMode(m)
       res
 
     addModemap(op, dom, sig, env) ==
       print hconcat ["EnvAddModeMap", paren [op :: OF, dom :: OF, sig :: OF]]
       
-      sdom := convert dom
-      sdom case "failed" =>
-        error "addModemap: failed to convert domain type"
+      sdom := convert [dom]$N
 
       m := saveMode()
-      res : % := addModemap(op, dom, sig, 'T, 'NIL, env)$Lisp
+      res : % := addModemap(op, sdom, sig, 'T, op, env)$Lisp
       restoreMode(m)
       res
 

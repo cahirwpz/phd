@@ -443,8 +443,7 @@ SpadApply(N : SpadNodeCategory) : ParsableCategory with
 
       -- finally, process the application
       fname := funsym :: OutputForm
-      (constructor? funsym) and (empty? argl) =>
-        fname
+      (constructor? funsym) and (empty? argl) => fname
       hconcat [fname, paren argl]
 
     n = m ==

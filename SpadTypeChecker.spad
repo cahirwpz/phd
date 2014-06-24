@@ -183,12 +183,9 @@ TypeUnifier() : Exports == Implementation where
         unifyTypeList pairs
 
       -- constants
-      if symbol? n1 and symbol? n2 then
-        (n1 :: Symbol) = (n2 :: Symbol) => [[]]
-      if integer? n1 and integer? n2 then
-        (n1 :: Integer) = (n2 :: Integer) => [[]]
-      if string? n1 and string? n2 then
-        (n1 :: String) = (n2 :: String) => [[]]
+      symbol? n1 and symbol? n2 and (n1 :: Symbol) = (n2 :: Symbol) => [[]]
+      integer? n1 and integer? n2 and (n1 :: Integer) = (n2 :: Integer) => [[]]
+      string? n1 and string? n2 and (n1 :: String) = (n2 :: String) => [[]]
 
       "failed"
 
@@ -769,6 +766,16 @@ SpadTypeChecker() : Exports == Implementation where
       env := addMode(sig.name, sig.type, env)
       env := addMode("$" :: Symbol, ft.type, env)
       env := addModemapsFromCategory(["$" :: Symbol], ft.type, env)
+
+      ++ process functor's arguments
+      cat : SExpression := convert [convert [convert 'Category]]
+      for arg in ft.args repeat
+        typ := arg.type :: APP
+        typName := typ.function :: Symbol
+        env := addModemap(typName, typ, cat, env)
+        env := addMode(arg.name, arg.type, env)
+        env := addModemapsFromCategory([arg.name], arg.type, env)
+
       node := addNode!([ft], sig.type, ctx)
       env := walkL([ft.capsule], ctx, env)
       node.rule := nodeRef(node.index + 1)
