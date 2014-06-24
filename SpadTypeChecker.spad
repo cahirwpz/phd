@@ -763,18 +763,18 @@ SpadTypeChecker() : Exports == Implementation where
     walk (ft : FT, ctx : CTX, env : ENV) : ENV ==
       sig := signature ft
       print ["[*] Processing functor :", sig :: OF]
+      self := "$" :: Symbol
       env := addMode(sig.name, sig.type, env)
-      env := addMode("$" :: Symbol, ft.type, env)
-      env := addModemapsFromCategory(["$" :: Symbol], ft.type, env)
+      env := addMode(self, ft.type, env)
+      env := addModemapsFromCategory(self :: N, ft.type, env)
 
       ++ process functor's arguments
-      cat : SExpression := convert [convert [convert 'Category]]
+      cat := [['Category$N, []]$APP]
       for arg in ft.args repeat
         typ := arg.type :: APP
-        typName := typ.function :: Symbol
-        env := addModemap(typName, typ, cat, env)
+        env := addModemap(typ.function :: Symbol, typ, [cat], env)
         env := addMode(arg.name, arg.type, env)
-        env := addModemapsFromCategory([arg.name], arg.type, env)
+        env := addModemapsFromCategory(arg.name :: N, arg.type, env)
 
       node := addNode!([ft], sig.type, ctx)
       env := walkL([ft.capsule], ctx, env)

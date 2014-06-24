@@ -62,7 +62,7 @@ SpadEnvironment() : Exports == Implementation where
     addDomain : (APP, %) -> %
     addModemapsFromCategory : (N, N, %) -> %
 
-    addModemap : (Symbol, APP, SEX, %) -> %
+    addModemap : (Symbol, APP, List(N), %) -> %
     getModemap : (Symbol, %) -> List(SpadModeMap)
 
     addMode : (Symbol, N, %) -> %
@@ -92,26 +92,6 @@ SpadEnvironment() : Exports == Implementation where
     restoreMode m ==
       SETF(_$InteractiveMode $ Lisp, m) $ Lisp
 
-    convert : APP -> Union(SEX, "failed")
-    convert (app : APP) : Union(SEX, "failed") ==
-      not symbol? app.function =>
-        "failed"
-      fst : SEX := convert (app.function :: Symbol)
-      lst : List SEX := []
-      for arg in app.args repeat
-        print( arg :: OF)
-        sex :=
-          symbol? arg =>
-            convert [convert (arg :: Symbol)]
-          apply? arg =>
-            subapp := convert (arg :: APP)
-            subapp case "failed" => return "failed"
-            subapp :: SEX
-          return "failed"
-        lst := [sex, :lst]
-      lst := reverse lst
-      convert [fst, :lst]
-
     -- create empty environment
     new() ==
       _$compiler_InteractiveFrame $ Lisp
@@ -128,19 +108,18 @@ SpadEnvironment() : Exports == Implementation where
 
     addDomain(dom, env) ==
       print hconcat ["EnvAddDomain", paren [dom :: OF]]
-      sdom := convert [dom]$N
+      sdom := convert dom
       m := saveMode()
       res : % := addDomain(sdom, env)$Lisp
       restoreMode(m)
       res
 
-    addModemap(op, dom, sig, env) ==
-      print hconcat ["EnvAddModeMap", paren [op :: OF, dom :: OF, sig :: OF]]
-      
-      sdom := convert [dom]$N
-
+    addModemap(op, dom, args, env) ==
+      print hconcat ["EnvAddModeMap", paren [op :: OF, dom :: OF, args :: OF]]
+      sdom := convert dom
+      sargs := [convert arg for arg in args]
       m := saveMode()
-      res : % := addModemap(op, sdom, sig, 'T, op, env)$Lisp
+      res : % := addModemap(op, sdom, sargs, 'T, op, env)$Lisp
       restoreMode(m)
       res
 
