@@ -1,0 +1,20 @@
+)abbrev domain TEST3 Test3
+Test3() : Exports == Implementation where
+  Exports ==> with
+    id : PositiveInteger -> PositiveInteger
+    hello1 : () -> Void
+    hello2 : () -> Void
+
+  Implementation ==> add
+    import Integer
+    import NonNegativeInteger
+    import OutputForm
+    import PositiveInteger
+
+    id x == x :: PositiveInteger
+
+    hello1() ==
+      print((0@Integer)::OutputForm)
+
+    hello2() ==
+      print(coerce(0@Integer)@OutputForm)

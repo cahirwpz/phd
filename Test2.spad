@@ -1,7 +1,10 @@
 )abbrev domain TEST2 Test2
 Test2(A : Type) : Exports == Implementation where
+  I ==> Integer
+
   Exports ==> with
     index : (A -> Boolean, List(A)) -> NonNegativeInteger
+    sum : List(I) -> I
 
   Implementation ==> add
     index(pred, l) ==
@@ -11,3 +14,9 @@ Test2(A : Type) : Exports == Implementation where
         i := i + 1
         l := rest l
       0
+
+    --sum (l : List(I)) : I ==
+    --  s := 0
+    --  for i in l repeat
+    --    s := s + i
+    --  s

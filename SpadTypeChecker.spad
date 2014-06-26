@@ -309,6 +309,7 @@ TCNodeArray() : Exports == Implementation where
     addNode! : (N, N, %) -> TCN
     addNode! : (N, List(N), %) -> TCN
     addTypeVar! : % -> N
+    addType! : (TCN, N, %) -> Void
     setType! : (TCN, N, %) -> Boolean
 
     apply! : (MR, List(N), %) -> Void
@@ -377,14 +378,6 @@ TCNodeArray() : Exports == Implementation where
       typevars(tvar :: MR) := [emptyNode()]
       tvar
 
-    setType!(n, type, x) ==
-      print ["[*]", number(n.index) :: OF, "is of", type :: OF, "type."]
-      typeVar? n.type =>
-        typevars := x.typevars
-        typevars(n.type :: MR) := [type]
-        true
-      n.type = type
-
     node (i, x) ==
       (x.nodes)(i)
 
@@ -409,6 +402,24 @@ TCNodeArray() : Exports == Implementation where
       types := (x.typevars)(tvar)
       #types > 1 => false
       not unbound? types.1
+
+    setType!(n, type, x) ==
+      print ["[*]", number(n.index) :: OF, "is of", type :: OF, "type."]
+      typeVar? n.type =>
+        typevars := x.typevars
+        typevars(n.type :: MR) := [type]
+        true
+      n.type = type
+
+    addType!(n, type, x) ==
+      print ["[*] Adding type alternative of", type :: OF, "to node", number(n.index) :: OF]
+      not typeVar? n.type =>
+        error "addType! works only on type variants"
+      typevars := x.typevars
+      tvar := n.type :: MR
+      emptyType? typevars(tvar) =>
+        typevars(tvar) := [type]
+      typevars(tvar) := [type, :typevars(tvar)]
 
     rewriteTypeVars! : (MR, List(N), AssociationList(MR, List(N))) -> Void
     rewriteTypeVars!(var, terms, typevars) ==
@@ -603,7 +614,7 @@ TCNodeArray() : Exports == Implementation where
         not correct =>
           print (x :: OF)
           print (x.typevars :: OF)
-          error "Possibly infinite loop detected!"
+          error "Type checker does not advance by applying known typing rules!"
 
         ++ setup new meta-step
         p := newP
@@ -895,8 +906,24 @@ SpadTypeChecker() : Exports == Implementation where
         env := envAddType(te.type, env)
         next := lastIndex ctx + 1
         env := walk(te.expr, ctx, env)
-        node(next, ctx).type := te.type
+        setType!(node(next, ctx), te.type, ctx)
         env
+
+      te.kind = '_:_: =>
+        print ["[*] Expression", te.expr :: OF, "have to coerce to", te.type :: OF]
+        i := lastIndex ctx + 1
+        -- convert "::" to "coerce" function call
+        env := walk([[['coerce], [te.expr]]$APP], ctx, env)
+        -- conversion above almost works, but we need to fix it for identity
+        -- coercion by infusing artificial signature "%a -> %a" which is not
+        -- always available
+        coerceNode := node(i, ctx)
+        argType := coerceNode.children.2.type
+        idFunType := [[[argType], argType]$MT]
+        addType!(coerceNode.children.1, idFunType, ctx)
+        env
+    
+      ++ te.kind = '_$
 
       error "Not handled!"
 
