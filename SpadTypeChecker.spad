@@ -4,23 +4,28 @@ SpadNodeFactory() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   MR ==> SpadMarker(N)
+  MT ==> SpadMappingType(N)
 
   Exports ==> with
     booleanType : () -> N
     integerType : () -> N
     floatType : () -> N
+    mappingType : (List(N), N) -> N
     stringType : () -> N
     voidType : () -> N
     nodeRef : NNI -> N
+    typeAny : () -> N
     typeVar : NNI -> N
 
   Implementation ==> add
     booleanType () == [[['Boolean], []]$APP]
     integerType () == [[['Integer], []]$APP]
     floatType () == [[['DoubleFloat], []]$APP]
+    mappingType (args, type) == [[args, type]$MT]
     stringType () == [[['String], []]$APP]
     voidType () == [[['Void], []]$APP]
     nodeRef(i) == [[i, 'noderef]$MR]
+    typeAny() == [[0, 'typevar]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
 
 )abbrev package OFEXT OutputFormExt
@@ -82,6 +87,7 @@ TypeUnifier() : Exports == Implementation where
   Implementation ==> add
     import SpadNode
     import OutputFormExt
+    import SpadNodeFactory
 
     failed? t == t case "failed"
 
@@ -107,9 +113,8 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         any?(unbound?, [mt.type, :mt.args])
-      typeVar? n or emptyNode? n =>
-        true
-      false
+      typeAny? n => false
+      typeVar? n or emptyNode? n
 
     substitute(n : N, var : MR, term : N) : N ==
       apply? n =>
@@ -119,7 +124,7 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         lst := [substitute(k, var, term) for k in [mt.type, :mt.args]]
-        [[rest lst, first lst]$MT]
+        mappingType(rest lst, first lst)
       typeVar? n and (n :: MR) = var =>
         term 
       n
@@ -165,6 +170,9 @@ TypeUnifier() : Exports == Implementation where
         occurs? (n2 :: MR, n1) => "failed"
         [[[n2 :: MR, [n1]]]]
 
+      -- type wildcard found? => leave without generating a substitution
+      typeAny? n1 or typeAny? n2 => [[]]
+
       -- both nodes can be represented as lists of terms and variables
       -- so convert them to a pair of lists and perform unification
       mappingType? n1 and mappingType? n2 =>
@@ -209,9 +217,14 @@ TypeUnifier() : Exports == Implementation where
         for t2 in terms2 repeat
           ures := unifyType(t1, t2)
           failed? ures => "iterate"
-          terms := [substitute(t1, ures :: SUBST), :terms]
+          -- prefer concrete type instead of wildcard
+          t := if typeAny? t1 then t2 else t1
+          terms := [substitute(t, ures :: SUBST), :terms]
           subst := [ures :: SUBST, :subst]
-      [removeDuplicates terms, mergeSubstitutions subst]
+      -- remove wildcard if we have more than one match
+      if #terms > 1 then
+        terms := [t for t in removeDuplicates terms | not typeAny? t]
+      [terms, mergeSubstitutions subst]
 
 )abbrev domain TCNODE TCNode
 TCNode() : Exports == Implementation where
@@ -512,18 +525,15 @@ TCNodeArray() : Exports == Implementation where
       apply? n.rule =>
         nfun := first n.children -- function node
         nargs := rest n.children -- argument nodes
-        -- TODO: generate all possible variants
-        sigs : List(N) := [[[[narg.type for narg in nargs], n.type]$MT]]
-        --print ["(~) sigs1 :", sigs :: OF]
+        sig := mappingType([narg.type for narg in nargs], n.type)
         --argslst := product [fetch(narg.type, x) for narg in nargs]
         --sigs2 : List(N) := [[[args, n.type]$MT] for args in argslst]
-        --print ["(~) sigs2 :", sigs2 :: OF]
-        nodeType!(nfun, sigs, x)
+        nodeType!(nfun, [sig], x)
 
       assign? n.rule =>
         ln := n.children.1 -- left node
         rn := n.children.2 -- right node
-        nodesMatch!(ln, rn, x) and nodesMatch!(ln, n, x)
+        nodesMatch!(ln, rn, x) and nodeType!(n, [ln.type, rn.type], x)
 
       conditional? n.rule =>
         cn := n.children.1 -- condition node
@@ -531,7 +541,7 @@ TCNodeArray() : Exports == Implementation where
         fn := n.children.3 -- false branch node
         not nodeType!(cn, [booleanType], x) => false
         if nodesMatch!(tn, fn, x)
-          then nodesMatch!(n, tn, x)
+          then nodeType!(n, [tn.type, fn.type], x)
           else nodeType!(n, [voidType], x)
 
       nodeRef? n.rule =>
@@ -699,22 +709,9 @@ SpadTypeChecker() : Exports == Implementation where
       env
 
     walk (a : APP, ctx : CTX, env : ENV) : ENV ==
-      fn := a.function
-      args := a.args
-
-      symbol? fn and string(fn :: Symbol) = "return" =>
-        print ["[*] Processing return statement."]
-        #args ~= 2 => error "malformed return statement"
-        node := addNode!([a], ctx)
-        env := addChildren(node, [rest args], ctx, env)
-        node.children := [node(1, ctx), :node.children]
-        nl := [nodeRef(n.index) for n in node.children]
-        node.rule := [[nl.1, nl.2]$ASS]
-        env
-
       print ["[*] Processing function application."]
       node := addNode!([a], ctx)
-      env := addChildren(node, [fn, :args], ctx, env)
+      env := addChildren(node, [a.function, :a.args], ctx, env)
       nl := [nodeRef(n.index) for n in node.children]
       node.rule := [[first nl, rest nl]$APP]
       env
@@ -772,7 +769,7 @@ SpadTypeChecker() : Exports == Implementation where
           type := typeVar(i)
         types := [type, :types]
       types := reverse types
-      sig := [[rest types, first types]$MT]
+      sig := mappingType(rest types, first types)
 
       -- calculate eligible signatures
       sigs : List(MT) := []
@@ -874,6 +871,12 @@ SpadTypeChecker() : Exports == Implementation where
       ++ workaround for Boolean constants
       if s = 'true or s = 'false then
         types := [booleanType, :types]
+      if s = 'error then
+        errorType := mappingType([stringType], typeAny)
+        types := [errorType, :types]
+      if s = 'return then
+        returnType := mappingType([integerType, node(1, ctx).type], typeAny)
+        types := [returnType, :types]
       empty? types => error "Undefined symbol!"
       if #types = 1
         then addNode!([s], first types, ctx)
@@ -919,7 +922,7 @@ SpadTypeChecker() : Exports == Implementation where
         -- always available
         coerceNode := node(i, ctx)
         argType := coerceNode.children.2.type
-        idFunType := [[[argType], argType]$MT]
+        idFunType := mappingType([argType], argType)
         addType!(coerceNode.children.1, idFunType, ctx)
         env
     

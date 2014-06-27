@@ -52,6 +52,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   typeExpr? : % -> Boolean
   unionType? : % -> Boolean
   where? : % -> Boolean
+  typeAny? : % -> Boolean
   typeVar? : % -> Boolean
 
   coerce : % -> DoubleFloat
@@ -119,7 +120,10 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
         m.kind = 'typevar => "%"
         m.kind = 'noderef => "#"
         "%"
-      concat(s, string(m.id :: Integer)) :: Symbol
+      n : String :=
+        m.id > 0 => string(m.id :: Integer)
+        "?"
+      concat(s, n) :: Symbol
 
     coerce (m : %) : OutputForm ==
       (m :: Symbol) :: OutputForm
@@ -1042,7 +1046,10 @@ SpadNode() : SpadNodeCategory == add
     mappingType? n == n case mapping 
     marker? n == n case marker
     namedType? n == n case named
-    nodeRef? n == n case marker and (n :: SpadMarker(%)).kind = 'noderef
+    nodeRef? n ==
+      not n case marker => false
+      mr := (n :: SpadMarker(%))
+      mr.kind = 'noderef
     recordType? n == n case record
     segment? n == n case segment 
     sequence? n == n case seq
@@ -1052,7 +1059,14 @@ SpadNode() : SpadNodeCategory == add
     typeExpr? n == n case typeexpr
     unionType? n == n case union
     where? n == n case swhere
-    typeVar? n == n case marker and (n :: SpadMarker(%)).kind = 'typevar
+    typeAny? n ==
+      not n case marker => false
+      mr := (n :: SpadMarker(%))
+      mr.kind = 'typevar and mr.id = 0
+    typeVar? n ==
+      not n case marker => false
+      mr := (n :: SpadMarker(%))
+      mr.kind = 'typevar and mr.id > 0
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]

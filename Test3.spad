@@ -4,6 +4,7 @@ Test3() : Exports == Implementation where
     id : PositiveInteger -> PositiveInteger
     hello1 : () -> Void
     hello2 : () -> Void
+    foobar : Integer -> Integer
 
   Implementation ==> add
     import Integer
@@ -18,3 +19,7 @@ Test3() : Exports == Implementation where
 
     hello2() ==
       print(coerce(0@Integer)@OutputForm)
+
+    foobar x ==
+      x < 0 => error "Cannot accept negative integer!"
+      x
