@@ -1,74 +1,11 @@
-)abbrev domain PRT Printer
-Printer() : with
-    stdout : constant -> %
-
-    print : (%, String) -> Void
-    newline : % -> Void
-    indent : (%, Integer) -> Void
-    unindent : (%, Integer) -> Void
-
-    "<<" : (%, String) -> %
-    "<<" : (%, Integer) -> %
-    "<<" : (%, Float) -> %
-  == add
-    Rep := Record(stream : SExpression,
-                  column : Integer,
-                  tabwidth : Integer,
-                  preindent : Integer)
-
-    import Character
-    import String
-
-    %stdout := [_$fricasOutput$Lisp,0,2,0]$Rep
-
-    stdout == %stdout
-
-    print(p, s) ==
-      PRINTEXP(s, p.stream)$Lisp
-
-    newline(p) ==
-      print(p, char 10 :: String)
-      p.column := p.preindent
-      if p.preindent > 0 then
-        s := new(p.preindent :: NonNegativeInteger, char " ")
-        print(p, s)
-
-    indent(p, n) ==
-      p.preindent := p.preindent + n
-
-    unindent(p, n) ==
-      n > p.preindent =>
-        p.preindent := 0
-      p.preindent := p.preindent - n
-
-    putstr : (%, String) -> %
-    putstr(p, s) ==
-      p.column := p.column + #s
-      print(p, s)
-      p
-
-    (p : %) << (s : String) ==
-      putstr(p, s)
-    (p : %) << (i : Integer) ==
-      putstr(p, string i)
-    (p : %) << (f : Float) ==
-      putstr(p, WRITE_-TO_-STRING(f :: DoubleFloat)$Lisp)
-
-)abbrev category PRTCAT PrintableCategory
-PrintableCategory() : Category == with
-  "<<" : (Printer, %) -> Printer
-
-)abbrev domain PRTCODE PrintableCode
-PrintableCode() : Exports == Implementation where
+)abbrev domain PRTCODE PrinterCode
+PrinterCode() : Exports == Implementation where
+  CMD ==> Record(fn : Union("indent", "unindent"), value : Integer)
   CODE ==> Union("eol", "reset", "bold", "underline", "italic", "inverse",
                  "black", "red", "green", "yellow", "blue", "magenta",
-                 "cyan", "white")
-  CMD ==> Record(fn : Union("indent", "unindent"), arg : Integer)
+                 "cyan", "white", CMD)
 
-  Exports ==> PrintableCategory with
-    indent : Integer -> %
-    unindent : Integer -> %
-
+  Exports ==> with
     eol : constant -> %
     reset : constant -> %
     bold : constant -> %
@@ -84,68 +21,316 @@ PrintableCode() : Exports == Implementation where
     cyan : constant -> %
     white : constant -> %
 
+    eol? : % -> Boolean
+    reset? : % -> Boolean
+    bold? : % -> Boolean
+    underline? : % -> Boolean
+    italic? : % -> Boolean
+    inverse? : % -> Boolean
+    black? : % -> Boolean
+    red? : % -> Boolean
+    green? : % -> Boolean
+    yellow? : % -> Boolean
+    blue? : % -> Boolean
+    magenta? : % -> Boolean
+    cyan? : % -> Boolean
+    white? : % -> Boolean
+
+    indent : Integer -> %
+    unindent : Integer -> %
+
+    indent? : % -> Boolean
+    unindent? : % -> Boolean
+
+    value : % -> Integer
+
   Implementation ==> add
-    Rep := Union(ctrl : CODE, cmd : CMD)
+    Rep := CODE
 
-    indent x == [["indent", x]]
-    unindent x == [["unindent", x]]
+    eol == "eol"@CODE
+    reset == "reset"@CODE
+    bold == "bold"@CODE
+    underline == "underline"@CODE
+    italic == "italic"@CODE
+    inverse == "inverse"@CODE
+    black == "black"@CODE
+    red == "red"@CODE
+    green == "green"@CODE
+    yellow == "yellow"@CODE
+    blue == "blue"@CODE
+    magenta == "magenta"@CODE
+    cyan == "cyan"@CODE
+    white == "white"@CODE
 
-    eol == ["eol"]
-    reset == ["reset"]
-    bold == ["bold"]
-    underline == ["underline"]
-    italic == ["italic"]
-    inverse == ["inverse"]
-    black == ["black"]
-    red == ["red"]
-    green == ["green"]
-    yellow == ["yellow"]
-    blue == ["blue"]
-    magenta == ["magenta"]
-    cyan == ["cyan"]
-    white == ["white"]
+    eol? c == c case "eol"
+    reset? c == c case "reset"
+    bold? c == c case "bold"
+    underline? c == c case "underline"
+    italic? c == c case "italic"
+    inverse? c == c case "inverse"
+    black? c == c case "black"
+    red? c == c case "red"
+    green? c == c case "green"
+    yellow? c == c case "yellow"
+    blue? c == c case "blue"
+    magenta? c == c case "magenta"
+    cyan? c == c case "cyan"
+    white? c == c case "white"
+
+    indent x == ["indent", x]$CMD
+    unindent x == ["unindent", x]$CMD
+
+    indent? c ==
+      c case CMD => c.fn case "indent"
+      false
+
+    unindent? c ==
+      c case CMD => c.fn case "unindent"
+      false
+
+    value c ==
+      c case CMD =>
+        c.value
+      error "PrinterCode has no value!"
+
+)abbrev domain PRTFORM PrintableForm
+PrintableForm() : Exports == Implementation where
+  NNI ==> NonNegativeInteger
+
+  Exports ==> with
+    ++ PrinterCode must be at the beginning for performance's sake
+    construct : PrinterCode -> %
+    construct : Integer -> %
+    construct : Float -> %
+    construct : String -> %
+    construct : Symbol -> %
+    construct : List(%) -> %
+
+    float? : % -> Boolean
+    integer? : % -> Boolean
+    code? : % -> Boolean
+    string? : % -> Boolean
+    symbol? : % -> Boolean
+    list? : % -> Boolean
+
+    coerce : % -> PrinterCode
+    coerce : % -> Float
+    coerce : % -> Integer
+    coerce : % -> String
+    coerce : % -> Symbol
+    coerce : % -> List(%)
+
+    string : % -> %
+    symbol : % -> %
+    sepBy : (%, List(%)) -> %
+    spaces : List(%) -> %
+    hconcat : List(%) -> %
+    hspace : NNI -> %
+    paren : % -> %
+    paren : List(%) -> %
+    pile : List(%) -> %
+
+    indent : Integer -> %
+    unindent : Integer -> %
+
+    red : % -> %
+    bold : % -> %
+    underline : % -> %
+    italic : % -> %
+    inverse : % -> %
+    black : % -> %
+    red : % -> %
+    green : % -> %
+    yellow : % -> %
+    blue : % -> %
+    magenta : % -> %
+    cyan : % -> %
+    white : % -> %
+
+  Implementation ==> add
+    Rep := Union(fnum : Float, inum : Integer, code : PrinterCode,
+                 str : String, sym : Symbol, list : List(%))
 
     import Character
 
-    csi : String -> String
-    csi s == concat [char 27 :: String, "[", s]
+    construct (p : PrinterCode) : % == [p]$Rep
+    construct (f : Float) : % == [f]$Rep
+    construct (i : Integer) : % == [i]$Rep
+    construct (s : String) : % == [s]$Rep
+    construct (s : Symbol) : % == [s]$Rep
+    construct (l : List(%)) : % == [l]$Rep
 
-    p << pc ==
-      pc case cmd =>
-        c := pc.cmd
-        c.fn case "indent" =>
-          (indent(p, c.arg); p)
-        c.fn case "unindent" => 
-          (unindent(p, c.arg); p)
-      pc case ctrl =>
-        c := pc.ctrl
-        c case "eol" =>
-          -- BUG: why parenthesis are required ?
-          (newline(p); p)
-        s : String :=
-          c case "reset" => csi "0m"
-          c case "bold" => csi "1m"
-          c case "italic" => csi "3m"
-          c case "underline" => csi "4m"
-          c case "inverse" => csi "7m"
-          c case "black" => csi "30m"
-          c case "red" => csi "31m"
-          c case "green" => csi "32m"
-          c case "yellow" => csi "33m"
-          c case "blue" => csi "34m"
-          c case "magenta" => csi "35m"
-          c case "cyan" => csi "36m"
-          c case "white" => csi "37m"
-          ""
-        print(p, s); p
+    code? f == f case code
+    float? f == f case fnum
+    integer? f == f case inum
+    string? f == f case str
+    symbol? f == f case sym
+    list? f == f case list
+
+    coerce (f : %) : PrinterCode ==
+      code? f => f.code
+      error "Cannot coerce to PrinterCode!"
+
+    coerce (f : %) : Float ==
+      float? f => f.fnum
+      error "Cannot coerce to Float!"
+
+    coerce (f : %) : Integer ==
+      integer? f => f.inum
+      error "Cannot coerce to Integer!"
+
+    coerce (f : %) : String ==
+      string? f => f.str
+      error "Cannot coerce to String!"
+
+    coerce (f : %) : Symbol ==
+      symbol? f => f.sym
+      error "Cannot coerce to Symbol!"
+
+    coerce (f : %) : List(%) ==
+      list? f => f.list
+      error "Cannot coerce to List(PrintableForm)!"
+
+    string f == [[["_""], f, ["_""]]]
+    hconcat l == [l]
+    symbol f == [[["'"], f]]
+    paren (f : %) == paren [f]
+    paren (l : List(%)) == [[["("], sepBy([", "], l), [")"]]]
+    spaces l == sepBy([" "], l)
+    hspace n == [new(n, char " ")]
+    pile l == sepBy([eol], l)
+
+    sepBy(s, l) ==
+      empty? l => [""]
+      r : List(%) := [first l, :r]
+      for i in rest l repeat
+        if not (first(r) case code) then
+          r := [s, :r]
+        r := [i, :r]
+      [reverse r]
+
+    indent n == [indent(n)$PrinterCode]
+    unindent n == [unindent(n)$PrinterCode]
+
+    red f == [[[red], f, [reset]]]
+    green f == [[[green], f, [reset]]]
+
+)abbrev package PRT Printer
+Printer() : Exports == Implementation where
+  PF ==> PrintableForm
+  NNI ==> NonNegativeInteger
+  STATE == Record(stream : SExpression,
+                  column : Integer,
+                  tabwidth : Integer,
+                  preindent : Integer)
+
+  Exports ==> with
+    print : PrinterCode -> Void
+    print : Float -> Void
+    print : Integer -> Void
+    print : String -> Void
+    print : Symbol -> Void
+    print : List(PF) -> Void
+    print : PF -> Void
+
+    println : PF -> Void
+    println : List(PF) -> Void
+
+  Implementation ==> add
+    import Character
+    import String
+
+    p := [_$fricasOutput$Lisp,0,2,0]$STATE
+
+    putraw : String -> Void
+    putraw s ==
+      PRINTEXP(s, p.stream)$Lisp
+
+    newline : () -> Void
+    newline() ==
+      putraw(char 10 :: String)
+      p.column := p.preindent
+      p.preindent > 0 =>
+        s := new(p.preindent :: NNI, char " ")
+        putraw s
+
+    csi : String -> Void
+    csi s == putraw concat [char 27 :: String, "[", s]
+
+    print (c : PrinterCode) ==
+      eol? c => newline()
+      reset? c => csi "0m"
+      bold? c => csi "1m"
+      italic? c => csi "3m"
+      underline? c => csi "4m"
+      inverse? c => csi "7m"
+      black? c => csi "30m"
+      red? c => csi "31m"
+      green? c => csi "32m"
+      yellow? c => csi "33m"
+      blue? c => csi "34m"
+      magenta? c => csi "35m"
+      cyan? c => csi "36m"
+      white? c => csi "37m"
+      indent? c =>
+        n := value c
+        p.preindent := p.preindent + n
+      unindent? c =>
+        n := value c
+        p.preindent :=
+          p.preindent < n => 0
+          p.preindent - n
+
+    print (f : Float) ==
+      s : String := WRITE_-TO_-STRING(f :: DoubleFloat)$Lisp
+      print s
+
+    print (i : Integer) ==
+      print (string i)
+
+    print(s : String) ==
+      p.column := p.column + #s
+      putraw(s)
+
+    print (s : Symbol) ==
+      print (string s)
+
+    print (l : List(PF)) ==
+      for f in l repeat
+        print f 
+
+    print (f : PF) ==
+      code? f => print(f :: PrinterCode)
+      float? f => print(f :: Float)
+      integer? f => print(f :: Integer)
+      string? f => print(f :: String)
+      symbol? f => print(f :: Symbol)
+      list? f => print(f :: List(PF))
+
+    println (l : List(PF)) ==
+      print l
+      newline()
+
+    println (f : PF) ==
+      print f
+      newline()
 
 )abbrev package PRTTEST PrinterTest
-PrinterTest() : with
+PrinterTest() : Exports == Implementation where
+
+  Exports ==> with
     test : () -> Void
-  == add
-    import PrintableCode
+
+  Implementation ==> add
+    import Printer
 
     test () ==
-      stdout << indent 2 << red << "ala" << reset << " " << "ma" << " " << green << "kota" << reset << eol
-      stdout << unindent 2 << "a" << " " << "kot" << " " << "ma" << " " << "ale" << eol
-      stdout << sqrt 2.0
+      println [indent(2), spaces [red ["ala"], ["ma"], green ["kota"]]]
+      println ["i nastepna linia"]
+      println [unindent(2), spaces [["a"], ["kot"], ["ma"], ["ale"]]]
+      println [["sqrt"], paren [2], [" = "], [sqrt(2.0)]]
+      println spaces [["czyli"], ["powstal"], ["cykl"]]
+      println symbol ['boolean]
+      println string ["ciag znakow"]
+      println paren [["baz"], red [2], ['foobar]]
+      println [indent(2), pile [[1], [2], [3]]]
