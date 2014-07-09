@@ -1,219 +1,171 @@
-)abbrev domain PRTCODE PrinterCode
-PrinterCode() : Exports == Implementation where
-  CMD ==> Record(fn : Union("indent", "unindent"), value : Integer)
-  CODE ==> Union("eol", "reset", "bold", "underline", "italic", "inverse",
-                 "black", "red", "green", "yellow", "blue", "magenta",
-                 "cyan", "white", CMD)
-
-  Exports ==> with
-    eol : constant -> %
-    reset : constant -> %
-    bold : constant -> %
-    underline : constant -> %
-    italic : constant -> %
-    inverse : constant -> %
-    black : constant -> %
-    red : constant -> %
-    green : constant -> %
-    yellow : constant -> %
-    blue : constant -> %
-    magenta : constant -> %
-    cyan : constant -> %
-    white : constant -> %
-
-    eol? : % -> Boolean
-    reset? : % -> Boolean
-    bold? : % -> Boolean
-    underline? : % -> Boolean
-    italic? : % -> Boolean
-    inverse? : % -> Boolean
-    black? : % -> Boolean
-    red? : % -> Boolean
-    green? : % -> Boolean
-    yellow? : % -> Boolean
-    blue? : % -> Boolean
-    magenta? : % -> Boolean
-    cyan? : % -> Boolean
-    white? : % -> Boolean
-
-    indent : Integer -> %
-    unindent : Integer -> %
-
-    indent? : % -> Boolean
-    unindent? : % -> Boolean
-
-    value : % -> Integer
-
-  Implementation ==> add
-    Rep := CODE
-
-    eol == "eol"@CODE
-    reset == "reset"@CODE
-    bold == "bold"@CODE
-    underline == "underline"@CODE
-    italic == "italic"@CODE
-    inverse == "inverse"@CODE
-    black == "black"@CODE
-    red == "red"@CODE
-    green == "green"@CODE
-    yellow == "yellow"@CODE
-    blue == "blue"@CODE
-    magenta == "magenta"@CODE
-    cyan == "cyan"@CODE
-    white == "white"@CODE
-
-    eol? c == c case "eol"
-    reset? c == c case "reset"
-    bold? c == c case "bold"
-    underline? c == c case "underline"
-    italic? c == c case "italic"
-    inverse? c == c case "inverse"
-    black? c == c case "black"
-    red? c == c case "red"
-    green? c == c case "green"
-    yellow? c == c case "yellow"
-    blue? c == c case "blue"
-    magenta? c == c case "magenta"
-    cyan? c == c case "cyan"
-    white? c == c case "white"
-
-    indent x == ["indent", x]$CMD
-    unindent x == ["unindent", x]$CMD
-
-    indent? c ==
-      c case CMD => c.fn case "indent"
-      false
-
-    unindent? c ==
-      c case CMD => c.fn case "unindent"
-      false
-
-    value c ==
-      c case CMD =>
-        c.value
-      error "PrinterCode has no value!"
-
 )abbrev domain PRTFORM PrintableForm
 PrintableForm() : Exports == Implementation where
   NNI ==> NonNegativeInteger
+  CMDCODE ==> Union(font : Union("bold", "underline", "inverse",
+                              "black", "red", "green", "yellow", "blue",
+                              "magenta", "cyan", "white"),
+                 justify : Record(fn : Union("indent", "left", "right", "center"), width : NNI))
+  CMD ==> Record(code : CMDCODE, form : %)
+  LSTCODE ==> Union("hconcat", "vconcat", %)
+  LST ==> Record(code : LSTCODE, forms : List(%))
 
   Exports ==> with
-    ++ PrinterCode must be at the beginning for performance's sake
-    construct : PrinterCode -> %
-    construct : Integer -> %
-    construct : Float -> %
-    construct : String -> %
-    construct : Symbol -> %
-    construct : List(%) -> %
+    coerce : Integer -> %
+    coerce : DoubleFloat -> %
+    coerce : Float -> %
+    coerce : String -> %
+    coerce : Symbol -> %
+    coerce : List(%) -> %
 
+    command? : % -> Boolean
     float? : % -> Boolean
     integer? : % -> Boolean
-    code? : % -> Boolean
     string? : % -> Boolean
     symbol? : % -> Boolean
     list? : % -> Boolean
 
-    coerce : % -> PrinterCode
-    coerce : % -> Float
-    coerce : % -> Integer
-    coerce : % -> String
-    coerce : % -> Symbol
-    coerce : % -> List(%)
+    commandOf : % -> CMD
+    floatOf : % -> Float
+    integerOf : % -> Integer
+    stringOf : % -> String
+    symbolOf : % -> Symbol
+    listOf : % -> LST
+
+    convert : SExpression -> %
+
+    hconcat : List(%) -> %
+    vconcat : List(%) -> %
+    pile : List(%) -> %
+    sepBy : (%, List(%)) -> %
 
     string : % -> %
     symbol : % -> %
-    sepBy : (%, List(%)) -> %
     spaces : List(%) -> %
-    hconcat : List(%) -> %
     hspace : NNI -> %
     paren : % -> %
     paren : List(%) -> %
-    pile : List(%) -> %
+    brace : % -> %
+    brace : List(%) -> %
+    bracket : % -> %
+    bracket : List(%) -> %
+    box : % -> %
 
-    indent : Integer -> %
-    unindent : Integer -> %
-
-    red : % -> %
-    bold : % -> %
-    underline : % -> %
-    italic : % -> %
-    inverse : % -> %
     black : % -> %
-    red : % -> %
-    green : % -> %
-    yellow : % -> %
     blue : % -> %
-    magenta : % -> %
     cyan : % -> %
+    green : % -> %
+    magenta : % -> %
+    red : % -> %
     white : % -> %
+    yellow : % -> %
+
+    right : (NNI, %) -> %
+    left : (NNI, %) -> %
+    center : (NNI, %) -> %
+    indent : (NNI, %) -> %
+
+    bold : % -> %
+    inverse : % -> %
+    underline : % -> %
+
+    number : Integer -> Symbol
+    funsig : (Symbol, Integer) -> Symbol
 
   Implementation ==> add
-    Rep := Union(fnum : Float, inum : Integer, code : PrinterCode,
-                 str : String, sym : Symbol, list : List(%))
+    Rep := Union(fnum : Float, inum : Integer, str : String, sym : Symbol,
+                 cmd : CMD, list : LST)
 
-    import Character
+    coerce (df : DoubleFloat) : % == [convert(df)]$Rep
+    coerce (f : Float) : % == [f]$Rep
+    coerce (i : Integer) : % == [i]$Rep
+    coerce (s : String) : % == [s]$Rep
+    coerce (s : Symbol) : % == [s]$Rep
+    coerce (l : List(%)) : % == brace sepBy("," :: %, l)
 
-    construct (p : PrinterCode) : % == [p]$Rep
-    construct (f : Float) : % == [f]$Rep
-    construct (i : Integer) : % == [i]$Rep
-    construct (s : String) : % == [s]$Rep
-    construct (s : Symbol) : % == [s]$Rep
-    construct (l : List(%)) : % == [l]$Rep
-
-    code? f == f case code
+    command? f == f case cmd
     float? f == f case fnum
     integer? f == f case inum
     string? f == f case str
     symbol? f == f case sym
     list? f == f case list
 
-    coerce (f : %) : PrinterCode ==
-      code? f => f.code
-      error "Cannot coerce to PrinterCode!"
+    commandOf (f : %) : CMD ==
+      command? f => f.cmd
+      error "Cannot coerce to PrintableForm command!"
 
-    coerce (f : %) : Float ==
+    floatOf (f : %) : Float ==
       float? f => f.fnum
       error "Cannot coerce to Float!"
 
-    coerce (f : %) : Integer ==
+    integerOf (f : %) : Integer ==
       integer? f => f.inum
       error "Cannot coerce to Integer!"
 
-    coerce (f : %) : String ==
+    stringOf (f : %) : String ==
       string? f => f.str
       error "Cannot coerce to String!"
 
-    coerce (f : %) : Symbol ==
+    symbolOf (f : %) : Symbol ==
       symbol? f => f.sym
       error "Cannot coerce to Symbol!"
 
-    coerce (f : %) : List(%) ==
+    listOf (f : %) : LST ==
       list? f => f.list
       error "Cannot coerce to List(PrintableForm)!"
 
-    string f == [[["_""], f, ["_""]]]
-    hconcat l == [l]
-    symbol f == [[["'"], f]]
+    convert(sex : SExpression) ==
+      float? sex => [convert(float sex)]
+      integer? sex => [integer sex]
+      string? sex => [string sex]
+      symbol? sex => [symbol sex]
+      list? sex => paren spaces [convert e for e in destruct sex]
+
+    mkCmd : (CMDCODE, %) -> %
+    mkCmd (code, form) == [[code, form]]$Rep
+
+    mkLst : (LSTCODE, List(%)) -> %
+    mkLst (code, forms) == [[code, forms]]$Rep
+
+    hconcat l == mkLst ("hconcat", l)
+    vconcat l == mkLst ("vconcat", l)
+    sepBy(s, l) == mkLst (s, l)
+    pile l ==
+      #l = 1 => first l
+      vconcat [first l, indent(2, vconcat rest l)]
+
+    string f == hconcat ["_"" :: %, f, "_"" :: %]
+    symbol f == hconcat ["'|" :: %, f, "|" :: %]
     paren (f : %) == paren [f]
-    paren (l : List(%)) == [[["("], sepBy([", "], l), [")"]]]
-    spaces l == sepBy([" "], l)
-    hspace n == [new(n, char " ")]
-    pile l == sepBy([eol], l)
+    brace (f : %) == brace [f]
+    bracket (f : %) == bracket [f]
+    paren (l : List(%)) == hconcat ["(" :: %, sepBy(", " :: %, l), ")" :: %]
+    brace (l : List(%)) == hconcat ["{" :: %, sepBy(", " :: %, l), "}" :: %]
+    bracket (l : List(%)) == hconcat ["[" :: %, sepBy(", " :: %, l), "]" :: %]
+    spaces l == sepBy(" " :: %, l)
+    hspace n == new(n, char " ") :: %
 
-    sepBy(s, l) ==
-      empty? l => [""]
-      r : List(%) := [first l, :r]
-      for i in rest l repeat
-        if not (first(r) case code) then
-          r := [s, :r]
-        r := [i, :r]
-      [reverse r]
+    black f == mkCmd (["black"], f)
+    blue f == mkCmd (["blue"], f)
+    cyan f == mkCmd (["cyan"], f)
+    green f == mkCmd (["green"], f)
+    magenta f == mkCmd (["magenta"], f)
+    red f == mkCmd (["red"], f)
+    white f == mkCmd (["white"], f)
+    yellow f == mkCmd (["yellow"], f)
 
-    indent n == [indent(n)$PrinterCode]
-    unindent n == [unindent(n)$PrinterCode]
+    bold f == mkCmd (["bold"], f)
+    inverse f == mkCmd (["inverse"], f)
+    underline f == mkCmd (["underline"], f)
 
-    red f == [[[red], f, [reset]]]
-    green f == [[[green], f, [reset]]]
+    indent(n, f) == mkCmd ([["indent", n]], f)
+    right(n, f) == mkCmd ([["right", n]], f)
+    left(n, f) == mkCmd ([["left", n]], f)
+    center(n, f) == mkCmd ([["center", n]], f)
+
+    number i == coerce concat ["#", string i]
+
+    funsig (name, args) ==
+      coerce concat [string name, "/", string args]
 
 )abbrev package PRT Printer
 Printer() : Exports == Implementation where
@@ -222,17 +174,15 @@ Printer() : Exports == Implementation where
   STATE == Record(stream : SExpression,
                   column : Integer,
                   tabwidth : Integer,
-                  preindent : Integer)
+                  preindent : Integer,
+                  tags : Stack(String))
 
   Exports ==> with
-    print : PrinterCode -> Void
-    print : Float -> Void
-    print : Integer -> Void
     print : String -> Void
-    print : Symbol -> Void
-    print : List(PF) -> Void
     print : PF -> Void
+    print : List(PF) -> Void
 
+    println : String -> Void
     println : PF -> Void
     println : List(PF) -> Void
 
@@ -240,83 +190,155 @@ Printer() : Exports == Implementation where
     import Character
     import String
 
-    p := [_$fricasOutput$Lisp,0,2,0]$STATE
+    csi : String -> String
+    csi s == concat [char 27 :: String, "[", s]
+
+    p := [_$fricasOutput$Lisp,0,2,0,stack [csi "0m"]]$STATE
 
     putraw : String -> Void
     putraw s ==
       PRINTEXP(s, p.stream)$Lisp
 
+    putblank : NNI -> Void
+    putblank n ==
+      print new(n, char " ")
+
     newline : () -> Void
     newline() ==
+      p.column := 0
       putraw(char 10 :: String)
-      p.column := p.preindent
-      p.preindent > 0 =>
-        s := new(p.preindent :: NNI, char " ")
-        putraw s
 
-    csi : String -> Void
-    csi s == putraw concat [char 27 :: String, "[", s]
+    wrapEsc : (String, PF) -> Void
+    wrapEsc (esc, form) ==
+      putraw push!(csi esc, p.tags)
+      print form
+      pop! p.tags
+      for esc in reverse members p.tags repeat putraw esc
 
-    print (c : PrinterCode) ==
-      eol? c => newline()
-      reset? c => csi "0m"
-      bold? c => csi "1m"
-      italic? c => csi "3m"
-      underline? c => csi "4m"
-      inverse? c => csi "7m"
-      black? c => csi "30m"
-      red? c => csi "31m"
-      green? c => csi "32m"
-      yellow? c => csi "33m"
-      blue? c => csi "34m"
-      magenta? c => csi "35m"
-      cyan? c => csi "36m"
-      white? c => csi "37m"
-      indent? c =>
-        n := value c
-        p.preindent := p.preindent + n
-      unindent? c =>
-        n := value c
-        p.preindent :=
-          p.preindent < n => 0
-          p.preindent - n
-
-    print (f : Float) ==
-      s : String := WRITE_-TO_-STRING(f :: DoubleFloat)$Lisp
-      print s
-
-    print (i : Integer) ==
-      print (string i)
+    width : PF -> NNI
+    width f ==
+      command? f =>
+        cmd := commandOf f
+        width cmd.form
+      float? f =>
+        df := (floatOf f) :: DoubleFloat
+        s : String := WRITE_-TO_-STRING(df)$Lisp
+        #s
+      integer? f =>
+        #(string (integerOf f))
+      string? f =>
+        #(stringOf f)
+      symbol? f =>
+        #(string (symbolOf f))
+      list? f =>
+        l := listOf f
+        n := #(l.forms)
+        n = 0 => 0
+        l.code case "vconcat" =>
+          "max"/[width f for f in l.forms]
+        lw := "+"/[width f for f in l.forms]
+        l.code case "hconcat" => lw
+        l.code case PF =>
+          sw := width (l.code :: PF)
+          sw * (n - 1) :: NNI + lw
 
     print(s : String) ==
+      if p.column = 0 and p.preindent > 0 then
+        p.column := p.column + p.preindent
+        putraw new(p.preindent :: NNI, char " ")
       p.column := p.column + #s
-      putraw(s)
-
-    print (s : Symbol) ==
-      print (string s)
+      putraw s
 
     print (l : List(PF)) ==
       for f in l repeat
         print f 
 
     print (f : PF) ==
-      code? f => print(f :: PrinterCode)
-      float? f => print(f :: Float)
-      integer? f => print(f :: Integer)
-      string? f => print(f :: String)
-      symbol? f => print(f :: Symbol)
-      list? f => print(f :: List(PF))
+      command? f =>
+        cmd := commandOf f
+
+        cmd.code case font =>
+          fc := cmd.code.font
+          fc case "bold" => wrapEsc("1m", cmd.form)
+          fc case "underline" => wrapEsc("4m", cmd.form)
+          fc case "inverse" => wrapEsc("7m", cmd.form)
+          fc case "black" => wrapEsc("30m", cmd.form)
+          fc case "red" => wrapEsc("31m", cmd.form)
+          fc case "green" => wrapEsc("32m", cmd.form)
+          fc case "yellow" => wrapEsc("33m", cmd.form)
+          fc case "blue" => wrapEsc("34m", cmd.form)
+          fc case "magenta" => wrapEsc("35m", cmd.form)
+          fc case "cyan" => wrapEsc("36m", cmd.form)
+          fc case "white" => wrapEsc("37m", cmd.form)
+
+        cmd.code case justify =>
+          jc := cmd.code.justify.fn
+          n := cmd.code.justify.width
+          jc case "indent" =>
+            old := p.preindent 
+            p.preindent := p.preindent + n
+            print cmd.form
+            p.preindent := old
+          d := n - width cmd.form
+          jc case "left" =>
+            print cmd.form
+            if d > 0 then
+              putblank (d :: NNI)
+          jc case "right" =>
+            if d > 0 then
+              putblank (d :: NNI)
+            print cmd.form
+          jc case "center" =>
+            ld := d quo 2
+            rd := d - ld
+            if ld > 0 then
+              putblank (ld :: NNI)
+            print cmd.form
+            if rd > 0 then
+              putblank (rd :: NNI)
+
+      float? f =>
+        df := (floatOf f) :: DoubleFloat
+        s : String := WRITE_-TO_-STRING(df)$Lisp
+        print s
+
+      integer? f =>
+        print string (integerOf f)
+
+      string? f =>
+        print (stringOf f)
+
+      symbol? f =>
+        print string (symbolOf f)
+
+      list? f =>
+        l := listOf f
+        l.code case "vconcat" =>
+          for f in l.forms repeat println f
+        l.code case "hconcat" =>
+          for f in l.forms repeat print f
+        l.code case PF =>
+          s := l.code :: PF
+          empty? l.forms => "easter egg!!"
+          print first l.forms
+          for f in rest l.forms repeat
+            print s
+            print f
+
+    println (s : String) ==
+      print s
+      newline()
 
     println (l : List(PF)) ==
-      print l
-      newline()
+      println spaces l
 
     println (f : PF) ==
       print f
-      newline()
+      if p.column > 0 then newline()
 
 )abbrev package PRTTEST PrinterTest
 PrinterTest() : Exports == Implementation where
+  PF ==> PrintableForm
 
   Exports ==> with
     test : () -> Void
@@ -325,12 +347,16 @@ PrinterTest() : Exports == Implementation where
     import Printer
 
     test () ==
-      println [indent(2), spaces [red ["ala"], ["ma"], green ["kota"]]]
-      println ["i nastepna linia"]
-      println [unindent(2), spaces [["a"], ["kot"], ["ma"], ["ale"]]]
-      println [["sqrt"], paren [2], [" = "], [sqrt(2.0)]]
-      println spaces [["czyli"], ["powstal"], ["cykl"]]
-      println symbol ['boolean]
-      println string ["ciag znakow"]
-      println paren [["baz"], red [2], ['foobar]]
-      println [indent(2), pile [[1], [2], [3]]]
+      println pile([3.14 :: PF,
+                    (-2 :: Integer) :: PF,
+                    indent(2, vconcat(["indented two lines" :: PF,
+                                       symbol ("a symbol" :: Symbol :: PF)])),
+                    spaces ["brown" :: PF, "fox" :: PF, "lazy" :: PF, "dog" :: PF]])
+      println spaces [hconcat ["sqrt" :: PF, paren(2 :: PF)], "=" :: PF, sqrt(2.0) :: PF]
+      println vconcat([hconcat ["|" :: PF, right(40, "right" :: PF), "|" :: PF],
+                       hconcat ["|" :: PF, left(40, "left" :: PF), "|" :: PF],
+                       hconcat ["|" :: PF, center(40, "center" :: PF), "|" :: PF]])
+      println string ("a string of characters in double quotes" :: PF)
+      println spaces [inverse ("inverse" :: PF), underline ("underline" :: PF), bold ("bold" :: PF)] 
+      println paren ["baz" :: PF, yellow(2 :: PF), 'foobar :: PF]
+      println red spaces ["red" :: PF, green("green" :: PF), bold("and red again but bold" :: PF)]

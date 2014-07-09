@@ -1,21 +1,20 @@
 )abbrev domain SPMM SpadModeMap
 SpadModeMap() : Exports == Implementation where
   N ==> SpadNode
-  OF ==> OutputForm
+  PF ==> PrintableForm
   MT ==> SpadMappingType(N)
   SEX ==> SExpression
 
-  Exports ==> SetCategory with
+  Exports ==> CoercibleTo(PrintableForm) with
     elt : (%, "origin") -> N
     elt : (%, "type") -> MT
     elt : (%, "constraint") -> N
     elt : (%, "template") -> Record(type : MT, arg : N)
 
   Implementation ==> add
-    Rep := List List SEX
+    Rep := List(List(SEX))
 
     import SpadNode
-    import OutputForm
     import SExpression
 
     elt(x, "origin") ==
@@ -23,40 +22,42 @@ SpadModeMap() : Exports == Implementation where
 
     elt(x, "type") ==
       tl := [parse t for t in rest x.1]
-      if #tl = 1 then [[], tl.1] else [rest tl, first tl]
+      [rest tl, first tl]
 
     elt(x, "constraint") ==
-      parse x.2.1
+      ex := x.2.1
+      (symbol? ex) and (symbol ex = 'T) => emptyNode()
+      parse ex
       
     elt(x, "template") ==
       tmplpart := destruct x.2.2
       tl := [parse t for t in destruct tmplpart.3]
-      tmpl := if #tl = 1 then [[], tl.1] else [rest tl, first tl]
+      tmpl := [rest tl, first tl]
       targ := parse tmplpart.2
       [tmpl, targ]
 
     coerce x ==
-      of1 := pile([hconcat [x.origin :: OF, " implements :"],
-                   hconcat [hspace 4, x.type :: OF]])
-      of2 := pile([hconcat [hspace 2, "when :"],
-                   hconcat [hspace 4, x.constraint :: OF]])
-      of3 := "?" :: OF
-      --of3 := pile(["Original signature: ",
-      --             hconcat [hspace 4, x.template.type :: OF],
-      --             hconcat [hspace 2, "with % = ", x.template.arg :: OF]])
-      (symbol? x.constraint) and (x.constraint :: Symbol) = 'T =>
-        pile [of1, of3]
-      pile [of1, of2, of3]
+      lst := [spaces [x.origin :: PF, "implements :" :: PF],
+              indent(4, x.type :: PF)]
+      cond := x.constraint
+      if not emptyNode? cond then
+        concat!(lst,
+                [indent(2, "when :" :: PF), indent(4, x.constraint :: PF)])
+      concat!(lst,
+              ["Original signature:" :: PF,
+               indent(4, x.template.type :: PF),
+               indent(2, hconcat ["with % = " :: PF, x.template.arg :: PF])])
+      pile lst
 
 )abbrev domain SPENV SpadEnvironment
 SpadEnvironment() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
-  OF ==> OutputForm
+  PF ==> PrintableForm
   SEX ==> SExpression
   PROP ==> Record(kind : Symbol, value : SEX)
 
-  Exports ==> SetCategory with
+  Exports ==> CoercibleTo(PrintableForm) with
     new : () -> %
 
     addDomain : (APP, %) -> %
@@ -79,7 +80,8 @@ SpadEnvironment() : Exports == Implementation where
     Rep := Stack List Record(name : Symbol, properties : List PROP)
 
     import SExpression
-    import OutputForm
+    import Printer
+    import PrinterCode
     import SpadNode
 
     saveMode : () -> Boolean
@@ -97,7 +99,7 @@ SpadEnvironment() : Exports == Implementation where
       _$compiler_InteractiveFrame $ Lisp
 
     addModemapsFromCategory(dom, cat, env) ==
-      print hconcat ["EnvAddModemapsFromCategory", paren [dom :: OF, cat :: OF]]
+      println ["EnvAddModemapsFromCategory" :: PF, paren [dom :: PF, cat :: PF]]
       sdom := convert dom
       scat := convert cat
       m := saveMode()
@@ -107,7 +109,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addDomain(dom, env) ==
-      print hconcat ["EnvAddDomain", paren [dom :: OF]]
+      println ["EnvAddDomain" :: PF, paren [dom :: PF]]
       sdom := convert dom
       m := saveMode()
       res : % := addDomain(sdom, env)$Lisp
@@ -115,7 +117,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addModemap(op, dom, args, env) ==
-      print hconcat ["EnvAddModeMap", paren [op :: OF, dom :: OF, args :: OF]]
+      println ["EnvAddModeMap" :: PF, paren [op :: PF, dom :: PF, :[arg :: PF for arg in args]]]
       sdom := convert dom
       sargs := [convert arg for arg in args]
       m := saveMode()
@@ -130,7 +132,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addMode(name, type, env) ==
-      print hconcat ["EnvAddMode", paren [name :: OF, type :: OF]]
+      println ["EnvAddMode" :: PF, paren [name :: PF, type :: PF]]
       m := saveMode()
       res : % := put(name, 'mode, convert type, env)$Lisp
       restoreMode(m)
@@ -143,7 +145,7 @@ SpadEnvironment() : Exports == Implementation where
       parse res
 
     putValue(name, value, env) ==
-      print hconcat ["EnvPutValue", paren [name :: OF, value :: OF]]
+      println ["EnvPutValue" :: PF, paren [name :: PF, value :: PF]]
       m := saveMode()
       res : % := put(name, 'value, convert value, env)$Lisp
       restoreMode(m)
@@ -160,26 +162,26 @@ SpadEnvironment() : Exports == Implementation where
       removeDuplicates [entry.name for entry in top env]
 
     coerce env ==
-      entries : List(OF) := []
-      empty? env => "()"
+      entries : List(PF) := []
+      empty? env => "()" :: PF
       for entry in top env repeat
-        props : List(OF) := []
+        props : List(PF) := []
         for prop in entry.properties repeat
           val :=
             prop.kind = 'modemap =>
               mml := prop.value pretend List(SpadModeMap)
-              pile [mm :: OF for mm in mml]
+              pile [mm :: PF for mm in mml]
             prop.kind = 'value =>
               v := parse prop.value
-              v :: OF
+              v :: PF
             prop.kind = 'mode =>
               t := parse prop.value
-              t :: OF
-            prop.value :: OF
-          of := hconcat [prop.kind :: OF, " => ", val]
+              t :: PF
+            convert(prop.value)
+          of := spaces [hspace 1, prop.kind :: PF, "=>" :: PF, val]
           props := [of, :props]
-        of := hconcat [string entry.name :: OF, " : ", pile reverse props]
-        entries := [of, "", :entries]
+        of := pile [hconcat [entry.name :: PF, ":" :: PF], pile reverse props]
+        entries := [of, :entries]
       pile reverse entries
 
     test () ==
@@ -193,6 +195,6 @@ SpadEnvironment() : Exports == Implementation where
       env := addDomain(dom2, env)
       modemaps := getModemap('*, env)
       for modemap in modemaps repeat
-        print (modemap :: OF)
-        print ""
-      --print (env :: OF)
+        println (modemap :: PF)
+        println ""
+      println (env :: PF)

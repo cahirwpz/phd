@@ -28,39 +28,9 @@ SpadNodeFactory() : Exports == Implementation where
     typeAny() == [[0, 'typevar]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
 
-)abbrev package OFEXT OutputFormExt
-OutputFormExt() : Exports == Implementation where
-  OF ==> OutputForm
-  N ==> SpadNode
-
-  Exports ==> with
-    number : Integer -> Symbol
-    funsig : (Symbol, Integer) -> Symbol
-    spaces : List(OF) -> OF
-    print : List(OF) -> Void
-
-  Implementation ==> add
-    import String
-    import OutputForm
-
-    number i ==
-      coerce concat ["#", string i]
-
-    funsig (name, args) ==
-      coerce concat [string name, "/", string args]
-
-    spaces lst ==
-      lst' := [first lst]
-      for e in rest lst repeat
-        lst' := [e, " ", :lst']
-      hconcat reverse lst'
-
-    print (lst : List(OF)) : Void ==
-      print spaces lst
-
 )abbrev package TUNIFY TypeUnifier
 TypeUnifier() : Exports == Implementation where
-  OF ==> OutputForm
+  PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)
   MT ==> SpadMappingType(N)
@@ -86,7 +56,7 @@ TypeUnifier() : Exports == Implementation where
 
   Implementation ==> add
     import SpadNode
-    import OutputFormExt
+    import Printer
     import SpadNodeFactory
 
     failed? t == t case "failed"
@@ -152,7 +122,7 @@ TypeUnifier() : Exports == Implementation where
       merged
 
     unifyType(n1 : N, n2 : N) : URES ==
-      -- print [hspace 2, brace(n1 :: OF), "~", brace(n2 :: OF)]
+      -- println [hspace 2, brace(n1 :: PF), "~" :: PF, brace(n2 :: PF)]
 
       -- left or right node is a type variable => just generate a substitution
       typeVar? n1 and typeVar? n2 =>
@@ -228,14 +198,14 @@ TypeUnifier() : Exports == Implementation where
 
 )abbrev domain TCNODE TCNode
 TCNode() : Exports == Implementation where
-  OF ==> OutputForm
+  PF ==> PrintableForm
   NNI ==> NonNegativeInteger
   ENV ==> SpadEnvironment
   N ==> SpadNode
   MR ==> SpadMarker(N)
   SUBST ==> AssociationList(MR, List(N))
 
-  Exports ==> CoercibleTo(OutputForm) with
+  Exports ==> CoercibleTo(PrintableForm) with
     elt : (%, "index") -> NNI
     elt : (%, "node") -> N
     elt : (%, "children") -> List(%)
@@ -260,7 +230,7 @@ TCNode() : Exports == Implementation where
                   ni_done : Boolean)
 
     import SpadNode
-    import OutputFormExt
+    import Printer
     import TypeUnifier
 
     elt (x, "index") == x.ni_index
@@ -292,17 +262,16 @@ TCNode() : Exports == Implementation where
     done? x == x.ni_done
 
     coerce x ==
-      p := hconcat([paren(if done? x then "+" :: OF else "-" :: OF),
-                    right(number(x.index) :: OF, 4)])
+      done := if done? x then "(+)" :: PF else "(-)" :: PF
+      p := hconcat [done, right(4, number(x.index) :: PF)]
       emptyNode? x.rule =>
-        hconcat [p, " is ", x.type :: OF]
-      hconcat [p, " <- {", x.rule :: OF, "} is ", x.type :: OF]
+        spaces [p, "is" :: PF, x.type :: PF]
+      spaces [p, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, x.type :: PF]
 
 )abbrev package TCNA TCNodeArray
 TCNodeArray() : Exports == Implementation where
   NNI ==> NonNegativeInteger
   TCN ==> TCNode
-  OF ==> OutputForm
   N ==> SpadNode
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
@@ -312,8 +281,9 @@ TCNodeArray() : Exports == Implementation where
   MR ==> SpadMarker(N)
   SUBST ==> AssociationList(MR, List(N))
   URES ==> Union(SUBST, "failed")
+  PF ==> PrintableForm
 
-  Exports ==> CoercibleTo(OutputForm) with
+  Exports ==> CoercibleTo(PrintableForm) with
     nodeArray : () -> %
     nodeArray : % -> %
     lastNode : % -> TCN
@@ -330,7 +300,7 @@ TCNodeArray() : Exports == Implementation where
 
     node : (NNI, %) -> TCN
 
-    coerce : AssociationList(MR, List(N)) -> OutputForm
+    coerce : AssociationList(MR, List(N)) -> PF
     check : % -> Boolean
 
   Implementation ==> add
@@ -342,8 +312,8 @@ TCNodeArray() : Exports == Implementation where
     import TCNode
     import SpadNode
     import TypeUnifier
-    import OutputFormExt
     import SpadNodeFactory
+    import Printer
 
     nodeArray () ==
       [flexibleArray [], 0, [[]]]
@@ -351,17 +321,20 @@ TCNodeArray() : Exports == Implementation where
     nodeArray x ==
       [flexibleArray [], x.counter, [[]]]
 
-    coerce (typevars : AssociationList(MR, List(N))) : OutputForm ==
-      format(tvar : MR, types : List(N)) : OF ==
-        prefix := hconcat [right(tvar :: OF, 4), " : "]
-        ts := if #types = 1 then (first types) :: OF else types :: OF
-        hconcat [prefix, ts]
-      tvs := [format(tv.key, tv.entry) for tv in reverse entries typevars]
-      empty? tvs => "No type variables!"
-      pile ["Type variables :", :tvs]
+    coerceTypeVar : (MR, List(N)) -> PF
+    coerceTypeVar (tvar : MR, types : List(N)) : PF ==
+        ts :=
+          #types = 1 => (first types) :: PF
+          bracket [t :: PF for t in types]
+        spaces [right(4, tvar :: PF), ":" :: PF, ts]
 
-    coerce (x : %) : OutputForm ==
-      pile ["Nodes :", :[ni :: OF for ni in entries x.nodes]]
+    coerce (typevars : AssociationList(MR, List(N))) : PF ==
+      tvs := [coerceTypeVar(tv.key, tv.entry) for tv in reverse entries typevars]
+      empty? tvs => "No type variables!" :: PF
+      pile ["Type variables :" :: PF, :tvs]
+
+    coerce (x : %) : PF ==
+      pile ["Nodes :" :: PF, :[ni :: PF for ni in entries x.nodes]]
 
     lastNode x ==
       ns := x.nodes
@@ -417,7 +390,7 @@ TCNodeArray() : Exports == Implementation where
       not unbound? types.1
 
     setType!(n, type, x) ==
-      print ["[*]", number(n.index) :: OF, "is of", type :: OF, "type."]
+      println ["[*]" :: PF, number(n.index) :: PF, "is of" :: PF, type :: PF, "type." :: PF]
       typeVar? n.type =>
         typevars := x.typevars
         typevars(n.type :: MR) := [type]
@@ -425,7 +398,7 @@ TCNodeArray() : Exports == Implementation where
       n.type = type
 
     addType!(n, type, x) ==
-      print ["[*] Adding type alternative of", type :: OF, "to node", number(n.index) :: OF]
+      println ["[*]" :: PF, "Adding type alternative of" :: PF, type :: PF, "to node" :: PF, number(n.index) :: PF]
       not typeVar? n.type =>
         error "addType! works only on type variants"
       typevars := x.typevars
@@ -448,7 +421,8 @@ TCNodeArray() : Exports == Implementation where
       typevars(var) := types
 
     apply!(var, terms, x) ==
-      print ["[*] Modyfing", var :: OF, "type variable with", terms :: OF]
+      println(["[*]" :: PF, "Modyfing" :: PF, var :: PF, "type variable with" :: PF,
+               bracket [t :: PF for t in terms]])
       rewriteTypeVars!(var, terms, x.typevars)
       if typeInferred?(var, x) then
         for tv in entries x.typevars repeat
@@ -504,8 +478,8 @@ TCNodeArray() : Exports == Implementation where
       nodes := [n for n in entries ns | occurs?(var, n.type)] 
       for n in nodes repeat
         n.type := substitute(n.type, var, term)
-        print(["[*] Rewrote", number(n.index) :: OF, "with",
-               hconcat ["{", var :: OF, " => ", term :: OF, "}"]])
+        println(["[*]" :: PF, "Rewrote" :: PF, number(n.index) :: PF,
+                 "with" :: PF, brace spaces [var :: PF, "=>" :: PF, term :: PF]])
       for n in nodes repeat
         checkAndMarkIfDone! n
 
@@ -520,7 +494,8 @@ TCNodeArray() : Exports == Implementation where
     inferType(n, x) ==
       emptyNode? n.rule => true
 
-      print ["[*] Run type inference for", number(n.index) :: OF, "of", n.type :: OF, "type."]
+      println(["[*]" :: PF, "Run type inference for" :: PF,
+               number(n.index) :: PF, "of" :: PF, n.type :: PF, "type." :: PF])
 
       apply? n.rule =>
         nfun := first n.children -- function node
@@ -582,21 +557,21 @@ TCNodeArray() : Exports == Implementation where
       while p.a > 0 or p.b > 0 repeat
         newQ : Queue(TCN) := empty()
 
-        step := paren(s :: OF)
+        step := paren (s :: PF)
 
         ++ perform meta-step
         while not empty? q repeat
           n := dequeue! q
           done? n => "iterate"
 
-          --print([step, "Queue state =>", number(n.index) :: OF, ":",
-          --       bracket [number(m.index) :: OF for m in members q]])
+          --println([step, ["Queue state"], ["=>"], [number(n.index)], [":"],
+          --         bracket [[number(m.index)] for m in members q]])
 
           not inferType(n, x) =>
-            print (x :: OF)
-            print (x.typevars :: OF)
-            print ["(!) Failed to infer type for: ", number(n.index) :: OF]
-            print box(n.node :: OF)
+            println (x :: PF)
+            println (x.typevars :: PF)
+            println ["(!)" :: PF, "Failed to infer type for:" :: PF, number(n.index) :: PF]
+            println box(n.node :: PF)
             return false
 
           ++ check if we're done with processing type variable tied to this node
@@ -604,13 +579,15 @@ TCNodeArray() : Exports == Implementation where
             var := n.type :: MR
             if typeInferred?(var, x) then
               term := first(remove!(var, x.typevars) :: List(N))
-              print ["[*] Type inferred for node", number(n.index) :: OF, ":", term :: OF]
+              println(["[*]" :: PF, "Type inferred for node" :: PF, number(n.index) :: PF,
+                       ":" :: PF, term :: PF])
               rewriteNodes!(var, term, x.nodes)
 
           ++ if type is inferred for all dependencies the node itself won't change
           checkAndMarkIfDone! n
           if done? n then
-            print ["[*] Processing node", number(n.index) :: OF, "completed!"]
+            println(["[*]" :: PF, "Processing node" :: PF,
+                     number(n.index) :: PF, "completed!" :: PF])
           else
             enqueue!(n, newQ)
 
@@ -622,8 +599,8 @@ TCNodeArray() : Exports == Implementation where
           newP.a = p.a and newP.b < p.b => true
           false
         not correct =>
-          print (x :: OF)
-          print (x.typevars :: OF)
+          println (x :: PF)
+          println (x.typevars :: PF)
           error "Type checker does not advance by applying known typing rules!"
 
         ++ setup new meta-step
@@ -631,7 +608,7 @@ TCNodeArray() : Exports == Implementation where
         q := newQ
         s := s + 1
 
-      print (x :: OF)
+      println (x :: PF)
       true
 
 )abbrev package STYPCHK SpadTypeChecker
@@ -658,11 +635,11 @@ SpadTypeChecker() : Exports == Implementation where
   MR ==> SpadMarker(N)
 
   NNI ==> NonNegativeInteger
-  OF ==> OutputForm
   ENV ==> SpadEnvironment
   TCN ==> TCNode
   CTX ==> TCNodeArray
   SUBST ==> AssociationList(MR, List(N))
+  PF ==> PrintableForm
 
   Exports ==> with
     walk : (APP, CTX, ENV) -> ENV
@@ -691,12 +668,13 @@ SpadTypeChecker() : Exports == Implementation where
     import TCNode
     import SpadNode
     import SpadNodeFactory
-    import OutputFormExt
+    import Printer
+    import PrintableForm
     import TypeUnifier
 
     envAddType : (N, ENV) -> ENV
     envAddType (t : N, env : ENV) : ENV ==
-      ++ print ["(e) Adding type", t :: OF, "to the environment."]
+      ++ println [["(e) Adding type"], t :: PF, ["to the environment."]]
       if apply? t then
         app := t :: APP
         env := addDomain(app, env)
@@ -709,7 +687,7 @@ SpadTypeChecker() : Exports == Implementation where
       env
 
     walk (a : APP, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Processing function application."]
+      println ["[*]" :: PF, "Processing function application." :: PF]
       node := addNode!([a], ctx)
       env := addChildren(node, [a.function, :a.args], ctx, env)
       nl := [nodeRef(n.index) for n in node.children]
@@ -728,7 +706,7 @@ SpadTypeChecker() : Exports == Implementation where
       if symbol? a.lval then
         s := a.lval :: Symbol
         if emptyNode? getMode(s, env) then
-          print ["[*] Processing fresh assignment", string(s) :: OF]
+          println ["[*]" :: PF, "Processing fresh assignment" :: PF, string(s :: PF)]
           env := addMode(s, addTypeVar! ctx, env)
         
       node := addNode!([a], type, ctx)
@@ -738,7 +716,7 @@ SpadTypeChecker() : Exports == Implementation where
       env
 
     walk (cn : CN, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Processing conditional expression."]
+      println ["[*]" :: PF, "Processing conditional expression." :: PF]
       node := addNode!([cn], ctx)
       env := addChildren(node, [cn.cond, cn.truebr, cn.falsebr], ctx, env)
       nl := [nodeRef(n.index) for n in node.children]
@@ -746,7 +724,7 @@ SpadTypeChecker() : Exports == Implementation where
       env
 
     walk (fn : FN, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Processing function", string(fn.name) :: OF]
+      println ["[*]" :: PF, "Processing function" :: PF, string(fn.name :: PF)]
 
       fnNode := addNode!([fn], ctx)
 
@@ -755,12 +733,12 @@ SpadTypeChecker() : Exports == Implementation where
 
       -- fetch signatures from domain's definition
       mappings : List(N) := [[mm.type] for mm in getModemap(fn.name, env)]
-      print(["Found", string(name) :: OF, "with signatures :",
-             bracket [t :: OF for t in mappings]])
+      println(["Found" :: PF, string(name :: PF), "with signatures :" :: PF,
+               bracket [t :: PF for t in mappings]])
 
       -- signature associated with function definition
       mt := sig :: MT
-      print ["Signature associated with function definition :", mt :: OF]
+      println ["Signature associated with function definition :" :: PF, mt :: PF]
 
       -- prepare function signature for unification
       types : List(N) := []
@@ -782,11 +760,11 @@ SpadTypeChecker() : Exports == Implementation where
       empty? sigs =>
         error "No signature corresponding to the function!"
 
-      print ["Eligible signatures :", sigs :: OF]
+      println ["Eligible signatures :" :: PF, brace [sig :: PF for sig in sigs]]
 
       -- try to check type for each eligible signature
       for mt in sigs repeat
-        print ["[*] Assume", name :: OF, "has type :", mt :: OF]
+        println ["[*]" :: PF, "Assume" :: PF, name :: PF, "has type :" :: PF, mt :: PF]
 
         env' := envAddType([mt], env)
         for arg in fn.args for argt in mt.args repeat
@@ -797,8 +775,8 @@ SpadTypeChecker() : Exports == Implementation where
         env' := addChildren(node, [fn.body], ctx', env')
         node.rule := nodeRef(2)
 
-        print "[*] Tree ready for unification : " 
-        print (ctx' :: OF)
+        println ["[*]" :: PF, "Tree ready for unification :" :: PF]
+        println (ctx' :: PF)
 
         not check ctx' => "iterate"
 
@@ -809,7 +787,7 @@ SpadTypeChecker() : Exports == Implementation where
 
     walk (ft : FT, ctx : CTX, env : ENV) : ENV ==
       sig := signature ft
-      print ["[*] Processing functor :", sig :: OF]
+      println ["[*]" :: PF, "Processing functor :" :: PF, sig :: PF]
       self := "$" :: Symbol
       env := addMode(sig.name, sig.type, env)
       env := addMode(self, ft.type, env)
@@ -829,7 +807,7 @@ SpadTypeChecker() : Exports == Implementation where
       env
 
     walk (im : IM, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Importing", im.type :: OF]
+      println ["[*]" :: PF, "Importing" :: PF, im.type :: PF]
       env := envAddType(im.type, env)
       addNode!([im], voidType, ctx)
       env
@@ -839,15 +817,15 @@ SpadTypeChecker() : Exports == Implementation where
     --  addChildren(node, [l.body], ctx, env)
 
     walk (lp : LP, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Loop statement."]
+      println ["[*]" :: PF, "Loop statement." :: PF]
       node := addNode!([lp], voidType, ctx)
       not empty? lp.itors =>
         error "Loop iterators not handled yet!"
-      print ["[*] Processing", #(lp.guards) :: OF, "guards."]
+      println ["[*]" :: PF, "Processing" :: PF, #(lp.guards) :: PF, "guards." :: PF]
       env := addChildren(node, lp.guards, ctx, env)
       for guard in node.children repeat
         setType!(guard, booleanType, ctx)
-      print ["[*] Processing loop body."]
+      println ["[*]" :: PF, "Processing loop body." :: PF]
       addChildren(node, [lp.body], ctx, env)
 
     --walk (seg : SEG, ctx : CTX, env : ENV) : ENV ==
@@ -855,14 +833,14 @@ SpadTypeChecker() : Exports == Implementation where
     --  addChildren(node, [seg.start, seg.end, seg.step], ctx, env)
 
     walk (s : SEQ, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Found sequence of", #(s.list) :: OF, "expressions."]
+      println ["[*]" :: PF, "Found sequence of" :: PF, #(s.list) :: PF, "expressions." :: PF]
       node := addNode!([s], ctx)
       env := addChildren(node, s.list, ctx, env)
       node.rule := nodeRef((last node.children).index)
       env
 
     walk (s : Symbol, ctx : CTX, env : ENV) : ENV ==
-      print ["[*] Symbol lookup for", string(s) :: OF]
+      println ["[*]" :: PF, "Symbol lookup for" :: PF, string(s :: PF)]
       types : List(N) := [[mm.type] for mm in getModemap(s, env)]
       mode := getMode(s, env)
       if not emptyNode? mode then
@@ -881,13 +859,14 @@ SpadTypeChecker() : Exports == Implementation where
       if #types = 1
         then addNode!([s], first types, ctx)
         else addNode!([s], types, ctx)
-      print(["Found", string(s) :: OF, "with type :",
-            bracket [t :: OF for t in types]])
+      println(["Found" :: PF, string(s :: PF), "with type :" :: PF,
+               bracket [t :: PF for t in types]])
       env
 
     walk (te : TE, ctx : CTX, env : ENV) : ENV ==
       te.kind = '_: => 
-        print ["[*] Expression", te.expr :: OF, "has type", te.type :: OF]
+        println(["[*]" :: PF, "Expression" :: PF, te.expr :: PF,
+                 "has type" :: PF, te.type :: PF])
 
         not symbol? te.expr =>
           error "Type annotation works only for symbols!"
@@ -896,14 +875,15 @@ SpadTypeChecker() : Exports == Implementation where
         -- add it to the environment or crash if already defined
         s := te.expr :: Symbol
         not emptyNode? getMode(s, env) =>
-          print [s :: OF, "already defined as", getMode(s, env) :: OF]
+          println [s :: PF, "already defined as" :: PF, getMode(s, env) :: PF]
           error "Symbol already defined!"
 
         addNode!([te], te.type, ctx)
         addMode(s, te.type, env)
 
       te.kind = '_@ =>
-        print ["[*] Expression", te.expr :: OF, "has to return type", te.type :: OF]
+        println(["[*]" :: PF, "Expression" :: PF, te.expr :: PF,
+                 "has to return type" :: PF, te.type :: PF])
         not apply? te.expr =>
           error "Type cut operator works only for function application!"
         env := envAddType(te.type, env)
@@ -913,7 +893,8 @@ SpadTypeChecker() : Exports == Implementation where
         env
 
       te.kind = '_:_: =>
-        print ["[*] Expression", te.expr :: OF, "have to coerce to", te.type :: OF]
+        println(["[*]" :: PF, "Expression" :: PF, te.expr :: PF,
+                 "have to coerce to" :: PF, te.type :: PF])
         i := lastIndex ctx + 1
         -- convert "::" to "coerce" function call
         env := walk([[['coerce], [te.expr]]$APP], ctx, env)
@@ -931,17 +912,17 @@ SpadTypeChecker() : Exports == Implementation where
       error "Not handled!"
 
     walk (i : Integer, ctx : CTX, env : ENV) : ENV ==
-      print ["[*]", i :: OF, "is", integerType :: OF, ":)"]
+      println ["[*]" :: PF, i :: PF, "is" :: PF, integerType :: PF, ":)" :: PF]
       addNode!([i], integerType, ctx)
       env
 
     walk (f : DoubleFloat, ctx : CTX, env : ENV) : ENV ==
-      print ["[*]", f :: OF, "is", floatType :: OF, ":)"]
+      println ["[*]" :: PF, f :: PF, "is" :: PF, floatType :: PF, ":)" :: PF]
       addNode!([f], floatType, ctx)
       env
 
     walk (s : String, ctx : CTX, env : ENV) : ENV ==
-      print ["[*]", s :: OF, "is", stringType :: OF, ":)"]
+      println ["[*]" :: PF, s :: PF, "is" :: PF, stringType :: PF, ":)" :: PF]
       addNode!([s], stringType, ctx)
       env
 

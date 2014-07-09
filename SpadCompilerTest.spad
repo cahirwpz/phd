@@ -4,12 +4,15 @@
 ++ Date Last Updated: January 2014
 ++ Description:
 ++ Experimental type checker with bottom-up approach.
-SpadCompilerTest() : with
+SpadCompilerTest() : Exports == Implementation where
+  PF ==> PrintableForm
+
+  Exports ==> with
     run : SExpression -> Void 
     run2 : SExpression -> Void 
-  == add
-    import Character
-    import OutputForm
+
+  Implementation ==> add
+    import Printer 
     import SpadNode
     import SpadTreeMacroExpander
     import TCNodeArrayOps
@@ -22,28 +25,29 @@ SpadCompilerTest() : with
       n : SpadNode := parse e
 
       n := rewrite(n) $ SpadTreeCleanUp
-      print (n :: OutputForm)
+      println (n :: PF)
       
       init() $ SpadMacroExpander
       n := rewrite(n) $ SpadMacroExpander
-      print (n :: OutputForm)
+      println (n :: PF)
 
     run2 e ==
-      print (e :: OutputForm)
-      print ""
+      println (convert(e) :: PF)
+      println ""
 
       n : SpadNode := parse e
       n := rewrite(n) $ SpadTreeCleanUp
       
       init() $ SpadMacroExpander
       n := rewrite(n) $ SpadMacroExpander
-      print (n :: OutputForm)
-      print (convert n :: OutputForm)
-      print ""
+      e2 := convert(n)
+      println (n :: PF)
+      println (convert(e2) :: PF)
+      println ""
 
       narr : TCNodeArray := nodeArray ()
       env : SpadEnvironment := new ()
 
       walk(n, narr, env) $ SpadTypeChecker
 
-      print (narr :: OutputForm)
+      println (narr :: PF)

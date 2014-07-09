@@ -121,6 +121,7 @@ ParserTools() : with
     while? ex == list_of_eq?(ex, 'WHILE, 2)
 
 )abbrev category PRSCAT ParsableCategory
-ParsableCategory() : Category == SetCategory with
+ParsableCategory() : Category == SetCategory with ++ BUG: cannot change to BasicType, because removeDuplicate is not visible in runtime for List(BasicType)
   parse : SExpression -> %
+  coerce : % -> PrintableForm
   convert : % -> SExpression

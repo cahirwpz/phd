@@ -1,73 +1,102 @@
 )abbrev domain SPCMM SpadCtorModeMap
-SpadCtorModeMap() : SetCategory with
+SpadCtorModeMap() : Exports == Implementation where
+  N ==> SpadNode
+  NT ==> SpadNamedType(N)
+  PF ==> PrintableForm
+
+  Exports ==> Join(CoercibleTo(SpadNode), CoercibleTo(PrintableForm)) with
+    convert : SExpression -> %
+
     elt : (%, "name") -> Symbol
-    elt : (%, "sig") -> List Symbol
-    elt : (%, "type") -> SExpression
-    elt : (%, "args") -> List SExpression
-    construct : SExpression -> %
-  == add
-    import OutputForm
+    elt : (%, "type") -> N
+    elt : (%, "args") -> List(NT)
+
+  Implementation ==> add
+    Rep := Record(ctor : List(SExpression), unused : SExpression)
+
     import SExpression
     import SpadNode
+    import Printer
 
-    rep(x) ==> (x pretend SExpression)
+    convert x ==
+      x pretend %
 
-    elt (x, "name") == (car car car rep(x)) pretend Symbol
-    elt (x, "sig") == (cdr car car rep(x)) pretend List Symbol
-    elt (x, "type") == (car cdr car rep(x)) 
-    elt (x, "args") == (cdr cdr car rep(x)) pretend List SExpression
-
-    construct x == x pretend %
+    elt (x, "name") ==
+      symbol car x.ctor.1 
+    elt (x, "type") ==
+      parse x.ctor.2
+    elt (x, "args") ==
+      ts := [parse t for t in rest(x.ctor, 2)]
+      as := [symbol a for a in destruct cdr x.ctor.1]
+      [[a, t]$NT for a in as for t in ts]
 
     coerce x ==
-      fsig := [hconcat [s :: OutputForm, " : ", (parse a) :: OutputForm] for s in x.sig for a in x.args]
-      hconcat([x.name :: OutputForm, paren fsig, " : ",
-               (parse x.type) :: OutputForm])
+      hconcat [x.name :: PF, paren [arg :: PF for arg in x.args], ":" :: PF, x.type :: PF]
 
 )abbrev domain SPCC SpadCtorCategory
-SpadCtorCategory() : SetCategory with
-    asNode : % -> SpadNode
-  == add
-    rep(x) ==> (x pretend SExpression)
+SpadCtorCategory() : Exports == Implementation where
+  N ==> SpadNode
+  PF ==> PrintableForm
 
-    asNode x ==
-      parse rep(x)
+  Exports ==> Join(CoercibleTo(SpadNode), CoercibleTo(PrintableForm)) with
+    convert : SExpression -> %
 
-    coerce x ==
-      (asNode x) :: OutputForm
+  Implementation ==> add
+    convert x == x pretend %
+
+    coerce (x : %) : N ==
+      parse (x pretend SExpression)
+    coerce (x : %) : PF ==
+      (x :: N) :: PF
 
 )abbrev domain SPOP SpadOperation
-SpadOperation() : SetCategory == add
-    rep(x) ==> (x pretend SExpression)
-    N ==> SpadNode
+SpadOperation() : Exports == Implementation where
+  N ==> SpadNode
+  PF ==> PrintableForm
+  MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
 
+  Exports ==> CoercibleTo(PrintableForm) with
+    convert : SExpression -> %
+
+    elt : (%, "name") -> Symbol
+    elt : (%, "type") -> MT
+    elt : (%, "signature") -> NT
+    elt : (%, "condition") -> N
+
+  Implementation ==> add
     import SpadNode
-    import OutputForm
+    import Printer
     import SExpression
 
-    coerce x ==
-      sex : SExpression := rep(x)
-      --print (sex :: OutputForm)
-      opname := symbol sex.1
-      sig := destruct sex.2
+    Rep := Record(op_name : Symbol, op_info : List(List(SExpression)))
+
+    convert x == x pretend %
+
+    elt (x, "name") ==
+      x.op_name
+
+    elt (x, "type") ==
+      sig := x.op_info.1
       tl := [parse t for t in destruct sig.1]
       if #sig >= 4 then
-        tl := concat(tl, [['constant]])
-      mt : SpadMappingType(N) :=
-        if #tl = 1 then
-          [[], tl.1]
-        else
-          [rest tl, first tl]
-      type := [opname, [mt]]$SpadNamedType(N)
-      op :=
-        if #sig >= 3 and not (symbol? sig.3 and symbol sig.3 = 'T)
-          then
-            pile([type :: OutputForm,
-                  hconcat [hspace 2, "when"],
-                  hconcat [hspace 4, (parse sig.3)$SpadNode :: OutputForm]])
-          else
-            type :: OutputForm
-      op
+        tl := concat(tl, ['constant])
+      [rest tl, first tl]$MT
+
+    elt (x, "signature") ==
+      [x.name, [x.type]]$NT
+
+    elt (x, "condition") ==
+      sig := x.op_info.1
+      #sig < 3 or (symbol? sig.3 and symbol sig.3 = 'T) => emptyNode()
+      parse sig.3
+
+    coerce x ==
+      cond := x.condition
+      emptyNode? cond =>
+        x.signature :: PF 
+      vconcat([x.signature :: PF,
+               pile ["when" :: PF, cond :: PF]])
 
 )abbrev domain SPDB SpadDatabase
 SpadDatabase() : with
@@ -89,26 +118,27 @@ SpadDatabase() : with
       -- Integer
       sex : SExpression := GETDATABASE(t, 'OPERATIONALIST)$Lisp
       null? sex => error "Unknown constructor!"
-      sex pretend List SpadOperation
+      opList := sex pretend List(SExpression)
+      [convert op for op in opList]
 
     getCtorArgsKind t ==
       sex : SExpression := GETDATABASE(t,'COSIG)$Lisp
       null? sex => error "Unknown constructor!"
-      (cdr sex) pretend List Boolean
+      (cdr sex) pretend List(Boolean)
 
     getCtorCategory t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORCATEGORY)$Lisp
       null? sex => error "Unknown constructor!"
-      sex pretend SpadCtorCategory
+      convert(sex)
 
     getCtorModeMap t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
       null? sex => error "Unknown constructor!"
-      sex pretend SpadCtorModeMap
+      convert(sex)
 
     getCtorArgs t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORARGS)$Lisp
-      sex pretend List Symbol
+      sex pretend List(Symbol)
 
     getCtorKind t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORKIND)$Lisp
