@@ -1,0 +1,119 @@
+)abbrev category LOGCAT LoggerCategory
+LoggerCategory() : Category == with
+  ++ Info useful to developers for debugging the application.
+  debug : PrintableForm -> Void
+  debug : List(PrintableForm) -> Void
+  ++ Normal operational messages.
+  info : PrintableForm -> Void
+  info : List(PrintableForm) -> Void
+  ++ Events that are unusual but not error conditions (default level).
+  notice : PrintableForm -> Void
+  notice : List(PrintableForm) -> Void
+  ++ Warning messages.
+  warn : PrintableForm -> Void
+  warn : List(PrintableForm) -> Void
+  ++ Error messages.
+  fail : PrintableForm -> Void
+  fail : List(PrintableForm) -> Void
+  ++ Set logger level.
+  loggerLevel : Union("debug", "info", "notice", "warn", "fail") -> Void
+
+)abbrev domain LOGMAIN MainLogger
+MainLogger() : Exports == Implementation where
+  LVL ==> Union("debug", "info", "notice", "warn", "fail")
+  PF ==> PrintableForm
+  NNI ==> NonNegativeInteger
+  CONF ==> AssociationList(Symbol, LVL)
+
+  Exports ==> with
+    debug : (Symbol, PF) -> Void
+    info : (Symbol, PF) -> Void
+    notice : (Symbol, PF) -> Void
+    warn : (Symbol, PF) -> Void
+    fail : (Symbol, PF) -> Void
+    log : (Symbol, LVL, PF) -> Void
+    loggerLevel : (Symbol, LVL) -> Void
+    loggerDefaultLevel : LVL -> Void
+
+  Implementation ==> add
+    import Printer
+
+    debug (c, f) == log(c, "debug", f)
+    info (c, f) == log(c, "info", f)
+    notice (c, f) == log(c, "notice", f)
+    warn (c, f) == log(c, "warn", f)
+    fail (c, f) == log(c, "fail", f)
+
+    config : CONF := [[]]
+    default : LVL := "notice"
+
+    num : LVL -> NNI
+    num l ==
+      l case "debug" => 0
+      l case "info" => 1
+      l case "notice" => 2
+      l case "warn" => 3
+      l case "fail" => 4
+
+    log (component, level, form) ==
+      l :=
+        lc := assoc(component, config)
+        lc case "failed" => default
+        lc.entry
+      if num l <= num level then
+        println form
+
+    loggerLevel (component, level) ==
+      config(component) := level
+
+    loggerDefaultLevel level ==
+      default := level
+
+)abbrev domain LOG Logger
+Logger(C : Symbol) : LoggerCategory == Implementation where
+  LVL ==> Union("debug", "info", "notice", "warn", "fail")
+  PF ==> PrintableForm
+
+  Implementation ==> add
+    import MainLogger
+
+    debug (f : PF) ==
+      debug(C, spaces [magenta bold bracket (C :: PF), f])
+    info (f : PF) ==
+      info(C, spaces [cyan bold bracket (C :: PF), f])
+    notice (f : PF) ==
+      notice(C, spaces [green bold bracket (C :: PF), f])
+    warn (f : PF) ==
+      warn(C, spaces [yellow bold bracket (C :: PF), f])
+    fail (f : PF) ==
+      fail(C, spaces [red bold bracket (C :: PF), f])
+
+    debug (l : List(PF)) == debug spaces l
+    info (l : List(PF)) == info spaces l
+    notice (l : List(PF)) == notice spaces l
+    warn (l : List(PF)) == warn spaces l
+    fail (l : List(PF)) == fail spaces l
+
+    loggerLevel l == loggerLevel(C, l)
+
+)abbrev package LOGTEST LoggerTest
+LoggerTest() : Exports == Implementation where
+  PF ==> PrintableForm
+
+  Exports ==> with
+    test : () -> Void
+
+  Implementation ==> add
+    import MainLogger
+    import Logger('L1)
+    import Logger('L2)
+
+    test () ==
+      loggerLevel("debug")$Logger('L1)
+      loggerLevel("info")$Logger('L2)
+      fail("this is an error" :: PF)$Logger('L1)
+      warn("this is a warning" :: PF)$Logger('L2)
+      notice("this is a notice" :: PF)$Logger('L1)
+      info("this is an information message" :: PF)$Logger('L2)
+      debug("this is a debug message" :: PF)$Logger('L1)
+      debug("this is a debug message" :: PF)$Logger('L2)

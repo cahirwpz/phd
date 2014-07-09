@@ -83,6 +83,7 @@ SpadEnvironment() : Exports == Implementation where
     import Printer
     import PrinterCode
     import SpadNode
+    import Logger('Env)
 
     saveMode : () -> Boolean
     saveMode() ==
@@ -99,7 +100,7 @@ SpadEnvironment() : Exports == Implementation where
       _$compiler_InteractiveFrame $ Lisp
 
     addModemapsFromCategory(dom, cat, env) ==
-      println ["EnvAddModemapsFromCategory" :: PF, paren [dom :: PF, cat :: PF]]
+      debug ["EnvAddModemapsFromCategory" :: PF, paren [dom :: PF, cat :: PF]]
       sdom := convert dom
       scat := convert cat
       m := saveMode()
@@ -109,7 +110,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addDomain(dom, env) ==
-      println ["EnvAddDomain" :: PF, paren [dom :: PF]]
+      debug ["EnvAddDomain" :: PF, paren [dom :: PF]]
       sdom := convert dom
       m := saveMode()
       res : % := addDomain(sdom, env)$Lisp
@@ -117,7 +118,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addModemap(op, dom, args, env) ==
-      println ["EnvAddModeMap" :: PF, paren [op :: PF, dom :: PF, :[arg :: PF for arg in args]]]
+      debug ["EnvAddModeMap" :: PF, paren [op :: PF, dom :: PF, :[arg :: PF for arg in args]]]
       sdom := convert dom
       sargs := [convert arg for arg in args]
       m := saveMode()
@@ -132,7 +133,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addMode(name, type, env) ==
-      println ["EnvAddMode" :: PF, paren [name :: PF, type :: PF]]
+      debug ["EnvAddMode" :: PF, paren [name :: PF, type :: PF]]
       m := saveMode()
       res : % := put(name, 'mode, convert type, env)$Lisp
       restoreMode(m)
@@ -145,7 +146,7 @@ SpadEnvironment() : Exports == Implementation where
       parse res
 
     putValue(name, value, env) ==
-      println ["EnvPutValue" :: PF, paren [name :: PF, value :: PF]]
+      debug ["EnvPutValue" :: PF, paren [name :: PF, value :: PF]]
       m := saveMode()
       res : % := put(name, 'value, convert value, env)$Lisp
       restoreMode(m)

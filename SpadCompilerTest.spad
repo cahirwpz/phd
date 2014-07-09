@@ -16,8 +16,11 @@ SpadCompilerTest() : Exports == Implementation where
     import SpadNode
     import SpadTreeMacroExpander
     import TCNodeArrayOps
+    import MainLogger
 
     run e ==
+      loggerDefaultLevel "debug"
+
       -- print (e :: OutputForm)
 
       -- BUG: type annotation below is necessary otherwise compiler chooses
@@ -32,6 +35,9 @@ SpadCompilerTest() : Exports == Implementation where
       println (n :: PF)
 
     run2 e ==
+      loggerDefaultLevel "debug"
+      loggerLevel('Type, "info")
+
       println (convert(e) :: PF)
       println ""
 
