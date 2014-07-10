@@ -2,7 +2,7 @@
 SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadApply(%) -> %
   construct : SpadAssign(%) -> %
-  construct : SpadConditional(%) -> %
+  construct : SpadCondExpr(%) -> %
   construct : SpadFunction(%) -> %
   construct : SpadFunctor(%) -> %
   construct : SpadImport(%) -> %
@@ -29,7 +29,7 @@ SpadNodeCategory() : Category == ParsableCategory with
 
   apply? : % -> Boolean
   assign? : % -> Boolean
-  conditional? : % -> Boolean
+  condExpr? : % -> Boolean
   emptyNode? : % -> Boolean
   float? : % -> Boolean
   function? : % -> Boolean
@@ -59,7 +59,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> Integer
   coerce : % -> SpadApply(%)
   coerce : % -> SpadAssign(%)
-  coerce : % -> SpadConditional(%)
+  coerce : % -> SpadCondExpr(%)
   coerce : % -> SpadFunction(%)
   coerce : % -> SpadFunctor(%)
   coerce : % -> SpadImport(%)
@@ -283,16 +283,16 @@ SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
       spaces [n.name :: PF, ":" :: PF, typeName]
 
 )abbrev domain SPTREC SpadRecordType
-SpadRecordType(T : SpadNodeCategory) : Exports == Implementation where
-  F ==> SpadNamedType(T)
+SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
+  NT ==> SpadNamedType(N)
 
   Exports ==> ParsableCategory with
-    elt : (%, "fields") -> List F
-    construct : List F -> %
+    elt : (%, "fields") -> List(NT)
+    construct : List(NT) -> %
 
   Implementation ==> add
-    Rep := Record(r_fields : List F)
+    Rep := Record(r_fields : List(NT))
 
     import SExpression
 
@@ -312,16 +312,16 @@ SpadRecordType(T : SpadNodeCategory) : Exports == Implementation where
       hconcat ["Record" :: PF, paren [f :: PF for f in n.fields]]
 
 )abbrev domain SPTUNION SpadUnionType
-SpadUnionType(T : SpadNodeCategory) : Exports == Implementation where
-  NT ==> SpadNamedType(T)
+SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
+  NT ==> SpadNamedType(N)
   PF ==> PrintableForm
 
   Exports ==> ParsableCategory with
-    elt : (%, "variants") -> List T
-    construct : List T -> %
+    elt : (%, "variants") -> List(N)
+    construct : List(N) -> %
 
   Implementation ==> add
-    Rep := Record(u_variants : List T)
+    Rep := Record(u_variants : List(N))
 
     import ParserTools
     import SExpression
@@ -333,7 +333,7 @@ SpadUnionType(T : SpadNodeCategory) : Exports == Implementation where
     parse ex ==
       -- (Union (: field1 Type1) (: field2 Type2) ...)
       -- (Union Type1 Type2 ...)
-      parseUnionField (s : SExpression) : T ==
+      parseUnionField (s : SExpression) : N ==
         (var? s => [[symbol s.2, parse s.3] $ NT]; parse s)
       [[parseUnionField e for e in destruct cdr ex]]
 
@@ -576,19 +576,20 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
 )abbrev domain SPLOOP SpadLoop
 SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
   K ==> Union("loop", "collect", "repeat")
+  IT ==> SpadIterator(N)
   PF ==> PrintableForm
 
   Exports ==> ParsableCategory with
     elt : (%, "kind") -> K
-    elt : (%, "itors") -> List SpadIterator(N)
-    elt : (%, "guards") -> List N
+    elt : (%, "itors") -> List(IT)
+    elt : (%, "guards") -> List(N)
     elt : (%, "body") -> N
-    construct : (K, List SpadIterator(N), List N, N) -> %
+    construct : (K, List(IT), List(N), N) -> %
 
   Implementation ==> add
     Rep := Record(lp_kind : K,
-                  lp_itors : List SpadIterator(N),
-                  lp_guards : List N,
+                  lp_itors : List(IT),
+                  lp_guards : List(N),
                   lp_body : N)
 
     import Printer
@@ -612,8 +613,8 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       -- println [convert(car ex), paren [convert e for e in lst]]
 
       range : SpadSegment(N)
-      l_itors : List SpadIterator(N) := []
-      l_guards : List N := []
+      l_itors : List(IT) := []
+      l_guards : List(N) := []
 
       for e in lst repeat
         -- TODO:
@@ -728,11 +729,11 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> ParsableCategory with
     elt : (%, "kind") -> K
-    elt : (%, "list") -> List N
-    construct : (K, List N) -> %
+    elt : (%, "list") -> List(N)
+    construct : (K, List(N)) -> %
 
   Implementation ==> add
-    Rep := Record(s_kind : K, s_list : List N)
+    Rep := Record(s_kind : K, s_list : List(N))
 
     import ParserTools
 
@@ -778,8 +779,8 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
       n.kind case "Sequence" or n.kind case "Capsule" => pile exps
       n.kind case "Tuple" => paren exps
 
-)abbrev package SPCOND SpadConditional
-SpadConditional(N : SpadNodeCategory) : Exports == Implementation where
+)abbrev package SPCOND SpadCondExpr
+SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
   Exports ==> ParsableCategory with
@@ -827,21 +828,20 @@ SpadConditional(N : SpadNodeCategory) : Exports == Implementation where
 SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
   NT ==> SpadNamedType(N)
   MT ==> SpadMappingType(N)
-  ARG ==> Union(String, NT)
   PF ==> PrintableForm
 
   Exports ==> ParsableCategory with
     elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List(ARG)
+    elt : (%, "args") -> List(N)
     elt : (%, "type") -> N
     elt : (%, "body") -> N
-    construct : (Symbol, List(ARG), N, N) -> %
+    construct : (Symbol, List(N), N, N) -> %
       ++ construct(name,varlist,type,exp)
     signature : % -> NT
 
   Implementation ==> add
     Rep := Record(fn_name : Symbol,
-                  fn_args : List(ARG),
+                  fn_args : List(N),
                   fn_type : N,
                   fn_body : N)
 
@@ -857,11 +857,10 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
     construct(fname, fargs, ftype, fbody) == 
       [fname, fargs, ftype, fbody]$Rep
 
-    parse_arg : (SExpression, SExpression) -> ARG
+    parse_arg : (SExpression, SExpression) -> N
     parse_arg(s, t) ==
-      string? s =>
-        string s
-      [symbol s, parseNonNull t]
+      string? s => [string s]
+      [[symbol s, parseNonNull t]$NT]
 
     parse ex ==
       fname := symbol car(ex.2)
@@ -869,7 +868,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       arg_types := destruct cdr(ex.3)
       fargs := [parse_arg(s, t) for s in arg_names for t in arg_types]
       ftype := car ex.3
-      fbody := ex.5 -- convert [ex.5]
+      fbody := ex.5
       [fname, fargs, parseNonNull ftype, parse fbody]
 
     convert x ==
@@ -884,16 +883,12 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
                :fbody])
 
     signature fn ==
-      types := [(if arg case String then emptyNode() else arg.type) for arg in fn.args]
+      types := [(namedType? arg => (arg :: NT).type; emptyNode())
+                for arg in fn.args]
       [fn.name, [[types, fn.type] $ MT]]
 
-    coerceArg : ARG -> PF
-    coerceArg arg ==
-      arg case String => (arg :: String) :: PF
-      arg case NT => (arg :: NT) :: PF
-
     coerce n ==
-      fargs := [coerceArg arg for arg in n.args]
+      fargs := [arg :: PF for arg in n.args]
       retType : List(PF) :=
         emptyNode? n.type => []
         [":" :: PF, n.type :: PF]
@@ -1033,47 +1028,74 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
 
 )abbrev domain SPNODE SpadNode
 ++ SPAD generic expression
-SpadNode() : SpadNodeCategory == Implementation where
+SpadNode() : Exports == Implementation where
+  DF ==> DoubleFloat
+  NNI ==> NonNegativeInteger
   PF ==> PrintableForm
+
+  APP ==> SpadApply(%)
+  ASS ==> SpadAssign(%)
+  CE ==> SpadCondExpr(%)
+  FN ==> SpadFunction(%)
+  FT ==> SpadFunctor(%)
+  IM ==> SpadImport(%)
+  IT ==> SpadIterator(%)
+  LAM ==> SpadLambda(%)
+  LP ==> SpadLoop(%)
+  M ==> SpadMacro(%)
+  MR ==> SpadMarker(%)
+  MT ==> SpadMappingType(%)
+  NT ==> SpadNamedType(%)
+  RT ==> SpadRecordType(%)
+  SEG ==> SpadSegment(%)
+  SEQ ==> SpadSequence(%)
+  ST ==> SpadSumType(%)
+  TE ==> SpadTypeExpr(%)
+  UT ==> SpadUnionType(%)
+  W ==> SpadWhere(%)
+  
+  Exports ==> SpadNodeCategory with
+    nodeApp : (%, List(%)) -> %
+    nodeAssign : (%, %) -> %
+    nodeCondExpr : (%, %, %) -> %
+    nodeFtor : (Symbol, List(NT), %, %, %) -> %
+    nodeFun : (Symbol, List(%), %, %) -> %
+    nodeImport : % -> %
+    nodeLambda : (List(Symbol), %, %) -> %
+    nodeLoop : (Union("loop", "collect", "repeat"), List(IT), List(%), %) -> %
+    nodeMacro : (Symbol, List(Symbol), %) -> %
+    nodeMappingType : (List(%), %) -> %
+    nodeNamedType : (Symbol, %) -> %
+    nodeRecordType : List(NT) -> %
+    nodeRef : NNI -> %
+    nodeSeg : (%, %, %) -> %
+    nodeSeq : (Union("Capsule", "Sequence", "Tuple"), List(%)) -> %
+    nodeSumType : (Union("Join", "Domain", "Package", "Body"), List(%)) -> %
+    nodeTypeExpr : (Symbol, %, %) -> %
+    nodeUnionType : List(%) -> %
+    nodeWhere : (%, %) -> %
 
   Implementation ==> add
     Rep := Union(empty : "$EmptyNode",
-                 apply : SpadApply(%),
-                 assign : SpadAssign(%),
-                 cond : SpadConditional(%),
-                 lambda : SpadLambda(%),
-                 loop : SpadLoop(%),
-                 mapping : SpadMappingType(%),
-                 named : SpadNamedType(%),
-                 record : SpadRecordType(%),
-                 segment : SpadSegment(%),
-                 seq : SpadSequence(%),
-                 ftor : SpadFunctor(%),
-                 func : SpadFunction(%),
-                 simport : SpadImport(%),
-                 smacro : SpadMacro(%),
-                 sum : SpadSumType(%),
-                 swhere : SpadWhere(%),
-                 typeexpr : SpadTypeExpr(%),
-                 union : SpadUnionType(%),
-                 marker : SpadMarker(%),
-                 dfloat : DoubleFloat,
-                 integer : Integer,
-                 string : String,
-                 symbol : Symbol)
+                 apply : APP, assign : ASS, cond : CE, lambda : LAM, loop : LP,
+                 mapping : MT, named : NT, record : RT, segment : SEG,
+                 seq : SEQ, ftor : FT, func : FN, simport : IM, smacro : M,
+                 sum : ST, swhere : W, typeexpr : TE, union : UT, marker : MR,
+                 dfloat : DF, int : Integer, str : String, sym : Symbol)
 
     import SExpression
     import Printer
     import ParserTools
+    import Logger('Parser)
 
     apply? n == n case apply
     assign? n == n case assign
-    conditional? n == n case cond
+    condExpr? n == n case cond
     float? n == n case dfloat
     function? n == n case func
     functor? n == n case ftor
     import? n == n case simport
-    integer? n == n case integer
+    integer? n == n case int
     lambda? n == n case lambda
     loop? n == n case loop 
     macro? n == n case smacro 
@@ -1082,119 +1104,119 @@ SpadNode() : SpadNodeCategory == Implementation where
     namedType? n == n case named
     nodeRef? n ==
       not n case marker => false
-      mr := (n :: SpadMarker(%))
+      mr := (n :: MR)
       mr.kind = 'noderef
     recordType? n == n case record
     segment? n == n case segment 
     sequence? n == n case seq
-    string? n == n case string
+    string? n == n case str
     sumType? n == n case sum
-    symbol? n == n case symbol
+    symbol? n == n case sym
     typeExpr? n == n case typeexpr
     unionType? n == n case union
     where? n == n case swhere
     typeAny? n ==
       not n case marker => false
-      mr := (n :: SpadMarker(%))
+      mr := (n :: MR)
       mr.kind = 'typevar and mr.id = 0
     typeVar? n ==
       not n case marker => false
-      mr := (n :: SpadMarker(%))
+      mr := (n :: MR)
       mr.kind = 'typevar and mr.id > 0
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]
 
-    coerce (n : %) : SpadApply(%) ==
+    coerce (n : %) : APP ==
       apply? n => n.apply
       CoerceError("SpadApply")
 
-    coerce (n : %) : SpadAssign(%) ==
+    coerce (n : %) : ASS ==
       assign? n => n.assign
       CoerceError("SpadAssign")
 
-    coerce (n : %) : SpadConditional(%) ==
-      conditional? n => n.cond
-      CoerceError("SpadConditional")
+    coerce (n : %) : CE ==
+      condExpr? n => n.cond
+      CoerceError("SpadCondExpr")
 
-    coerce (n : %) : SpadFunction(%) ==
+    coerce (n : %) : FN ==
       function? n => n.func
       CoerceError("SpadFunction")
 
-    coerce (n : %) : SpadFunctor(%) ==
+    coerce (n : %) : FT ==
       functor? n => n.ftor
       CoerceError("SpadFunctor")
 
-    coerce (n : %) : SpadImport(%) ==
+    coerce (n : %) : IM ==
       import? n => n.simport
       CoerceError("SpadImport")
 
-    coerce (n : %) : SpadLambda(%) == 
+    coerce (n : %) : LAM == 
       lambda? n => n.lambda
       CoerceError("SpadLambda")
 
-    coerce (n : %) : SpadLoop(%) ==
+    coerce (n : %) : LP ==
       loop? n => n.loop
       CoerceError("SpadLoop")
 
-    coerce (n : %) : SpadMacro(%) ==
+    coerce (n : %) : M ==
       macro? n => n.smacro
       CoerceError("SpadMacro")
 
-    coerce (n : %) : SpadMappingType(%) == 
+    coerce (n : %) : MT == 
       mappingType? n => n.mapping
       CoerceError("SpadMappingType")
 
-    coerce (n : %) : SpadMarker(%) == 
+    coerce (n : %) : MR == 
       marker? n => n.marker
       CoerceError("SpadMarker")
 
-    coerce (n : %) : SpadNamedType(%) ==
+    coerce (n : %) : NT ==
       namedType? n => n.named
       CoerceError("SpadNamedType")
 
-    coerce (n : %) : SpadRecordType(%) ==
+    coerce (n : %) : RT ==
       recordType? n => n.record
       CoerceError("SpadRecordType")
 
-    coerce (n : %) : SpadSegment(%) ==
+    coerce (n : %) : SEG ==
       segment? n => n.segment
       CoerceError("SpadSegment")
 
-    coerce (n : %) : SpadSequence(%) ==
+    coerce (n : %) : SEQ ==
       sequence? n => n.seq
       CoerceError("SpadSequence")
 
-    coerce (n : %) : SpadSumType(%) ==
+    coerce (n : %) : ST ==
       sumType? n => n.sum
       CoerceError("SpadSumType")
 
-    coerce (n : %) : SpadTypeExpr(%) ==
+    coerce (n : %) : TE ==
       typeExpr? n => n.typeexpr
       CoerceError("SpadTypeExpr")
 
-    coerce (n : %) : SpadUnionType(%) ==
+    coerce (n : %) : UT ==
       unionType? n => n.union
       CoerceError("SpadUnionType")
 
-    coerce (n : %) : SpadWhere(%) ==
+    coerce (n : %) : W ==
       where? n => n.swhere
       CoerceError("SpadWhere")
 
-    coerce (n : %) : DoubleFloat ==
+    coerce (n : %) : DF ==
       float? n => n.dfloat
       CoerceError("DoubleFloat")
 
     coerce (n : %) : Integer ==
-      integer? n => n.integer
+      integer? n => n.int
       CoerceError("Integer")
 
     coerce (n : %) : Symbol ==
-      symbol? n => n.symbol
+      symbol? n => n.sym
       CoerceError("Symbol")
 
     coerce (n : %) : String == 
-      string? n => n.string
+      string? n => n.str
       CoerceError("String")
 
     emptyNode () == ["$EmptyNode"]$Rep
@@ -1206,27 +1228,27 @@ SpadNode() : SpadNodeCategory == Implementation where
       sex : SExpression := GETDATABASE(s, 'ABBREVIATION)$Lisp
       not null? sex
 
-    construct (n : SpadApply(%)) : % == [n]$Rep
-    construct (n : SpadAssign(%)) : % == [n]$Rep
-    construct (n : SpadConditional(%)) : % == [n]$Rep
-    construct (n : SpadFunction(%)) : % == [n]$Rep
-    construct (n : SpadFunctor(%)) : % == [n]$Rep
-    construct (n : SpadImport(%)) : % == [n]$Rep
-    construct (n : SpadLambda(%)) : % == [n]$Rep
-    construct (n : SpadLoop(%)) : % == [n]$Rep
-    construct (n : SpadMacro(%)) : % == [n]$Rep
-    construct (n : SpadMappingType(%)) : % == [n]$Rep
-    construct (n : SpadMarker(%)) : % == [n]$Rep
-    construct (n : SpadNamedType(%)) : % == [n]$Rep
-    construct (n : SpadRecordType(%)) : % == [n]$Rep
-    construct (n : SpadSegment(%)) : % == [n]$Rep
-    construct (n : SpadSequence(%)) : % == [n]$Rep
-    construct (n : SpadSumType(%)) : % == [n]$Rep
-    construct (n : SpadTypeExpr(%)) : % == [n]$Rep
-    construct (n : SpadUnionType(%)) : % == [n]$Rep
-    construct (n : SpadWhere(%)) : % == [n]$Rep
+    construct (n : APP) : % == [n]$Rep
+    construct (n : ASS) : % == [n]$Rep
+    construct (n : CE) : % == [n]$Rep
+    construct (n : FN) : % == [n]$Rep
+    construct (n : FT) : % == [n]$Rep
+    construct (n : IM) : % == [n]$Rep
+    construct (n : LAM) : % == [n]$Rep
+    construct (n : LP) : % == [n]$Rep
+    construct (n : M) : % == [n]$Rep
+    construct (n : MT) : % == [n]$Rep
+    construct (n : MR) : % == [n]$Rep
+    construct (n : NT) : % == [n]$Rep
+    construct (n : RT) : % == [n]$Rep
+    construct (n : SEG) : % == [n]$Rep
+    construct (n : SEQ) : % == [n]$Rep
+    construct (n : ST) : % == [n]$Rep
+    construct (n : TE) : % == [n]$Rep
+    construct (n : UT) : % == [n]$Rep
+    construct (n : W) : % == [n]$Rep
 
-    construct (n : DoubleFloat) : % == [n]$Rep
+    construct (n : DF) : % == [n]$Rep
     construct (n : Integer) : % == [n]$Rep
     construct (n : String) : % == [n]$Rep
     construct (n : Symbol) : % == [n]$Rep
@@ -1236,34 +1258,21 @@ SpadNode() : SpadNodeCategory == Implementation where
       parse ex
 
     parse ex ==
-      -- println [["expression:"], convert(ex)]
-
-      import? ex =>
-        [(parse ex) $ SpadImport(%)]
+      debug ["Parsing expression:" :: PF, convert(ex) :: PF]
 
       capsule? ex or seq? ex or tuple? ex =>
         -- (SEQ expr1 expr2 ...)
         -- (CAPSULE expr1 expr2 ...)
         -- (@Tuple expr1 expr2 ...)
-        [(parse ex) $ SpadSequence(%)]
+        [parse(ex)$SEQ]
 
-      where? ex =>
-        [(parse ex) $ SpadWhere(%)]
-
-      lambda? ex =>
-        [(parse ex) $ SpadLambda(%)]
-
-      functor? ex =>
-        [(parse ex) $ SpadFunctor(%)]
-
-      function? ex =>
-        [(parse ex) $ SpadFunction(%)]
-
-      macro? ex =>
-        [(parse ex) $ SpadMacro(%)]
-
-      marker? ex =>
-        [(parse ex) $ SpadMarker(%)]
+      import? ex => [parse(ex)$IM]
+      where? ex => [parse(ex)$W]
+      lambda? ex => [parse(ex)$LAM]
+      functor? ex => [parse(ex)$FT]
+      function? ex => [parse(ex)$FN]
+      macro? ex => [parse(ex)$M]
+      marker? ex => [parse(ex)$MR]
 
       (var? ex or case? ex or has? ex or is? ex or pretend? ex or coerce? ex or
        domsel? ex or retsel? ex) => 
@@ -1283,39 +1292,26 @@ SpadNode() : SpadNodeCategory == Implementation where
         -- (@ expr Type)
         -- {expression with "$" domain selection operator}
         -- (Sel expr Type)
-        [(parse ex) $ SpadTypeExpr(%)]
+        [parse(ex)$TE]
 
-      let? ex =>
-        [(parse ex) $ SpadAssign(%)]
+      let? ex => [parse(ex)$ASS]
 
-      ifelse? ex =>
-        -- {if-then-else expression of if-then statement}
-        [(parse ex) $ SpadConditional(%)]
+      ifelse? ex => -- {if-then-else expression of if-then statement}
+        [parse(ex)$CE]
 
       collect? ex or loop? ex or repeat? ex =>
-        [(parse ex) $ SpadLoop(%)]
+        [parse(ex)$LP]
 
-      mapping? ex => 
-        -- TODO: var? ex is missing after collapsing Node and Type
-        [(parse ex) $ SpadMappingType(%)]
+      mapping? ex => -- TODO: var? ex is missing after collapsing Node and Type
+        [parse(ex)$MT]
 
       domain? ex or package? ex or join? ex or progn? ex =>
-        [(parse ex) $ SpadSumType(%)]
+        [parse(ex)$ST]
 
-      signature? ex =>
-        [(parse ex) $ SpadNamedType(%)]
-
-      record? ex =>
-        [(parse ex) $ SpadRecordType(%)]
-
-      union? ex => 
-        [(parse ex) $ SpadUnionType(%)]
-
-      list? ex and #ex > 0 =>
-        [(parse ex) $ SpadApply(%)]
-
-      string? ex =>
-        [string ex]
+      signature? ex => [parse(ex)$NT]
+      record? ex => [parse(ex)$RT]
+      union? ex => [parse(ex)$UT]
+      list? ex and #ex > 0 => [parse(ex)$APP]
 
       symbol? ex =>
         s := symbol ex
@@ -1323,101 +1319,103 @@ SpadNode() : SpadNodeCategory == Implementation where
         -- if s = '$ then s := '%
         [if s = '$ then s := coerce "%" else s]
 
-      integer? ex =>
-        [integer ex]
+      string? ex => [string ex]
+      integer? ex => [integer ex]
+      float? ex => [float ex]
+      null? ex => emptyNode()
 
-      float? ex =>
-        [float ex]
-
-      null? ex =>
-        emptyNode()
-
-      println "parse $ SpadNode:"
-      println convert(ex)
-      error "SExpression not handled!"
+      fail ["Could not parse s-expression:" :: PF, convert(ex) :: PF]
+      error "Panic!"
 
     coerce (n : %) : PF ==
-      apply? n => (n :: SpadApply(%)) :: PF
-      assign? n => (n :: SpadAssign(%)) :: PF
-      conditional? n => (n :: SpadConditional(%)) :: PF
-      float? n => (n :: DoubleFloat) :: PF
-      function? n => (n :: SpadFunction(%)) :: PF
-      functor? n => (n :: SpadFunctor(%)) :: PF
-      import? n => (n :: SpadImport(%)) :: PF
+      apply? n => (n :: APP) :: PF
+      assign? n => (n :: ASS) :: PF
+      condExpr? n => (n :: CE) :: PF
+      float? n => (n :: DF) :: PF
+      function? n => (n :: FN) :: PF
+      functor? n => (n :: FT) :: PF
+      import? n => (n :: IM) :: PF
       integer? n => (n :: Integer) :: PF
-      lambda? n => (n :: SpadLambda(%)) :: PF
-      loop? n => (n :: SpadLoop(%)) :: PF
-      macro? n => (n :: SpadMacro(%)) :: PF
-      mappingType? n => (n :: SpadMappingType(%)) :: PF
-      marker? n => (n :: SpadMarker(%)) :: PF
-      namedType? n => (n :: SpadNamedType(%)) :: PF
-      recordType? n => (n :: SpadRecordType(%)) :: PF
-      segment? n => (n :: SpadSegment(%)) :: PF
-      sequence? n => (n :: SpadSequence(%)) :: PF
+      lambda? n => (n :: LAM) :: PF
+      loop? n => (n :: LP) :: PF
+      macro? n => (n :: M) :: PF
+      mappingType? n => (n :: MT) :: PF
+      marker? n => (n :: MR) :: PF
+      namedType? n => (n :: NT) :: PF
+      recordType? n => (n :: RT) :: PF
+      segment? n => (n :: SEG) :: PF
+      sequence? n => (n :: SEQ) :: PF
       string? n => (n :: String) :: PF
-      sumType? n => (n :: SpadSumType(%)) :: PF
+      sumType? n => (n :: ST) :: PF
       symbol? n => (n :: Symbol) :: PF
-      typeExpr? n => (n :: SpadTypeExpr(%)) :: PF
-      unionType? n => (n :: SpadUnionType(%)) :: PF
-      where? n => (n :: SpadWhere(%)) :: PF
+      typeExpr? n => (n :: TE) :: PF
+      unionType? n => (n :: UT) :: PF
+      where? n => (n :: W) :: PF
       emptyNode? n => "?" :: PF
 
       error "coerce $ SpadNode: variant not handled!"
 
     convert n ==
-      apply? n => convert(n :: SpadApply(%))
-      assign? n => convert(n :: SpadAssign(%))
-      conditional? n => convert(n :: SpadConditional(%))
-      float? n => convert(n :: DoubleFloat)
-      function? n => convert(n :: SpadFunction(%))
-      functor? n => convert(n :: SpadFunctor(%))
-      import? n => convert(n :: SpadImport(%))
+      apply? n => convert(n :: APP)
+      assign? n => convert(n :: ASS)
+      condExpr? n => convert(n :: CE)
+      float? n => convert(n :: DF)
+      function? n => convert(n :: FN)
+      functor? n => convert(n :: FT)
+      import? n => convert(n :: IM)
       integer? n => convert(n :: Integer)
-      lambda? n => convert(n :: SpadLambda(%))
-      loop? n => convert(n :: SpadLoop(%))
-      macro? n => convert(n :: SpadMacro(%))
-      mappingType? n => convert(n :: SpadMappingType(%))
-      marker? n => convert(n :: SpadMarker(%))
-      namedType? n => convert(n :: SpadNamedType(%))
-      recordType? n => convert(n :: SpadRecordType(%))
-      segment? n => convert(n :: SpadSegment(%))
-      sequence? n => convert(n :: SpadSequence(%))
+      lambda? n => convert(n :: LAM)
+      loop? n => convert(n :: LP)
+      macro? n => convert(n :: M)
+      mappingType? n => convert(n :: MT)
+      marker? n => convert(n :: MR)
+      namedType? n => convert(n :: NT)
+      recordType? n => convert(n :: RT)
+      segment? n => convert(n :: SEG)
+      sequence? n => convert(n :: SEQ)
       string? n => convert(n :: String)
-      sumType? n => convert(n :: SpadSumType(%))
+      sumType? n => convert(n :: ST)
       symbol? n => convert(n :: Symbol)
-      typeExpr? n => convert(n :: SpadTypeExpr(%))
-      unionType? n => convert(n :: SpadUnionType(%))
-      where? n => convert(n :: SpadWhere(%))
+      typeExpr? n => convert(n :: TE)
+      unionType? n => convert(n :: UT)
+      where? n => convert(n :: W)
       emptyNode? n => convert []
 
       error "convert $ SpadNode: variant not handled!"
 
     n = m ==
       -- defined only for nodes that can represent types
-      apply? n and apply? m =>
-        (n :: SpadApply(%)) = (m :: SpadApply(%))
-      float? n and float? m =>
-        (n :: DoubleFloat) = (m :: DoubleFloat)
-      function? n and function? m =>
-        (n :: SpadFunction(%)) = (m :: SpadFunction(%))
-      integer? n and integer? m =>
-        (n :: Integer) = (m :: Integer)
-      mappingType? n and mappingType? m =>
-        (n :: SpadMappingType(%)) = (m :: SpadMappingType(%))
-      marker? n and marker? m =>
-        (n :: SpadMarker(%)) = (m :: SpadMarker(%))
-      namedType? n and namedType? m =>
-        (n :: SpadNamedType(%)) = (m :: SpadNamedType(%))
-      recordType? n and recordType? m =>
-        (n :: SpadRecordType(%)) = (m :: SpadRecordType(%))
-      string? n and string? m =>
-        (n :: String) = (m :: String)
-      sumType? n and sumType? m =>
-        (n :: SpadSumType(%)) = (m :: SpadSumType(%))
-      symbol? n and symbol? m =>
-        (n :: Symbol) = (m :: Symbol)
-      unionType? n and unionType? m =>
-        (n :: SpadUnionType(%)) = (m :: SpadUnionType(%))
-      emptyNode? n and emptyNode? m =>
-        true
+      apply? n and apply? m => (n :: APP) = (m :: APP)
+      float? n and float? m => (n :: DF) = (m :: DF)
+      function? n and function? m => (n :: FN) = (m :: FN)
+      integer? n and integer? m => (n :: Integer) = (m :: Integer)
+      mappingType? n and mappingType? m => (n :: MT) = (m :: MT)
+      marker? n and marker? m => (n :: MR) = (m :: MR)
+      namedType? n and namedType? m => (n :: NT) = (m :: NT)
+      recordType? n and recordType? m => (n :: RT) = (m :: RT)
+      string? n and string? m => (n :: String) = (m :: String)
+      sumType? n and sumType? m => (n :: ST) = (m :: ST)
+      symbol? n and symbol? m => (n :: Symbol) = (m :: Symbol)
+      unionType? n and unionType? m => (n :: UT) = (m :: UT)
+      emptyNode? n and emptyNode? m => true
       false
+
+    nodeApp (fun, args) == [[fun, args]$APP]
+    nodeAssign (lval, rval) == [[lval, rval]$ASS]
+    nodeCondExpr (cond, btrue, bfalse) == [[cond, btrue, bfalse]$CE]
+    nodeFun (name, args, type, body) == [[name, args, type, body]$FN]
+    nodeFtor (name, args, type, ext, caps) == [[name, args, type, ext, caps]$FT]
+    nodeImport type == [[type]$IM]
+    nodeLambda (args, type, body) == [[args, type, body]$LAM]
+    nodeLoop (kind, itors, guards, body) == [[kind, itors, guards, body]$LP]
+    nodeMacro (name, args, body) == [[name, args, body]$M]
+    nodeMappingType (args, type) == [[args, type]$MT]
+    nodeNamedType (name, type) == [[name, type]$NT]
+    nodeRecordType fields == [[fields]$RT]
+    nodeRef (i) == [[i, 'noderef]$MR]
+    nodeSeq (kind, list) == [[kind, list]$SEQ]
+    nodeSeg (start, end, step) == [[start, end, step]$SEG]
+    nodeTypeExpr (kind, expr, type) == [[kind, expr, type]$TE]
+    nodeSumType (kind, types) == [[kind, types]$ST]
+    nodeUnionType variants == [[variants]$UT]
+    nodeWhere (body, env) == [[body, env]$W]

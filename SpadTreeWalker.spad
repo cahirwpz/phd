@@ -3,10 +3,11 @@ SpadTreeWalkerCategory() : Category == Definition where
   N ==> SpadNode
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
-  CN ==> SpadConditional(N)
+  CE ==> SpadCondExpr(N)
   FN ==> SpadFunction(N)
   FT ==> SpadFunctor(N)
   IM ==> SpadImport(N)
+  IT ==> SpadIterator(N)
   LAM ==> SpadLambda(N)
   LP ==> SpadLoop(N)
   M ==> SpadMacro(N)
@@ -25,7 +26,7 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite : APP -> N
       rewrite : ASS -> N
-      rewrite : CN -> N
+      rewrite : CE -> N
       rewrite : FN -> N
       rewrite : FT -> N
       rewrite : IM -> N
@@ -49,76 +50,78 @@ SpadTreeWalkerCategory() : Category == Definition where
         GENSYM()$Lisp
 
       rewrite (a : APP) : N ==
-        [[rewrite a.function, [rewrite arg for arg in a.args]] $ APP]
+        nodeApp(rewrite a.function, [rewrite arg for arg in a.args])
 
       rewrite (a : ASS) : N ==
-        [[rewrite a.lval, rewrite a.rval] $ ASS]
+        nodeAssign(rewrite a.lval, rewrite a.rval)
 
-      rewrite (cn : CN) : N ==
-        [[rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr] $ CN]
+      rewrite (cn : CE) : N ==
+        nodeCondExpr(rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr)
 
       rewrite (fn : FN) : N ==
-        argl : List Union(String, NT) := []
+        argl : List(N) := []
         for arg in fn.args repeat
-          argl := if arg case NT
-            then [[arg.name, rewrite arg.type], :argl]
-            else [arg, :argl]
-        [[fn.name, reverse argl, rewrite fn.type, rewrite fn.body] $ FN]
+          arg' :=
+            namedType? arg =>
+              t := arg :: NT
+              [[t.name, rewrite t.type]$NT]
+            arg
+          argl := [arg', :argl]
+        nodeFun(fn.name, reverse argl, rewrite fn.type, rewrite fn.body)
 
       rewrite (ft : FT) : N ==
-        [[ft.name, ft.args, rewrite ft.type, rewrite ft.extends, rewrite ft.capsule] $ FT]
+        nodeFtor(ft.name, ft.args, rewrite ft.type, rewrite ft.extends, rewrite ft.capsule)
 
       rewrite (im : IM) : N ==
-        [[rewrite im.type] $ IM]
+        nodeImport(rewrite im.type)
 
       rewrite (l : LAM) : N ==
-        [[l.args, rewrite l.type, rewrite l.body] $ LAM]
+        nodeLambda(l.args, rewrite l.type, rewrite l.body)
 
       rewrite (lp : LP) : N ==
         -- BUG: parser cannot accept a multi-line list constructor
-        nitors : List SpadIterator(N) :=
-          [[itor.var, rewrite itor.seq] for itor in lp.itors]
+        nitors := [[itor.var, rewrite itor.seq]$IT for itor in lp.itors]
         nguards := [rewrite guard for guard in lp.guards]
-        [[lp.kind, nitors, nguards, rewrite lp.body] $ LP]
+        nodeLoop(lp.kind, nitors, nguards, rewrite lp.body)
 
       rewrite (m : M) : N ==
-        [[m.name, m.args, rewrite m.body] $ M]
+        nodeMacro(m.name, m.args, rewrite m.body)
 
       rewrite (mt : MT) : N ==
-        [[[rewrite arg for arg in mt.args], rewrite mt.type] $ MT]
+        nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.type)
 
       rewrite (nt : NT) : N ==
-        [[nt.name, rewrite nt.type] $ NT]
+        nodeNamedType(nt.name, rewrite nt.type)
 
       rewrite (rt : RT) : N ==
-        [[[[f.name, rewrite f.type] for f in rt.fields]] $ RT]
+        nodeRecordType([[f.name, rewrite f.type] for f in rt.fields])
 
       rewrite (seg : SEG) : N ==
-        [[rewrite seg.start, rewrite seg.end, rewrite seg.step] $ SEG]
+        nodeSeg(rewrite seg.start, rewrite seg.end, rewrite seg.step)
 
       rewrite (s : SEQ) : N ==
-        [[s.kind, [rewrite e for e in s.list]] $ SEQ]
+        nodeSeq(s.kind, [rewrite e for e in s.list])
 
       rewrite (s : String) : N == [s]
 
       rewrite (st : ST) : N ==
-        [[st.kind, [rewrite t for t in st.types]] $ ST]
+        nodeSumType(st.kind, [rewrite t for t in st.types])
 
       rewrite (s : Symbol) : N == [s]
 
       rewrite (te : TE) : N ==
-        [[te.kind, rewrite te.expr, rewrite te.type] $ TE]
+        nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
 
       rewrite (ut : UT) : N ==
-        [[[rewrite v for v in ut.variants]] $ UT]
+        nodeUnionType([rewrite v for v in ut.variants])
 
       rewrite (w : W) : N ==
-        [[rewrite w.body, rewrite w.env] $ W]
+        nodeWhere(rewrite w.body, rewrite w.env)
 
       rewrite (n : N) : N ==
         apply? n => rewrite (n :: APP)
         assign? n => rewrite (n :: ASS)
-        conditional? n => rewrite (n :: CN)
+        condExpr? n => rewrite (n :: CE)
         function? n => rewrite (n :: FN)
         functor? n => rewrite (n :: FT)
         import? n => rewrite (n :: IM)

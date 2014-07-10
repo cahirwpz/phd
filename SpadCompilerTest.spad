@@ -37,6 +37,7 @@ SpadCompilerTest() : Exports == Implementation where
     run2 e ==
       loggerDefaultLevel "debug"
       loggerLevel('Type, "info")
+      loggerLevel('Parser, "notice")
 
       println (convert(e) :: PF)
       println ""
