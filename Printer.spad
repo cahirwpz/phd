@@ -38,6 +38,7 @@ PrintableForm() : Exports == Implementation where
     pile : List(%) -> %
     sepBy : (%, List(%)) -> %
 
+    float : (Float, NNI) -> %
     string : % -> %
     symbol : % -> %
     spaces : List(%) -> %
@@ -74,6 +75,9 @@ PrintableForm() : Exports == Implementation where
   Implementation ==> add
     Rep := Union(fnum : Float, inum : Integer, str : String, sym : Symbol,
                  cmd : CMD, list : LST)
+
+    import Character
+    import String
 
     coerce (df : DoubleFloat) : % == [convert(df)]$Rep
     coerce (f : Float) : % == [f]$Rep
@@ -132,6 +136,14 @@ PrintableForm() : Exports == Implementation where
     pile l ==
       #l = 1 => first l
       vconcat [first l, indent(2, vconcat rest l)]
+
+    float (f, n) ==
+      k := 10 ^ n
+      i := wholePart(f * (k :: Float))
+      r := string(i rem k)
+      q := string(i quo k)
+      s := new((n - #r) :: NNI, char "0")
+      hconcat [q :: %, "." :: %, s :: %, r :: %]
 
     string f == hconcat ["_"" :: %, f, "_"" :: %]
     symbol f == hconcat ["'|" :: %, f, "|" :: %]

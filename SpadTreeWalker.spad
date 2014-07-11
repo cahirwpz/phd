@@ -11,6 +11,7 @@ SpadTreeWalkerCategory() : Category == Definition where
   LAM ==> SpadLambda(N)
   LP ==> SpadLoop(N)
   M ==> SpadMacro(N)
+  MR ==> SpadMarker(N)
   MT ==> SpadMappingType(N)
   NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
@@ -33,6 +34,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : LAM -> N
       rewrite : LP -> N
       rewrite : M -> N
+      rewrite : MR -> N
       rewrite : MT -> N
       rewrite : NT -> N
       rewrite : RT -> N
@@ -87,6 +89,8 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (m : M) : N ==
         nodeMacro(m.name, m.args, rewrite m.body)
 
+      rewrite (mr : MR) : N == [mr]
+
       rewrite (mt : MT) : N ==
         nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.type)
 
@@ -129,6 +133,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         loop? n => rewrite (n :: LP)
         macro? n => rewrite (n :: M)
         mappingType? n => rewrite (n :: MT)
+        marker? n => rewrite(n :: MR)
         namedType? n => rewrite (n :: NT)
         recordType? n => rewrite (n :: RT)
         segment? n => rewrite (n :: SEG)

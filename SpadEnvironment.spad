@@ -1,5 +1,5 @@
-)abbrev domain SPMM SpadModeMap
-SpadModeMap() : Exports == Implementation where
+)abbrev domain SPMM SpadModemap
+SpadModemap() : Exports == Implementation where
   N ==> SpadNode
   PF ==> PrintableForm
   MT ==> SpadMappingType(N)
@@ -64,7 +64,7 @@ SpadEnvironment() : Exports == Implementation where
     addModemapsFromCategory : (N, N, %) -> %
 
     addModemap : (Symbol, APP, List(N), %) -> %
-    getModemap : (Symbol, %) -> List(SpadModeMap)
+    getModemap : (Symbol, %) -> List(SpadModemap)
 
     addMode : (Symbol, N, %) -> %
     getMode : (Symbol, %) -> N
@@ -128,7 +128,7 @@ SpadEnvironment() : Exports == Implementation where
 
     getModemap(op, env) ==
       m := saveMode()
-      res : List(SpadModeMap) := get(op, 'modemap, env)$Lisp
+      res : List(SpadModemap) := get(op, 'modemap, env)$Lisp
       restoreMode(m)
       res
 
@@ -170,7 +170,7 @@ SpadEnvironment() : Exports == Implementation where
         for prop in entry.properties repeat
           val :=
             prop.kind = 'modemap =>
-              mml := prop.value pretend List(SpadModeMap)
+              mml := prop.value pretend List(SpadModemap)
               pile [mm :: PF for mm in mml]
             prop.kind = 'value =>
               v := parse prop.value

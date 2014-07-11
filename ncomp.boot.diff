@@ -1,4 +1,4 @@
---- src/interp/ncomp.boot	2014-03-12 23:25:51.000000000 +0100
+--- ncomp.boot	2014-03-12 23:25:51.000000000 +0100
 +++ ncomp.boot	2014-04-22 15:03:28.000000000 +0200
 @@ -325,6 +325,10 @@
  DEFVAR($globalDefs, nil)
@@ -11,7 +11,7 @@
  S_process(x) ==
      $Index : local := 0
      $MACROASSOC : local := nil
-@@ -369,6 +373,14 @@
+@@ -369,6 +373,15 @@
      $PrintOnly =>
          FORMAT(true, '"~S   =====>~%", $currentLine)
          PRETTYPRINT(x)
@@ -21,8 +21,9 @@
 +        if null(fn) then
 +            SAY("Post-parse hook not found!")
 +        else
-+            SPADCALL(x, fn)
++            x := SPADCALL(x, fn)
 +        FORMAT(true, '"~%~A~%~%", '">>>> POST-PARSE HOOK END <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
++    PRETTYPRINT(x)
      u := compTopLevel(x, $EmptyMode, $InteractiveFrame)
      if u then $InteractiveFrame := THIRD(u)
      if $semanticErrorStack then displaySemanticErrors()

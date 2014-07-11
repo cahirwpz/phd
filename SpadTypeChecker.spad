@@ -31,6 +31,7 @@ TypeUnifier() : Exports == Implementation where
   APP ==> SpadApply(N)
   MT ==> SpadMappingType(N)
   MR ==> SpadMarker(N)
+  TE ==> SpadTypeExpr(N)
   SUBST ==> AssociationList(MR, List(N))
   P ==> Record(t1 : N, t2 : N)
   URES ==> Union(SUBST, "failed")
@@ -119,6 +120,12 @@ TypeUnifier() : Exports == Implementation where
 
     unifyType(n1 : N, n2 : N) : URES ==
       -- println [hspace 2, brace(n1 :: PF), "~" :: PF, brace(n2 :: PF)]
+
+      -- throw away type origin qualifier
+      if typeOrigin? n1 then
+        n1 := (n1 :: TE).expr
+      if typeExpr? n2 then
+        n2 := (n2 :: TE).expr
 
       -- left or right node is a type variable => just generate a substitution
       typeVar? n1 and typeVar? n2 =>
@@ -264,6 +271,33 @@ TCNode() : Exports == Implementation where
         spaces [p, "is" :: PF, underline (x.type :: PF)]
       spaces [p, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, underline (x.type :: PF)]
 
+)abbrev package STFITS SpadTreeFillInTypes
+SpadTreeFillInTypes(ns : List(N)) : SpadTreeWalkerCategory == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  TE ==> SpadTypeExpr(N)
+
+  Implementation ==> add
+    rewrite (app : APP) : N ==
+      -- BUG? | rewrite(app) $ SpadTreeWalkerCategory&
+      app := [rewrite app.function, [rewrite arg for arg in app.args]]$APP
+
+      not typeOrigin? app.function => [app]
+
+      -- BUG? | te := app.function :: TE
+      te := coerce(app.function)@TE
+      funApp := nodeApp(rewrite te.expr, [rewrite arg for arg in app.args])
+      --mappingType? te.type => funApp
+      --nodeApp(['elt], [funApp, te.type])
+
+    rewrite (mr : SpadMarker(N)) : N ==
+      not mr.kind = 'noderef => [mr]
+      t := ns.(mr.id)
+      typeOrigin? t =>
+        te := coerce(t)@TE
+        te.type
+      t
+
 )abbrev package TCNA TCNodeArray
 TCNodeArray() : Exports == Implementation where
   NNI ==> NonNegativeInteger
@@ -281,6 +315,8 @@ TCNodeArray() : Exports == Implementation where
   Exports ==> CoercibleTo(PrintableForm) with
     nodeArray : () -> %
     nodeArray : % -> %
+    types : % -> List(N)
+
     lastNode : % -> TCN
     lastIndex : % -> NNI
     addNode! : (N, %) -> TCN
@@ -316,6 +352,8 @@ TCNodeArray() : Exports == Implementation where
 
     nodeArray x ==
       [flexibleArray [], x.counter, [[]]]
+
+    types x == [n.type for n in entries x.nodes]
 
     coerceTypeVar : (MR, List(N)) -> PF
     coerceTypeVar (tvar : MR, types : List(N)) : PF ==
@@ -565,8 +603,8 @@ TCNodeArray() : Exports == Implementation where
           not inferType(n, x) =>
             debug (x :: PF)
             debug (x.typevars :: PF)
-            fail ["Failed to infer type for:" :: PF, number(n.index) :: PF]
-            fail box(n.node :: PF)
+            fail pile([spaces ["Failed to infer type for node:" :: PF, number(n.index) :: PF],
+                       red(n.node :: PF)])
             return false
 
           ++ check if we're done with processing type variable tied to this node
@@ -596,7 +634,7 @@ TCNodeArray() : Exports == Implementation where
           fail ("Type checker does not advance by applying known typing rules!" :: PF)
           debug (x :: PF)
           debug (x.typevars :: PF)
-          error "Panic!"
+          error ""
 
         ++ setup new meta-step
         p := newP
@@ -702,28 +740,43 @@ SpadTypeChecker() : Exports == Implementation where
       rs := addChildren(node, [a.function, :a.args], ctx, env)
       ns := [nodeRef(n.index) for n in node.children]
       node.rule := nodeApp(first ns, rest ns)
-      [nodeApp(first rs.nodes, rest rs.nodes), rs.env]
+      fun := first rs.nodes
+      args := rest rs.nodes
+      if symbol? fun then
+        s := fun :: Symbol
+        if s = 'return or s = 'error then
+          return [nodeApp(fun, args), rs.env]
+        fun := nodeTypeExpr('_$, fun, ns.1)
+      [nodeTypeExpr('_@, nodeApp(fun, args), nodeRef(node.index)), rs.env]
 
     walkAssign (a, ctx, env) ==
-      -- handle "symbol : Type := value"
-      typeExpr? a.lval =>
+      typeExpr? a.lval => ++ handle "symbol : Type := value"
         te := a.lval :: TE
-        r := walkTypeExpr(te, ctx, env)
-        walk(nodeAssign(r.node, a.rval), ctx, r.env)
+        r := walkTypeExpr(te, ctx, env) -- add to context
+        te := r.node :: TE
+        r := walk(nodeAssign(te.expr, a.rval), ctx, r.env)
+        a := r.node :: ASS
+        [nodeAssign(nodeTypeExpr('_:, a.lval, te.type), a.rval), r.env]
       
       type := addTypeVar! ctx
+      intro := false
 
       if symbol? a.lval then
         s := a.lval :: Symbol
         if emptyNode? getMode(s, env) then
           debug ["Processing fresh assignment" :: PF, string(s :: PF)]
           env := addMode(s, addTypeVar! ctx, env)
+          intro := true
         
       node := addNode!([a], type, ctx)
       rs := addChildren(node, [a.lval, a.rval], ctx, env)
       ns := [nodeRef(n.index) for n in node.children]
       node.rule := nodeAssign(ns.1, ns.2)
-      [nodeAssign(rs.nodes.1, rs.nodes.2), rs.env]
+
+      lval :=
+        not intro => rs.nodes.1
+        nodeTypeExpr('_:, rs.nodes.1, ns.1)
+      [nodeAssign(lval, rs.nodes.2), rs.env]
 
     walkCondExpr (ce, ctx, env) ==
       debug ["Processing conditional expression." :: PF]
@@ -769,7 +822,7 @@ SpadTypeChecker() : Exports == Implementation where
 
       empty? sigs =>
         fail ("No signature corresponding to the function!" :: PF)
-        error "Panic!"
+        error ""
 
       debug ["Eligible signatures :" :: PF, brace [sig :: PF for sig in sigs]]
 
@@ -777,9 +830,13 @@ SpadTypeChecker() : Exports == Implementation where
       for mt in sigs repeat
         info ["Assume" :: PF, name :: PF, "has type :" :: PF, mt :: PF]
 
+        args' : List(N) := []
         env' := envAddType([mt], env)
-        for arg in fn.args for argt in mt.args repeat
-          env' := addMode((arg :: NT).name, argt, env')
+        for arg in fn.args for argType in mt.args repeat
+          argName := (arg :: NT).name
+          args' := [nodeNamedType(argName, argType), :args']
+          env' := addMode(argName, argType, env')
+        args' := reverse args'
 
         ctx' := nodeArray ctx
         node := addNode!([mt], mt.type, ctx')
@@ -790,11 +847,13 @@ SpadTypeChecker() : Exports == Implementation where
         debug [ctx' :: PF]
 
         if check ctx' then
+          ts := types ctx'
+          body := rewrite(rs.nodes.1)$SpadTreeFillInTypes(ts)
           fnNode.type := [mt]
-          return [nodeFun(fn.name, fn.args, fn.type, rs.nodes.1), rs.env]
+          return [nodeFun(fn.name, args', mt.type, body), rs.env]
 
       fail ["No matching signatures for function:" :: PF, mt :: PF]
-      error "Panic!"
+      error ""
 
     walkFtor (ft, ctx, env) ==
       sig := signature ft
@@ -815,7 +874,9 @@ SpadTypeChecker() : Exports == Implementation where
       node := addNode!([ft], sig.type, ctx)
       rs := addChildren(node, [ft.capsule], ctx, env)
       node.rule := nodeRef(node.index + 1)
-      [nodeFtor(ft.name, ft.args, ft.type, ft.extends, rs.nodes.1), rs.env]
+
+      ext := if emptyNode? ft.extends then ['Type] else ft.extends
+      [nodeFtor(ft.name, ft.args, ft.type, ext, rs.nodes.1), rs.env]
 
     walkImport (im, ctx, env) ==
       debug ["Importing" :: PF, im.type :: PF]
@@ -831,7 +892,8 @@ SpadTypeChecker() : Exports == Implementation where
       debug ["Loop statement." :: PF]
       node := addNode!([lp], voidType, ctx)
       not empty? lp.itors =>
-        error "Loop iterators not handled yet!"
+        fail ("Loop iterators not handled yet!" :: PF)
+        error ""
       debug ["Processing" :: PF, #(lp.guards) :: PF, "guards." :: PF]
       g_rs := addChildren(node, lp.guards, ctx, env)
       for guard in node.children repeat
@@ -853,7 +915,8 @@ SpadTypeChecker() : Exports == Implementation where
 
     walkSym (s, ctx, env) ==
       debug ["Symbol lookup for" :: PF, string(s :: PF)]
-      types : List(N) := [[mm.type] for mm in getModemap(s, env)]
+      -- types : List(N) := [[mm.type] for mm in getModemap(s, env)]
+      types := [nodeTypeExpr('_$, [mm.type], mm.origin) for mm in getModemap(s, env)]
       mode := getMode(s, env)
       if not emptyNode? mode then
         types := [mode, :types]
@@ -869,7 +932,7 @@ SpadTypeChecker() : Exports == Implementation where
         types := [returnType, :types]
       empty? types =>
         fail ["Undefined symbol:" :: PF, bold red string (s :: PF), "!" :: PF]
-        error "Panic!"
+        error ""
       if #types = 1
         then addNode!([s], first types, ctx)
         else addNode!([s], types, ctx)
@@ -883,7 +946,7 @@ SpadTypeChecker() : Exports == Implementation where
 
         not symbol? te.expr =>
           fail ["Type annotation works only for symbols!" :: PF]
-          error "Panic!"
+          error ""
 
         -- type definition for a symbol:
         -- add it to the environment or crash if already defined
@@ -891,7 +954,7 @@ SpadTypeChecker() : Exports == Implementation where
         not emptyNode? getMode(s, env) =>
           warn([bold yellow ("Warning!" :: PF), "Symbol" :: PF, string(s :: PF),
                 "already defined as" :: PF, getMode(s, env) :: PF, "!" :: PF])
-          [te.expr, env]
+          [[te], env]
 
         addNode!([te], te.type, ctx)
         env := addMode(s, te.type, env)
@@ -900,9 +963,11 @@ SpadTypeChecker() : Exports == Implementation where
       te.kind = '_@ =>
         debug (["[*]" :: PF, "Expression" :: PF, te.expr :: PF,
                  "has to return type" :: PF, te.type :: PF])
+
         not apply? te.expr =>
           fail ["Type cut operator works only for function application!" :: PF]
-          error "Panic!"
+          error ""
+
         env := envAddType(te.type, env)
         next := lastIndex ctx + 1
         r := walk(te.expr, ctx, env)
@@ -925,7 +990,8 @@ SpadTypeChecker() : Exports == Implementation where
     
       ++ te.kind = '_$
 
-      error "Not handled!"
+      fail ["Type expression" :: PF, bold red paren(te :: PF), "not handled yet!" :: PF]
+      error ""
 
     walkInt (i, ctx, env) ==
       debug [i :: PF, "is" :: PF, integerType :: PF, ":)" :: PF]
@@ -959,6 +1025,8 @@ SpadTypeChecker() : Exports == Implementation where
       typeExpr? n => walkTypeExpr(n :: TE, ctx, env)
       function? n => walkFun(n :: FN, ctx, env)
       -- namedType, mappingType, recordType, sumType, unionType, macro, where
-      if emptyNode? n then
+      emptyNode? n =>
         addNode!(n, voidType, ctx)
-      [n, env]
+        [n, env]
+      fail ["Expression" :: PF, bold red paren(n :: PF), "not handled yet!" :: PF]
+      error ""

@@ -6,10 +6,11 @@
 ++ Experimental type checker with bottom-up approach.
 SpadCompilerTest() : Exports == Implementation where
   PF ==> PrintableForm
+  SEX ==> SExpression
 
   Exports ==> with
-    run : SExpression -> Void 
-    run2 : SExpression -> Void 
+    run : SEX -> SEX
+    run2 : SEX -> SEX
 
   Implementation ==> add
     import Printer 
@@ -17,9 +18,11 @@ SpadCompilerTest() : Exports == Implementation where
     import SpadTreeMacroExpander
     import TCNodeArrayOps
     import MainLogger
+    import Logger('Main)
 
     run e ==
       loggerDefaultLevel "debug"
+      resetTime()
 
       -- print (e :: OutputForm)
 
@@ -33,28 +36,31 @@ SpadCompilerTest() : Exports == Implementation where
       init() $ SpadMacroExpander
       n := rewrite(n) $ SpadMacroExpander
       println (n :: PF)
+      convert(n)
 
     run2 e ==
       loggerDefaultLevel "debug"
       loggerLevel('Type, "info")
       loggerLevel('Parser, "notice")
+      loggerLevel('Main, "notice")
+      resetTime()
 
-      println (convert(e) :: PF)
-      println ""
+      notice pile ["Original parser tree:" :: PF, convert(e) :: PF]
 
       n : SpadNode := parse e
+      info pile ["Parser tree in internal format:" :: PF, n :: PF]
+
+      info ["Running cleanup & macro expander." :: PF]
       n := rewrite(n) $ SpadTreeCleanUp
-      
       init() $ SpadMacroExpander
       n := rewrite(n) $ SpadMacroExpander
-      e2 := convert(n)
-      println (n :: PF)
-      println (convert(e2) :: PF)
-      println ""
 
+      notice pile ["Tree ready for type checking:" :: PF, n :: PF]
       narr : TCNodeArray := nodeArray ()
       env : SpadEnvironment := new ()
+      r := walk(n, narr, env) $ SpadTypeChecker
 
-      walk(n, narr, env) $ SpadTypeChecker
-
-      println (narr :: PF)
+      notice pile ["Final tree with type annotations:" :: PF, r.node :: PF]
+      e := convert(r.node)
+      notice spaces ["Converted the tree to original format." :: PF]
+      e

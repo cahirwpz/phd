@@ -1,3 +1,5 @@
+)compile Printer.spad
+)compile Logger.spad
 )compile ParserTools.spad
 )compile SpadNode.spad
 )compile SpadDatabase.spad

@@ -72,7 +72,7 @@ SpadMacroExpander() : Exports == Implementation where
             fail (["Wrong number of arguments" :: PF, number(#app.args) :: PF,
                    "passed to macro" :: PF, string (m.name :: PF),
                    number(#m.args) :: PF])
-            error "Panic!"
+            error ""
           newCtx()
           for m_arg in m.args for arg in app.args repeat
             -- skip argument rewriting if it doesn't require renaming
@@ -103,5 +103,5 @@ SpadMacroExpander() : Exports == Implementation where
       #m.args ~= 0 =>
         fail (["Attempted to apply arguments to parameterless macro:" :: PF,
                string(m.name :: PF)])
-        error "Panic!"
+        error ""
       rewrite m.body

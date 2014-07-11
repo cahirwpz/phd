@@ -34,6 +34,8 @@ MainLogger() : Exports == Implementation where
     log : (Symbol, LVL, PF) -> Void
     loggerLevel : (Symbol, LVL) -> Void
     loggerDefaultLevel : LVL -> Void
+    getTime : () -> NNI 
+    resetTime : () -> Void
 
   Implementation ==> add
     import Printer
@@ -46,6 +48,7 @@ MainLogger() : Exports == Implementation where
 
     config : CONF := [[]]
     default : LVL := "notice"
+    timeBegin : NNI := 0
 
     num : LVL -> NNI
     num l ==
@@ -55,13 +58,20 @@ MainLogger() : Exports == Implementation where
       l case "warn" => 3
       l case "fail" => 4
 
+    getTime () ==
+      t : NNI := GET_-INTERNAL_-REAL_-TIME()$Lisp
+
+    resetTime () ==
+      timeBegin := getTime()
+
     log (component, level, form) ==
       l :=
         lc := assoc(component, config)
         lc case "failed" => default
         lc.entry
       if num l <= num level then
-        println form
+        time := (getTime() - timeBegin) :: Float / 1000
+        println spaces [paren float(time, 3), form]
 
     loggerLevel (component, level) ==
       config(component) := level

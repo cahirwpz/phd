@@ -50,6 +50,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   sumType? : % -> Boolean
   symbol? : % -> Boolean
   typeExpr? : % -> Boolean
+  typeOrigin? : % -> Boolean
   unionType? : % -> Boolean
   where? : % -> Boolean
   typeAny? : % -> Boolean
@@ -568,7 +569,8 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
         else [symbol ex.1, parse ex.2, parse ex.3]
 
     convert x ==
-      convert [convert x.kind, convert x.expr, convert x.type]
+      k := if x.kind = '_$ then 'Sel else x.kind
+      convert [convert k, convert x.expr, convert x.type]
 
     coerce ex ==
       spaces [ex.expr :: PF, ex.kind :: PF, ex.type :: PF]
@@ -659,13 +661,13 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       gl := [spaces ["if" :: PF, g :: PF] for g in n.guards]
       loopBody := n.body :: PF
       n.kind case "loop" =>
-        loopExpr : PF :=
+        loopExpr : List(PF) :=
           if empty? il then
             loopCond := sepBy(" and " :: PF, [g :: PF for g in n.guards])
-            spaces ["while" :: PF, loopCond, "repeat" :: PF]
+            ["while" :: PF, loopCond]
           else
-            spaces [:il, :gl, "repeat" :: PF]
-        vconcat [loopExpr, indent(2, loopBody)]
+            [:il, :gl]
+        vconcat [pile loopExpr, vconcat ["repeat" :: PF, indent(2, loopBody)]]
       n.kind case "collect" =>
         bracket spaces [loopBody, :concat(il, gl)]
       n.kind case "repeat" =>
@@ -776,7 +778,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce n ==
       exps := [e :: PF for e in n.list | not emptyNode? e]
-      n.kind case "Sequence" or n.kind case "Capsule" => pile exps
+      n.kind case "Sequence" or n.kind case "Capsule" => vconcat exps
       n.kind case "Tuple" => paren exps
 
 )abbrev package SPCOND SpadCondExpr
@@ -875,12 +877,12 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       arg_names := [convert (arg :: NT).name for arg in x.args]
       types := [convert (arg :: NT).type for arg in x.args]
       types' := [convert [] for i in 0..#x.args]
-      fbody := destruct convert x.body
+      fbody := convert x.body
       convert([convert ("DEF" :: Symbol),
                convert [convert x.name, :arg_names],
                convert [convert x.type, :types],
                convert types',
-               :fbody])
+               fbody])
 
     signature fn ==
       types := [(namedType? arg => (arg :: NT).type; emptyNode())
@@ -892,7 +894,8 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       retType : List(PF) :=
         emptyNode? n.type => []
         [":" :: PF, n.type :: PF]
-      spaces [n.name :: PF, paren fargs, :retType, "==" :: PF, n.body :: PF]
+      pile ([spaces [n.name :: PF, paren fargs, :retType, "==" :: PF],
+             n.body :: PF])
 
 )abbrev package SPMACRO SpadMacro
 ++ SPAD macro representation
@@ -1018,10 +1021,9 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
                convert x.capsule])
 
     coerce n ==
-      spaces([n.name :: PF, paren [arg :: PF for arg in n.args],
-              ":" :: PF, n.type :: PF,
-              "==" :: PF, n.extends :: PF,
-              "add" :: PF, spaces [hspace 2, n.capsule :: PF]])
+      def := spaces [n.name :: PF, paren [arg :: PF for arg in n.args], ":" :: PF]
+      impl := pile [spaces ["==" :: PF, n.extends :: PF, "add" :: PF], n.capsule :: PF]
+      pile [def, indent(2, n.type :: PF), impl]
 
     signature ft ==
       [ft.name, [[[arg.type for arg in ft.args], ft.type] $ MT]]
@@ -1104,8 +1106,7 @@ SpadNode() : Exports == Implementation where
     namedType? n == n case named
     nodeRef? n ==
       not n case marker => false
-      mr := (n :: MR)
-      mr.kind = 'noderef
+      n.marker.kind = 'noderef
     recordType? n == n case record
     segment? n == n case segment 
     sequence? n == n case seq
@@ -1113,16 +1114,17 @@ SpadNode() : Exports == Implementation where
     sumType? n == n case sum
     symbol? n == n case sym
     typeExpr? n == n case typeexpr
+    typeOrigin? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = '_$
     unionType? n == n case union
     where? n == n case swhere
     typeAny? n ==
       not n case marker => false
-      mr := (n :: MR)
-      mr.kind = 'typevar and mr.id = 0
+      n.marker.kind = 'typevar and n.marker.id = 0
     typeVar? n ==
       not n case marker => false
-      mr := (n :: MR)
-      mr.kind = 'typevar and mr.id > 0
+      n.marker.kind = 'typevar and n.marker.id > 0
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]
@@ -1325,7 +1327,7 @@ SpadNode() : Exports == Implementation where
       null? ex => emptyNode()
 
       fail ["Could not parse s-expression:" :: PF, convert(ex) :: PF]
-      error "Panic!"
+      error ""
 
     coerce (n : %) : PF ==
       apply? n => (n :: APP) :: PF
@@ -1345,7 +1347,7 @@ SpadNode() : Exports == Implementation where
       recordType? n => (n :: RT) :: PF
       segment? n => (n :: SEG) :: PF
       sequence? n => (n :: SEQ) :: PF
-      string? n => (n :: String) :: PF
+      string? n => string((n :: String) :: PF)
       sumType? n => (n :: ST) :: PF
       symbol? n => (n :: Symbol) :: PF
       typeExpr? n => (n :: TE) :: PF
