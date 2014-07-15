@@ -9,7 +9,7 @@ SpadModemap() : Exports == Implementation where
     elt : (%, "origin") -> N
     elt : (%, "type") -> MT
     elt : (%, "constraint") -> N
-    elt : (%, "template") -> Record(type : MT, arg : N)
+    elt : (%, "template") -> Union(Record(type : MT, arg : N), "failed")
 
   Implementation ==> add
     Rep := List(List(SEX))
@@ -31,23 +31,21 @@ SpadModemap() : Exports == Implementation where
       
     elt(x, "template") ==
       tmplpart := destruct x.2.2
+      not list? tmplpart.3 => "failed"
       tl := [parse t for t in destruct tmplpart.3]
       tmpl := [rest tl, first tl]
       targ := parse tmplpart.2
       [tmpl, targ]
 
     coerce x ==
-      lst := [spaces [x.origin :: PF, "implements :" :: PF],
-              indent(4, x.type :: PF)]
-      cond := x.constraint
-      if not emptyNode? cond then
-        concat!(lst,
-                [indent(2, "when :" :: PF), indent(4, x.constraint :: PF)])
-      concat!(lst,
-              ["Original signature:" :: PF,
-               indent(4, x.template.type :: PF),
-               indent(2, hconcat ["with % = " :: PF, x.template.arg :: PF])])
-      pile lst
+      tmpl := x.template
+      type :=
+        if tmpl case "failed"
+          then x.type :: PF 
+          else tmpl.type :: PF
+      type := pile [type, spaces [bold magenta("from" :: PF), x.origin :: PF]]
+      emptyNode? x.constraint => type
+      pile [type, spaces [bold magenta("when" :: PF), x.constraint :: PF]]
 
 )abbrev domain SPENV SpadEnvironment
 SpadEnvironment() : Exports == Implementation where
@@ -74,14 +72,10 @@ SpadEnvironment() : Exports == Implementation where
 
     definedSymbols : % -> List(Symbol)
 
-    test : () -> Void
-
   Implementation ==> add
     Rep := Stack List Record(name : Symbol, properties : List PROP)
 
     import SExpression
-    import Printer
-    import PrinterCode
     import SpadNode
     import Logger('Env)
 
@@ -171,7 +165,7 @@ SpadEnvironment() : Exports == Implementation where
           val :=
             prop.kind = 'modemap =>
               mml := prop.value pretend List(SpadModemap)
-              pile [mm :: PF for mm in mml]
+              vconcat [mm :: PF for mm in mml]
             prop.kind = 'value =>
               v := parse prop.value
               v :: PF
@@ -179,13 +173,29 @@ SpadEnvironment() : Exports == Implementation where
               t := parse prop.value
               t :: PF
             convert(prop.value)
-          of := spaces [hspace 1, prop.kind :: PF, "=>" :: PF, val]
+          of := pile [spaces [bold blue(prop.kind :: PF), "=>" :: PF], val]
           props := [of, :props]
-        of := pile [hconcat [entry.name :: PF, ":" :: PF], pile reverse props]
+        of := pile [hconcat [bold cyan(entry.name :: PF), ":" :: PF], :(reverse props)]
         entries := [of, :entries]
-      pile reverse entries
+      vconcat reverse entries
+
+)abbrev domain SPENVT SpadEnvironmentTest
+SpadEnvironmentTest() : Exports == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  PF ==> PrintableForm
 
-    test () ==
+  Exports ==> with
+    test1 : () -> Void
+    test2 : () -> Void
+
+  Implementation ==> add
+    import SpadEnvironment
+    import SExpression
+    import SpadNode
+    import Printer
+
+    test1 () ==
       _$forceAdd := true
       _$compErrorMessageStack := convert []
 
@@ -197,5 +207,12 @@ SpadEnvironment() : Exports == Implementation where
       modemaps := getModemap('*, env)
       for modemap in modemaps repeat
         println (modemap :: PF)
-        println ""
+
+    test2 () ==
+      _$forceAdd := true
+      _$compErrorMessageStack := convert []
+
+      env := new()
+      cat := nodeApp(['SetCategory], [])
+      env := addModemapsFromCategory(['A], cat, env)
       println (env :: PF)
