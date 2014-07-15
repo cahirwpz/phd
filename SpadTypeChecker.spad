@@ -3,26 +3,65 @@ SpadNodeFactory() : Exports == Implementation where
   NNI ==> NonNegativeInteger
   N ==> SpadNode
   MR ==> SpadMarker(N)
+  NT ==> SpadNamedType(N)
+  MT ==> SpadMappingType(N)
+  RT ==> SpadRecordType(N)
+  UT ==> SpadUnionType(N)
+  mt ==> nodeMappingType
 
   Exports ==> with
     booleanType : () -> N
     floatType : () -> N
     integerType : () -> N
+    outputFormType : () -> N
     stringType : () -> N
     voidType : () -> N
 
     typeAny : () -> N
     typeVar : NNI -> N
 
+    makeRecordFunList : N -> List(NT)
+    makeUnionFunList : N -> List(NT)
+
   Implementation ==> add
     booleanType () == nodeApp(['Boolean], [])
     floatType () == nodeApp(['DoubleFloat], [])
     integerType () == nodeApp(['Integer], [])
+    outputFormType () == nodeApp(['OutputForm], [])
     stringType () == nodeApp(['String], [])
     voidType () == nodeApp(['Void], [])
 
     typeAny() == [[0, 'typevar]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
+
+    makeRecordFunList n ==
+      r := n :: RT
+      funs : List(NT) :=
+       ([['=, mt([n, n], booleanType())],
+         ['~=, mt([n, n], booleanType())],
+         ['copy, mt([n], n)],
+         ['coerce, mt([n], outputFormType())],
+         ['construct, mt([f.type for f in r.fields], n)]
+        ])
+      for f in r.fields repeat
+        s : N := [f.name]
+        r : N := f.type
+        funs := [['elt, mt([n, s], r)], ['setelt!, mt([n, s, r], r)], :funs]
+      funs
+
+    makeUnionFunList n ==
+      u := n :: UT
+      n := ['%]
+      funs : List(NT) :=
+       ([['=, mt([n, n], booleanType())],
+         ['~=, mt([n, n], booleanType())],
+         ['coerce, mt([n], outputFormType())]
+        ])
+      vs := u.variants
+      if not namedType? vs.1 then
+        for v in vs repeat
+          funs := [['construct, mt([v], n)], ['coerce, mt([n], v)], :funs]
+      funs
 
 )abbrev package TUNIFY TypeUnifier
 TypeUnifier() : Exports == Implementation where
@@ -30,8 +69,11 @@ TypeUnifier() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
   MR ==> SpadMarker(N)
+  RT ==> SpadRecordType(N)
   TE ==> SpadTypeExpr(N)
+  UT ==> SpadUnionType(N)
   SUBST ==> AssociationList(MR, List(N))
   P ==> Record(t1 : N, t2 : N)
   URES ==> Union(SUBST, "failed")
@@ -55,6 +97,7 @@ TypeUnifier() : Exports == Implementation where
     import SpadNode
     import Printer
     import SpadNodeFactory
+    import Logger('Unify)
 
     failed? t == t case "failed"
 
@@ -119,7 +162,7 @@ TypeUnifier() : Exports == Implementation where
       merged
 
     unifyType(n1 : N, n2 : N) : URES ==
-      -- println [hspace 2, brace(n1 :: PF), "~" :: PF, brace(n2 :: PF)]
+      debug [brace(n1 :: PF), "~" :: PF, brace(n2 :: PF)]
 
       -- throw away type origin qualifier
       if typeOrigin? n1 then
@@ -162,6 +205,22 @@ TypeUnifier() : Exports == Implementation where
         pairs : List(P) :=
           [[t1, t2] for t1 in [app1.function, :app2.args] for t2 in [app2.function, :app2.args]]
         unifyTypeList pairs
+      recordType? n1 and recordType? n2 =>
+        r1 := n1 :: RT
+        r2 := n2 :: RT
+        #(r1.fields) ~= #(r2.fields) => "failed"
+        not "and"/[f1.name = f2.name for f1 in r1.fields for f2 in r2.fields] => "failed"
+        unifyTypeList [[f1.type, f2.type]$P for f1 in r1.fields for f2 in r2.fields]
+      unionType? n1 and unionType? n2 =>
+        u1 := n1 :: UT
+        u2 := n2 :: UT
+        #(u1.variants) ~= #(u2.variants) => "failed"
+        unifyTypeList [[v1, v2]$P for v1 in u1.variants for v2 in u2.variants]
+      namedType? n1 and namedType? n2 =>
+        nt1 := n1 :: NT
+        nt2 := n2 :: NT
+        nt1.name ~= nt2.name => "failed"
+        unifyType(nt1.type, nt2.type)
 
       -- constants
       symbol? n1 and symbol? n2 and (n1 :: Symbol) = (n2 :: Symbol) => [[]]
@@ -184,6 +243,8 @@ TypeUnifier() : Exports == Implementation where
       any?(t +-> not failed? unifyType(t, term) or term = t, terms)
 
     findMatches(terms1, terms2) ==
+      debug vconcat([pile ["Trying to match:" :: PF, vconcat [t1 :: PF for t1 in terms1]],
+                     pile ["with:" :: PF, vconcat [t2 :: PF for t2 in terms2]]])
       terms : List(N) := []
       subst : List(SUBST) := []
       for t1 in terms1 repeat
@@ -197,7 +258,11 @@ TypeUnifier() : Exports == Implementation where
       -- remove wildcard if we have more than one match
       if #terms > 1 then
         terms := [t for t in removeDuplicates terms | not typeAny? t]
-      [terms, mergeSubstitutions subst]
+      subst' := mergeSubstitutions subst
+      --debug pile(["Substitutions:" :: PF, 
+      --            :[spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst']])
+      --debug pile(["Terms:" :: PF, :[t :: PF for t in terms]])
+      [terms, subst']
 
 )abbrev domain TCNODE TCNode
 TCNode() : Exports == Implementation where
@@ -268,8 +333,8 @@ TCNode() : Exports == Implementation where
       done := if done? x then green("(+)" :: PF) else red("(-)" :: PF)
       p := hconcat [done, right(4, number(x.index) :: PF)]
       emptyNode? x.rule =>
-        spaces [p, "is" :: PF, underline (x.type :: PF)]
-      spaces [p, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, underline (x.type :: PF)]
+        spaces [p, "is" :: PF, bold (x.type :: PF)]
+      spaces [p, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, bold (x.type :: PF)]
 
 )abbrev package STFITS SpadTreeFillInTypes
 SpadTreeFillInTypes(ns : List(N)) : SpadTreeWalkerCategory == Implementation where
@@ -281,14 +346,11 @@ SpadTreeFillInTypes(ns : List(N)) : SpadTreeWalkerCategory == Implementation whe
     rewrite (app : APP) : N ==
       -- BUG? | rewrite(app) $ SpadTreeWalkerCategory&
       app := [rewrite app.function, [rewrite arg for arg in app.args]]$APP
-
       not typeOrigin? app.function => [app]
 
       -- BUG? | te := app.function :: TE
       te := coerce(app.function)@TE
-      funApp := nodeApp(rewrite te.expr, [rewrite arg for arg in app.args])
-      --mappingType? te.type => funApp
-      --nodeApp(['elt], [funApp, te.type])
+      nodeApp(rewrite te.expr, [rewrite arg for arg in app.args])
 
     rewrite (mr : SpadMarker(N)) : N ==
       not mr.kind = 'noderef => [mr]
@@ -326,8 +388,8 @@ TCNodeArray() : Exports == Implementation where
     addType! : (TCN, N, %) -> Void
     setType! : (TCN, N, %) -> Boolean
 
-    apply! : (MR, List(N), %) -> Void
-    apply! : (SUBST, %) -> Void
+    apply! : (MR, List(N), %) -> Boolean
+    apply! : (SUBST, %) -> Boolean
 
     node : (NNI, %) -> TCN
 
@@ -441,29 +503,30 @@ TCNodeArray() : Exports == Implementation where
         typevars(tvar) := [type]
       typevars(tvar) := [type, :typevars(tvar)]
 
-    rewriteTypeVars! : (MR, List(N), AssociationList(MR, List(N))) -> Void
+    rewriteTypeVars! : (MR, List(N), AssociationList(MR, List(N))) -> Boolean
     rewriteTypeVars!(var, terms, typevars) ==
       -- if type variable has no value then set it to whatever we've inferred
       emptyType? typevars(var) =>
         typevars(var) := terms
-
+        true
       -- unify proposed values with already stored in the variable
       -- store only matching ones (without performing substitutions)
-      types := [t for t in typevars(var) | matches?(t, terms)]
-      empty? types =>
-        error "rewriteTypeVars: No matches!"
-      typevars(var) := types
+      ms := findMatches(typevars(var), terms)
+      not empty? ms.terms => 
+        typevars(var) := ms.terms
+        true
+      false
 
     apply!(var, terms, x) ==
       debug ["Modyfing" :: PF, var :: PF, "type variable with" :: PF, bracket [t :: PF for t in terms]]
-      rewriteTypeVars!(var, terms, x.typevars)
+      not rewriteTypeVars!(var, terms, x.typevars) => false
       if typeInferred?(var, x) then
         for tv in entries x.typevars repeat
           tv.entry := [substitute(t, var, first terms) for t in tv.entry]
+      true
 
     apply!(substitutions, x) ==
-      for s in entries substitutions repeat
-        apply!(s.key, s.entry, x)
+      "and"/[apply!(s.key, s.entry, x) for s in entries substitutions]
 
     nodesMatch! : (TCN, TCN, %) -> Boolean
     nodesMatch!(ln, rn, x) ==
@@ -472,38 +535,32 @@ TCNodeArray() : Exports == Implementation where
         ures := unifyType(ln.type, rn.type)
         failed? ures => false
         apply!(ures :: SUBST, x)
-        true
       ++ %a[?] ~ (%b[t1, t2, ...] | T)
       unknownType?(ln, x) and not unknownType?(rn, x) =>
         apply!(ln.type :: MR, [rn.type], x)
-        true
       ++ (%a[t1, t2, ...] | T) ~ %b[?]
       not unknownType?(ln, x) and unknownType?(rn, x) =>
         apply!(rn.type :: MR, [ln.type], x)
-        true
       ++ (%a[t1, t2, ...] | T) ~ (%b[s1, s2, ...] | S)
       ms := findMatches(fetch(ln.type, x), fetch(rn.type, x))
       empty? ms.terms => false
-      if typeVar? ln.type then
+      if typeVar? ln.type and ln.type ~= (first ms.terms) then
         (x.typevars)(ln.type :: MR) := ms.terms
-      if typeVar? rn.type then
+      if typeVar? rn.type and rn.type ~= (first ms.terms) then
         (x.typevars)(rn.type :: MR) := ms.terms
       apply!(ms.subst, x)
-      true
 
     nodeType! : (TCN, List(N), %) -> Boolean
     nodeType!(n, types, x) ==
       ++ %a[?] ~ [s1, s2, ...]
       unknownType?(n, x) =>
         apply!(n.type :: MR, types, x)
-        true
       ++ (%a[t1, t2, ...] | T) ~ [s1, s2, ...]
       ms := findMatches(fetch(n.type, x), types)
       empty? ms.terms => false
-      if typeVar? n.type then
+      if typeVar? n.type and n.type ~= (first ms.terms) then
         (x.typevars)(n.type :: MR) := ms.terms
       apply!(ms.subst, x)
-      true
 
     -- rewrite all nodes with type that contains given variable
     rewriteNodes! : (MR, N, FlexibleArray(TCN)) -> Void
@@ -515,6 +572,17 @@ TCNodeArray() : Exports == Implementation where
                 brace spaces [var :: PF, "=>" :: PF, term :: PF]])
       for n in nodes repeat
         checkAndMarkIfDone! n
+
+    rewriteIfInferred! : (TCN, %) -> Boolean
+    rewriteIfInferred! (n, x) ==
+      not typeVar? n.type => false
+      var := n.type :: MR
+      not typeInferred?(var, x) => false
+      term := first(remove!(var, x.typevars) :: List(N))
+      info (["Type inferred for node" :: PF, number(n.index) :: PF,
+             ":" :: PF, bold(term :: PF)])
+      rewriteNodes!(var, term, x.nodes)
+      true
 
     product : List(List(N)) -> List(List(N))
     product ll ==
@@ -579,7 +647,7 @@ TCNodeArray() : Exports == Implementation where
       q : Queue(TCN) := empty()
 
       -- initial run => fill up the queue with nodes that aren't done yet
-      for n in reverse entries x.nodes repeat 
+      for n in entries x.nodes repeat 
         checkAndMarkIfDone! n
         if not done? n then
           enqueue!(n, q)
@@ -597,24 +665,20 @@ TCNodeArray() : Exports == Implementation where
           n := dequeue! q
           done? n => "iterate"
 
-          --println([step, ["Queue state"], ["=>"], [number(n.index)], [":"],
-          --         bracket [[number(m.index)] for m in members q]])
+          --debug([step, "Queue state" :: PF, "=>" :: PF, number(n.index) :: PF, ":" :: PF,
+          --       bracket [number(m.index) :: PF for m in members q]])
 
           not inferType(n, x) =>
+            for n' in entries x.nodes repeat
+              rewriteIfInferred!(n', x)
+            fail pile([spaces ["Type error for node:" :: PF, number(n.index) :: PF],
+                       red(n.node :: PF)])
             debug (x :: PF)
             debug (x.typevars :: PF)
-            fail pile([spaces ["Failed to infer type for node:" :: PF, number(n.index) :: PF],
-                       red(n.node :: PF)])
             return false
 
           ++ check if we're done with processing type variable tied to this node
-          if typeVar? n.type then
-            var := n.type :: MR
-            if typeInferred?(var, x) then
-              term := first(remove!(var, x.typevars) :: List(N))
-              info (["Type inferred for node" :: PF, number(n.index) :: PF,
-                     ":" :: PF, underline (term :: PF)])
-              rewriteNodes!(var, term, x.nodes)
+          rewriteIfInferred!(n, x)
 
           ++ if type is inferred for all dependencies the node itself won't change
           checkAndMarkIfDone! n
@@ -683,6 +747,7 @@ SpadTypeChecker() : Exports == Implementation where
     import SpadEnvironment
     import SExpression
     import String
+    import Symbol
     import TCNode
     import SpadNode
     import SpadNodeFactory
@@ -706,16 +771,22 @@ SpadTypeChecker() : Exports == Implementation where
 
     envAddType : (N, ENV) -> ENV
     envAddType (t, env) ==
-      ++ println [["(e) Adding type"], t :: PF, ["to the environment."]]
+      notice ["Adding type" :: PF, bold(t :: PF), "to the environment." :: PF]
       if apply? t then
         app := t :: APP
         env := addDomain(app, env)
-        for k in [app.function, :app.args] repeat
+        for k in app.args repeat
           env := envAddType(k, env)
       if mappingType? t then
         mt := t :: MT
         for k in [mt.type, :mt.args] repeat
           env := envAddType(k, env)
+      if recordType? t then
+        r := t :: RT
+        for f in r.fields repeat
+          env := envAddType(f.type, env)
+        for f in makeRecordFunList t repeat
+          env := addMode(f.name, f.type, env)
       env
 
     walkApp : (APP, CTX, ENV) -> R
@@ -735,6 +806,19 @@ SpadTypeChecker() : Exports == Implementation where
     walkStr : (String, CTX, ENV) -> R
 
     walkApp (a, ctx, env) ==
+      if symbol? a.function then
+        fn := a.function :: Symbol
+        mode := getMode(fn, env)
+        if recordType? mode then
+          eltNode := nodeApp(['elt], [a.function, :a.args])
+          debug ["Rewrote" :: PF, bold(a :: PF), "to" :: PF, bold(eltNode :: PF), "!" :: PF]
+          for f in makeRecordFunList mode repeat
+            env := addMode(f.name, f.type, env)
+          ++ hack that adds record field as a type singleton to the environment
+          for sym in a.args | symbol? sym repeat
+            env := addMode(sym :: Symbol, sym, env)
+          return walk(eltNode, ctx, env)
+
       debug ["Processing function application." :: PF]
       node := addNode!([a], ctx)
       rs := addChildren(node, [a.function, :a.args], ctx, env)
@@ -796,8 +880,8 @@ SpadTypeChecker() : Exports == Implementation where
 
       -- fetch signatures from domain's definition
       mappings : List(N) := [[mm.type] for mm in getModemap(fn.name, env)]
-      info(["Found" :: PF, string underline (name :: PF), "with signatures :" :: PF,
-            underline bracket [t :: PF for t in mappings]])
+      info(["Found" :: PF, string bold(name :: PF), "with signatures :" :: PF,
+            bold bracket [t :: PF for t in mappings]])
 
       -- signature associated with function definition
       mt := sig :: MT
@@ -852,7 +936,8 @@ SpadTypeChecker() : Exports == Implementation where
           fnNode.type := [mt]
           return [nodeFun(fn.name, args', mt.type, body), rs.env]
 
-      fail ["No matching signatures for function:" :: PF, mt :: PF]
+      fail (["No matching signatures for function" :: PF, string bold(fn.name :: PF),
+             "found!" :: PF, pile ["Candidates were:" :: PF, :[mt :: PF for mt in sigs]]])
       error ""
 
     walkFtor (ft, ctx, env) ==
@@ -936,8 +1021,8 @@ SpadTypeChecker() : Exports == Implementation where
       if #types = 1
         then addNode!([s], first types, ctx)
         else addNode!([s], types, ctx)
-      info(["Found" :: PF, string underline (s :: PF), "with type :" :: PF,
-            underline bracket [t :: PF for t in types]])
+      info(["Found" :: PF, string bold(s :: PF), "with type :" :: PF,
+            bold bracket [t :: PF for t in types]])
       [[s], env]
 
     walkTypeExpr (te, ctx, env) ==
@@ -979,6 +1064,7 @@ SpadTypeChecker() : Exports == Implementation where
         i := lastIndex ctx + 1
         -- convert "::" to "coerce" function call
         r := walk(nodeApp(['coerce], [te.expr]), ctx, env)
+)if 0
         -- conversion above almost works, but we need to fix it for identity
         -- coercion by infusing artificial signature "%a -> %a" which is not
         -- always available
@@ -986,9 +1072,21 @@ SpadTypeChecker() : Exports == Implementation where
         argType := coerceNode.children.2.type
         idFunType := nodeMappingType([argType], argType)
         addType!(coerceNode.children.1, idFunType, ctx)
+)endif
         [nodeTypeExpr(te.kind, r.node, te.type), r.env]
     
-      ++ te.kind = '_$
+      te.kind = '_$ =>
+        not symbol? te.expr =>
+          fail ("Type origin selector works only for symbols!" :: PF)
+          error ""
+
+        debug(["Symbol" :: PF, string(te.expr :: PF),
+               "must originate from" :: PF, bold(te.type :: PF),
+               "type!" :: PF])
+
+        env := envAddType(te.type, env)
+        r := walk(te.expr, ctx, env)
+        [r.node, r.env]
 
       fail ["Type expression" :: PF, bold red paren(te :: PF), "not handled yet!" :: PF]
       error ""
@@ -1004,8 +1102,8 @@ SpadTypeChecker() : Exports == Implementation where
       [[f], env]
 
     walkStr (s, ctx, env) ==
-      debug [s :: PF, "is" :: PF, stringType :: PF, ":)" :: PF]
-      addNode!([s], stringType, ctx)
+      debug [string(s :: PF), "is" :: PF, stringType :: PF, ":)" :: PF]
+      addNode!([s], [[string(s :: Symbol)], stringType], ctx)
       [[s], env]
 
     walk (n : N, ctx : CTX, env : ENV) : R ==

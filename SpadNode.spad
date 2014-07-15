@@ -82,7 +82,6 @@ SpadNodeCategory() : Category == ParsableCategory with
 
   convert : % -> SExpression
 
-  value? : % -> Boolean
   constructor? : Symbol -> Boolean
 
   parseNonNull : SExpression -> %
@@ -291,19 +290,48 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
   Exports ==> ParsableCategory with
     elt : (%, "fields") -> List(NT)
     construct : List(NT) -> %
+    wellFormed : % -> Boolean
 
   Implementation ==> add
     Rep := Record(r_fields : List(NT))
 
+    import ParserTools
     import SExpression
+    import Logger('Parser)
 
     elt(x, "fields") == x.r_fields
 
-    construct fl == [fl]$Rep
+    construct fl ==
+      r := [fl]$Rep
+      not wellFormed r =>
+        fail ["Malformed type" :: PF, bold(r :: PF), "!" :: PF]
+        error ""
+      r
+
+    wellFormed x ==
+      names : List(Symbol) := []
+      for f in x.r_fields repeat ++ BUG? runtime crashes when using "x.fields"
+        not (recordType? f.type or unionType? f.type or mappingType? f.type or
+             apply? f.type or string? f.type or symbol? f.type) =>
+          warn ["Record has a field with wrong type:" :: PF, bold(f :: PF)]
+          return false
+        member?(f.name, names) =>
+          warn (["Record has two fields with the same identifier" :: PF,
+                 string bold(f.name :: PF), "!" :: PF])
+          return false
+        names := [f.name, :names]
+      true
 
     parse ex ==
       -- (Record (: field1 Type1) (: field2 Type2) ...)
-      [[parse e for e in destruct cdr ex]]
+      fields : List(NT) := []
+      for field in destruct cdr ex repeat
+        not var? field =>
+          fail (["Cannot parse a record type" :: PF, bold convert(ex),
+                 "- malformed field" :: PF, bold convert(field), "!":: PF])
+          error ""
+        fields := [[symbol field.2, parse field.3], :fields]
+      [reverse fields]
 
     convert x ==
       fs := [convert f for f in x.fields]
@@ -319,6 +347,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> ParsableCategory with
     elt : (%, "variants") -> List(N)
+    wellFormed : % -> Boolean
     construct : List(N) -> %
 
   Implementation ==> add
@@ -326,16 +355,59 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
 
     import ParserTools
     import SExpression
+    import Logger('Parser)
 
     elt(x, "variants") == x.u_variants
 
-    construct vl == [vl]$Rep
+    wellFormed x ==
+      ++ tagged union
+      namedType? (first x.variants) =>
+        names : List(Symbol) := []
+        for v in x.variants repeat
+          not namedType? v =>
+            warn ("Mixing tagged and untagged variants is not allowed." :: PF)
+            return false
+          n := v :: NT 
+          not (recordType? n.type or unionType? n.type or mappingType? n.type or
+               apply? n.type or string? n.type or symbol? n.type) =>
+            warn (["Unions has a variant" :: PF, string(n.name :: PF),
+                   "with wrong type:" :: PF, n.type :: PF])
+            return false
+          member?(n.name, names) =>
+            warn (["Union has two variants with the same identifier:" :: PF,
+                   string(n.name :: PF)])
+            return false
+          names := [n.name, :names]
+        true
+
+      ++ untagged union
+      types : List(N) := []
+      for t in x.variants repeat
+        namedType? t =>
+          warn ("Mixing tagged and untagged variants is not allowed." :: PF)
+          return false
+        not (recordType? t or unionType? t or mappingType? t or
+             apply? t or string? t or symbol? t) =>
+          warn ["Union has a variant with wrong type:" :: PF, t :: PF]
+          return false
+        member?(t, types) =>
+          warn ["Union has two variants with the same type:" :: PF, t :: PF]
+          return false
+        types := [t, :types]
+      true
+
+    construct vl ==
+      union := [vl]$Rep
+      not wellFormed union =>
+        fail ["Malformed union:" :: PF, union :: PF]
+        error ""
+      union
 
     parse ex ==
       -- (Union (: field1 Type1) (: field2 Type2) ...)
       -- (Union Type1 Type2 ...)
       parseUnionField (s : SExpression) : N ==
-        (var? s => [[symbol s.2, parse s.3] $ NT]; parse s)
+        if var? s then [[symbol s.2, parse s.3]$NT] else parse s
       [[parseUnionField e for e in destruct cdr ex]]
 
     convert x ==
@@ -434,7 +506,7 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
       fun := n.function
       argl : List(PF) := [arg :: PF for arg in n.args]
 
-      not symbol? fun =>
+      not (symbol? fun or marker? fun) =>
         #argl = 0 => fun :: PF
         hconcat [paren(fun :: PF), paren argl]
 
@@ -448,8 +520,6 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
         symbol paren(argl)
       funSym = 'construct =>
         bracket argl
-      member?(funSym, ['elt, 'Sel]) =>
-        hconcat [first argl, "." :: PF, paren(rest argl)]
       funSym = 'exit =>
         hconcat ["exit" :: PF, brace(first argl), paren(rest argl)]
       funSym = 'return =>
@@ -652,8 +722,12 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
 
     convert x ==
       s : String := (x.kind = "collect" => "COLLECT"; "REPEAT")
-      lgs := [convert g for g in x.guards]
       lis := [convert i for i in x.itors]
+      lgs := [convert g for g in x.guards]
+      lgs :=
+        if empty? lis
+          then [convert [convert 'WHILE, g] for g in lgs]
+          else [convert [convert '_|, g] for g in lgs]
       convert [convert (s :: Symbol), :lis, :lgs, convert x.body]
 
     coerce n ==
@@ -1223,8 +1297,6 @@ SpadNode() : Exports == Implementation where
 
     emptyNode () == ["$EmptyNode"]$Rep
     emptyNode? n == n case empty
-
-    value? n == float? n or integer? n or string? n or symbol? n
 
     constructor? s ==
       sex : SExpression := GETDATABASE(s, 'ABBREVIATION)$Lisp

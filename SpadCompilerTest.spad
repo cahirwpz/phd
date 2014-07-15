@@ -45,8 +45,6 @@ SpadCompilerTest() : Exports == Implementation where
       loggerLevel('Main, "notice")
       resetTime()
 
-      notice pile ["Original parser tree:" :: PF, convert(e) :: PF]
-
       n : SpadNode := parse e
       info pile ["Parser tree in internal format:" :: PF, n :: PF]
 
