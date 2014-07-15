@@ -31,7 +31,8 @@ SpadCtorModeMap() : Exports == Implementation where
       [[a, t]$NT for a in as for t in ts]
 
     coerce x ==
-      hconcat [x.name :: PF, paren [arg :: PF for arg in x.args], ":" :: PF, x.type :: PF]
+      ftor := bold hconcat [x.name :: PF, paren [arg :: PF for arg in x.args]]
+      pile [spaces [ftor, ":" :: PF], x.type :: PF]
 
 )abbrev domain SPCC SpadCtorCategory
 SpadCtorCategory() : Exports == Implementation where
@@ -79,7 +80,7 @@ SpadOperation() : Exports == Implementation where
     elt (x, "type") ==
       sig := x.op_info.1
       tl := [parse t for t in destruct sig.1]
-      if #sig >= 4 then
+      if #sig >= 4 and symbol sig.4 = 'CONST then
         tl := concat(tl, ['constant])
       [rest tl, first tl]$MT
 
@@ -93,10 +94,8 @@ SpadOperation() : Exports == Implementation where
 
     coerce x ==
       cond := x.condition
-      emptyNode? cond =>
-        x.signature :: PF 
-      vconcat([x.signature :: PF,
-               pile ["when" :: PF, cond :: PF]])
+      emptyNode? cond => x.signature :: PF 
+      pile [x.signature :: PF, spaces [bold("when" :: PF), cond :: PF]]
 
 )abbrev domain SPDB SpadDatabase
 SpadDatabase() : with
@@ -119,7 +118,8 @@ SpadDatabase() : with
       sex : SExpression := GETDATABASE(t, 'OPERATIONALIST)$Lisp
       null? sex => error "Unknown constructor!"
       opList := sex pretend List(SExpression)
-      [convert op for op in opList]
+      [convert op for op in reverse opList |
+       not(list? op and symbol? op.1 and (symbol op.1) = '_$unique)]
 
     getCtorArgsKind t ==
       sex : SExpression := GETDATABASE(t,'COSIG)$Lisp
@@ -158,3 +158,30 @@ SpadDatabase() : with
       sex : SExpression := GETDATABASE(t, 'SOURCEFILE)$Lisp
       null? sex => error "Unknown constructor!"
       sex pretend String
+
+)abbrev domain SPDBT SpadDatabaseTest
+SpadDatabaseTest() : Exports == Implementation where
+  PF ==> PrintableForm
+
+  Exports ==> with
+    test1 : () -> Void
+    test2 : () -> Void
+
+  Implementation ==> add
+    import Printer
+    import SpadDatabase
+
+    test1 () ==
+      println pile([bold("AbelianMonoid:" :: PF),
+                    :[op :: PF for op in getOperationList('AbelianMonoid)]])
+      println pile([bold("List:" :: PF),
+                    :[op :: PF for op in getOperationList('List)]])
+      println pile([bold("BasicType:" :: PF),
+                    :[op :: PF for op in getOperationList('BasicType)]])
+
+    test2 () ==
+      println (getCtorModeMap('AbelianSemiGroup) :: PF)
+      println (getCtorModeMap('AbelianSemiGroup_&) :: PF)
+      println (getCtorModeMap('BasicType) :: PF)
+      println (getCtorModeMap('BasicType_&) :: PF)
+      println (getCtorModeMap('List) :: PF)

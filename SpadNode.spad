@@ -226,11 +226,17 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
       convert ls
 
     coerce n ==
-      ts := [ t :: PF for t in n.types ]
+      ts := [t :: PF for t in n.types]
       n.kind case "Join" =>
-        hconcat ["Join" :: PF, paren ts]
-      -- indent(2, pile ["with", :ts])
-      brace ts
+        #n.types = 1 => ts.1
+        lastType := last n.types
+        not sumType? lastType =>
+          hconcat ["Join" :: PF, paren ts]
+        st := lastType :: SpadSumType(N)
+        st.kind case "Domain" or st.kind case "Package" =>
+          join := ["Join", reverse rest reverse n.types] :: PF
+          pile ([spaces [join, "with" :: PF], :[t :: PF for t in st.types]])
+      vconcat ts
 
 )abbrev domain SPTNAMED SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
