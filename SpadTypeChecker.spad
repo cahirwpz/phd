@@ -499,9 +499,9 @@ TCNodeArray() : Exports == Implementation where
         error "addType! works only on type variants"
       typevars := x.typevars
       tvar := n.type :: MR
-      emptyType? typevars(tvar) =>
-        typevars(tvar) := [type]
-      typevars(tvar) := [type, :typevars(tvar)]
+      typevars(tvar) := 
+        emptyType? typevars(tvar) => [type]
+        [type, :typevars(tvar)]
 
     rewriteTypeVars! : (MR, List(N), AssociationList(MR, List(N))) -> Boolean
     rewriteTypeVars!(var, terms, typevars) ==
@@ -795,7 +795,7 @@ SpadTypeChecker() : Exports == Implementation where
     walkFun : (FN, CTX, ENV) -> R
     walkFtor : (FT, CTX, ENV) -> R
     walkImport : (IM, CTX, ENV) -> R
-    --walkLambda : (LAM, CTX, ENV) -> R
+    walkLambda : (LAM, CTX, ENV) -> R
     walkLoop : (LP, CTX, ENV) -> R
     --walkSeg : (SEG, CTX, ENV) -> R
     walkSeq : (SEQ, CTX, ENV) -> R
@@ -969,9 +969,36 @@ SpadTypeChecker() : Exports == Implementation where
       addNode!([im], voidType, ctx)
       [[im], env]
 
-    --walkLambda (lam, ctx, env) ==
-    --  node := addNode! ctx
-    --  addChildren(node, [lam.body], ctx, env)
+    walkLambda (lam, ctx, env) ==
+      ++ replace unknown types with type variables and add arguments
+      ++ to the environment
+      argTypes : List(N) := []
+      for arg in lam.args repeat
+        argType := 
+          emptyNode? arg.type => addTypeVar! ctx
+          arg.type
+        argTypes := [argType, :argTypes]
+        env := addMode(arg.name, argType, env)
+      retType :=
+        emptyNode? lam.type => addTypeVar! ctx
+        lam.type
+      lamType := [reverse argTypes, retType]$MT
+      debug ["Lambda expression of type" :: PF, bold(lamType :: PF)]
+      ++ add a node with type of the lambda expression just for dependants
+      addNode!([lam], [lamType], ctx)
+      ++ generate nodes for all types that were assigned type variables
+      ++ and prepare lambda's arguments to be filled out in final phase
+      args : List(NT) := []
+      for argType in argTypes for arg in lam.args repeat
+        typeVar? argType =>
+          node := addNode!([arg.name], argType, ctx)
+          args := [[arg.name, nodeRef(node.index)]$NT, :args]
+        args := [arg, :args]
+      ++ finally, generate a node with result type
+      node := addNode!(emptyNode(), retType, ctx)
+      node.rule := nodeRef(node.index + 1)
+      rs := addChildren(node, [lam.body], ctx, env)
+      [nodeLambda(reverse args, nodeRef(node.index), rs.nodes.1), rs.env]
 
     walkLoop (lp, ctx, env) ==
       debug ["Loop statement." :: PF]
@@ -1114,7 +1141,7 @@ SpadTypeChecker() : Exports == Implementation where
       functor? n => walkFtor(n :: FT, ctx, env)
       import? n => walkImport(n :: IM, ctx, env)
       integer? n => walkInt(n :: Integer, ctx, env)
-      --lambda? n => walkLambda(n :: LAM, ctx, env)
+      lambda? n => walkLambda(n :: LAM, ctx, env)
       loop? n => walkLoop(n :: LP, ctx, env)
       --segment? n => walkSeg(n :: SEG, ctx, env)
       sequence? n => walkSeq(n :: SEQ, ctx, env)

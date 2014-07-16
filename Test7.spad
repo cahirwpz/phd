@@ -1,0 +1,9 @@
+)abbrev domain TEST7 Test7
+Test7() : Exports == Implementation where
+
+  Exports ==> with
+    allPositive? : List(Integer) -> Boolean
+
+  Implementation ==> add
+    allPositive? l ==
+      every?(i +-> i > 0, l)

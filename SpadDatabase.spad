@@ -172,12 +172,13 @@ SpadDatabaseTest() : Exports == Implementation where
     import SpadDatabase
 
     test1 () ==
-      println pile([bold("AbelianMonoid:" :: PF),
-                    :[op :: PF for op in getOperationList('AbelianMonoid)]])
-      println pile([bold("List:" :: PF),
-                    :[op :: PF for op in getOperationList('List)]])
-      println pile([bold("BasicType:" :: PF),
-                    :[op :: PF for op in getOperationList('BasicType)]])
+      printOps (s : Symbol) : Void ==
+        println pile([bold hconcat[s :: PF, ":" :: PF],
+                      :[op :: PF for op in getOperationList(s)]])
+
+      printOps 'AbelianMonoid
+      printOps 'List
+      printOps 'BasicType
 
     test2 () ==
       println (getCtorModeMap('AbelianSemiGroup) :: PF)
@@ -185,3 +186,4 @@ SpadDatabaseTest() : Exports == Implementation where
       println (getCtorModeMap('BasicType) :: PF)
       println (getCtorModeMap('BasicType_&) :: PF)
       println (getCtorModeMap('List) :: PF)
+      println (getCtorModeMap('PositiveInteger) :: PF)

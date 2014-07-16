@@ -66,7 +66,7 @@ SpadTreeWalkerCategory() : Category == Definition where
           arg' :=
             namedType? arg =>
               t := arg :: NT
-              [[t.name, rewrite t.type]$NT]
+              nodeNamedType(t.name, rewrite t.type)
             arg
           argl := [arg', :argl]
         nodeFun(fn.name, reverse argl, rewrite fn.type, rewrite fn.body)
@@ -78,7 +78,8 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeImport(rewrite im.type)
 
       rewrite (l : LAM) : N ==
-        nodeLambda(l.args, rewrite l.type, rewrite l.body)
+        nargs := [[arg.name, rewrite arg.type]$NT for arg in l.args]
+        nodeLambda(nargs, rewrite l.type, rewrite l.body)
 
       rewrite (lp : LP) : N ==
         -- BUG: parser cannot accept a multi-line list constructor

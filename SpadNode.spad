@@ -46,6 +46,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   recordType? : % -> Boolean
   segment? : % -> Boolean
   sequence? : % -> Boolean
+  signatureList? : % -> Boolean
   string? : % -> Boolean
   sumType? : % -> Boolean
   symbol? : % -> Boolean
@@ -230,12 +231,10 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
       n.kind case "Join" =>
         #n.types = 1 => ts.1
         lastType := last n.types
-        not sumType? lastType =>
-          hconcat ["Join" :: PF, paren ts]
-        st := lastType :: SpadSumType(N)
-        st.kind case "Domain" or st.kind case "Package" =>
+        signatureList? lastType =>
           join := ["Join", reverse rest reverse n.types] :: PF
-          pile ([spaces [join, "with" :: PF], :[t :: PF for t in st.types]])
+          pile [spaces [join, "with" :: PF], lastType :: PF]
+        hconcat ["Join" :: PF, paren ts]
       vconcat ts
 
 )abbrev domain SPTNAMED SpadNamedType
@@ -756,53 +755,55 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
 )abbrev domain SPLAM SpadLambda
 SpadLambda(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
+  MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
 
   Exports ==> ParsableCategory with
-    elt : (%, "args") -> List(Symbol)
+    elt : (%, "args") -> List(NT)
     elt : (%, "type") -> N
     elt : (%, "body") -> N
-    construct : (List(Symbol), N, N) -> %
+    construct : (List(NT), N, N) -> %
 
   Implementation ==> add
-    Rep := Record(f_args : List(Symbol), f_type : N, f_body : N)
+    Rep := Record(l_args : List(NT), l_type : N, l_body : N)
 
     import ParserTools
 
-    elt(x, "args") == x.f_args
-    elt(x, "type") == x.f_type
-    elt(x, "body") == x.f_body
+    elt(x, "args") == x.l_args
+    elt(x, "type") == x.l_type
+    elt(x, "body") == x.l_body
 
     construct(al, t, b) == [al, t, b]$Rep
 
-    nameOf : SExpression -> Symbol
-    nameOf s == if list? s then symbol s.2 else symbol s
-
-    typeOf : SExpression -> SExpression
-    typeOf s == if list? s then s.3 else convert []
-
     parse ex ==
-      -- (+-> arg body)
-      not list? ex.2 =>
-        sig := convert [convert '_:, convert [], convert []]
-        [[symbol ex.2], parse sig, parse ex.3]
+      l : Record(args : List(SExpression), type : SExpression) :=
+        -- (+-> arg body)
+        not list? ex.2 =>
+          [[ex.2], convert []]
+        -- (+-> (@Tuple (: arg1 Type1) (: arg2 Type2)) body)
+        tuple? ex.2 =>
+          [destruct cdr ex.2, convert []]
+        -- (+-> (: (: arg Type) RetType) body) 
+        -- (+-> (: (@Tuple (: arg1 Type1) (: arg2 Type2)) RetType) body)
+        var? ex.2 =>
+          [(not tuple? ex.2.2 => [ex.2.2]; destruct cdr ex.2.2), ex.2.3]
 
-      -- (+-> (: (: arg Type) RetType) body) 
-      -- (+-> (: (@Tuple (: arg1 Type1) (: arg2 Type2)) RetType) body)
-      (ltype, rtype) := destruct(cdr ex.2)
+      largs : List(NT) := []
+      for arg in l.args repeat
+        var? arg =>
+          largs := [[symbol arg.2, parse arg.3], :largs]
+        largs := [[symbol arg, emptyNode()], :largs]
 
-      largs := if tuple? ltype then destruct cdr(ltype) else [ltype]
-      lsym := [nameOf arg for arg in largs]
-      ltypes := [typeOf arg for arg in largs]
+      [reverse largs, parse l.type, parse ex.3]
 
-      sig := convert cons(convert '_:, concat(ltypes, [rtype]))
-
-      [lsym, parse sig, parse ex.3]
-
-    convert x == convert []
+    convert x ==
+      args := [convert arg for arg in x.args]
+      type := [convert '_:, convert args, convert x.type]
+      convert [convert '_+_-_>, convert type, convert x.body]
 
     coerce n ==
-      spaces(["function" :: PF, paren [arg :: PF for arg in n.args],
-              ":" :: PF, n.type :: PF, "==" :: PF, n.body :: PF])
+      spaces([paren [arg :: PF for arg in n.args], ":" :: PF, n.type :: PF,
+             "+->" :: PF, n.body :: PF])
 
 )abbrev package SPSEQ SpadSequence
 SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
@@ -1143,7 +1144,7 @@ SpadNode() : Exports == Implementation where
     nodeFtor : (Symbol, List(NT), %, %, %) -> %
     nodeFun : (Symbol, List(%), %, %) -> %
     nodeImport : % -> %
-    nodeLambda : (List(Symbol), %, %) -> %
+    nodeLambda : (List(NT), %, %) -> %
     nodeLoop : (Union("loop", "collect", "repeat"), List(IT), List(%), %) -> %
     nodeMacro : (Symbol, List(Symbol), %) -> %
     nodeMappingType : (List(%), %) -> %
@@ -1190,6 +1191,9 @@ SpadNode() : Exports == Implementation where
     recordType? n == n case record
     segment? n == n case segment 
     sequence? n == n case seq
+    signatureList? n ==
+      not n case sum => false
+      n.sum.kind ~= "Join"
     string? n == n case str
     sumType? n == n case sum
     symbol? n == n case sym
