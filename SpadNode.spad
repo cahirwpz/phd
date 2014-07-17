@@ -671,6 +671,7 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
 
     import Printer
     import ParserTools
+    import Logger('Parser)
 
     elt(x, "kind") == x.lp_kind
     elt(x, "itors") == x.lp_itors
@@ -699,27 +700,28 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
         -- 2) a while statement can occur inside collect statement
         itor? e =>
           -- (IN item sequence)
-          l_itors := cons([symbol e.2, parse e.3], l_itors)
+          l_itors := [[symbol e.2, parse e.3], :l_itors]
         step? e =>
           -- (STEP i m k n) -> i := m..n by k
           -- (STEP i m k) -> i := m.. by k
           range : SpadSegment(N) := if #e = 4
             then [parse e.3, parse e.4]
             else [parse e.3, parse e.5, parse e.4]
-          l_itors := cons([symbol e.2, construct range], l_itors)
+          l_itors := [[symbol e.2, construct range], :l_itors]
         guard? e or while? e =>
           -- should they be mixed together ?
           -- ('| cond)
           -- (WHILE cond)
-          l_guards := cons(parse e.2, l_guards)
-        println "------"
-        println convert(e)
-        error "unrecognized loop construct"
+          l_guards := [parse e.2, :l_guards]
+        fail pile ["Unrecognized loop construct:" :: PF, convert(e)]
+        error ""
 
-      reverse!(l_itors)
-      reverse!(l_guards)
+      l_itors := reverse l_itors
+      l_guards := reverse l_guards
 
-      #l_guards > 1 => error "loop: more than one guard!"
+      #l_guards > 1 =>
+        fail ("Loop has more than one guard! That should not happen!" :: PF)
+        error ""
 
       if collect? ex
         then ["collect", l_itors, l_guards, l_body]

@@ -99,6 +99,10 @@ TypeUnifier() : Exports == Implementation where
     import SpadNodeFactory
     import Logger('Unify)
 
+    convert : SUBST -> PF
+    convert subst ==
+      vconcat [spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst]
+
     failed? t == t case "failed"
 
     occurs? (tvar, n) ==
@@ -259,9 +263,8 @@ TypeUnifier() : Exports == Implementation where
       if #terms > 1 then
         terms := [t for t in removeDuplicates terms | not typeAny? t]
       subst' := mergeSubstitutions subst
-      --debug pile(["Substitutions:" :: PF, 
-      --            :[spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst']])
-      --debug pile(["Terms:" :: PF, :[t :: PF for t in terms]])
+      --debug pile ["Substitutions:" :: PF, convert(subst')]
+      --debug pile ["Terms:" :: PF, :[t :: PF for t in terms]]
       [terms, subst']
 
 )abbrev domain TCNODE TCNode
@@ -332,9 +335,10 @@ TCNode() : Exports == Implementation where
     coerce x ==
       done := if done? x then green("(+)" :: PF) else red("(-)" :: PF)
       p := hconcat [done, right(4, number(x.index) :: PF)]
+      cl := bracket [number(n.index) :: PF for n in x.children]
       emptyNode? x.rule =>
-        spaces [p, "is" :: PF, bold (x.type :: PF)]
-      spaces [p, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, bold (x.type :: PF)]
+        spaces [p, cl, "is" :: PF, bold (x.type :: PF)]
+      spaces [p, cl, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, bold (x.type :: PF)]
 
 )abbrev package STFITS SpadTreeFillInTypes
 SpadTreeFillInTypes(ns : List(N)) : SpadTreeWalkerCategory == Implementation where
@@ -718,6 +722,7 @@ SpadTypeChecker() : Exports == Implementation where
   FT ==> SpadFunctor(N)
   IM ==> SpadImport(N)
   LAM ==> SpadLambda(N)
+  IT ==> SpadIterator(N)
   LP ==> SpadLoop(N)
   M ==> SpadMacro(N)
   MT ==> SpadMappingType(N)
@@ -766,7 +771,7 @@ SpadTypeChecker() : Exports == Implementation where
         env := r.env
         nl := [r.node, :nl]
         cl := [node(i, ctx), :cl]
-      parent.children := concat(reverse cl, parent.children)
+      parent.children := concat(parent.children, reverse cl)
       [reverse nl, env]
 
     envAddType : (N, ENV) -> ENV
@@ -974,15 +979,11 @@ SpadTypeChecker() : Exports == Implementation where
       ++ to the environment
       argTypes : List(N) := []
       for arg in lam.args repeat
-        argType := 
-          emptyNode? arg.type => addTypeVar! ctx
-          arg.type
+        argType := (emptyNode? arg.type => addTypeVar! ctx; arg.type)
         argTypes := [argType, :argTypes]
         env := addMode(arg.name, argType, env)
-      retType :=
-        emptyNode? lam.type => addTypeVar! ctx
-        lam.type
-      lamType := [reverse argTypes, retType]$MT
+      retType := (emptyNode? lam.type => addTypeVar! ctx; lam.type)
+      lamType : MT := [reverse argTypes, retType]
       debug ["Lambda expression of type" :: PF, bold(lamType :: PF)]
       ++ add a node with type of the lambda expression just for dependants
       addNode!([lam], [lamType], ctx)
@@ -1003,16 +1004,35 @@ SpadTypeChecker() : Exports == Implementation where
     walkLoop (lp, ctx, env) ==
       debug ["Loop statement." :: PF]
       node := addNode!([lp], voidType, ctx)
-      not empty? lp.itors =>
-        fail ("Loop iterators not handled yet!" :: PF)
-        error ""
-      debug ["Processing" :: PF, #(lp.guards) :: PF, "guards." :: PF]
-      g_rs := addChildren(node, lp.guards, ctx, env)
-      for guard in node.children repeat
-        setType!(guard, booleanType, ctx)
+      env' := env
+      loopChildren : List(TCN) := []
+
+      debug ["Processing" :: PF, #(lp.itors) :: PF, "iterator(s)." :: PF]
+      nItors : List(IT) := []
+      for itor in lp.itors repeat
+        itorVar := addNode!([itor.var], ctx)
+        itorSeq := addNode!(itor.seq, nodeApp(['List], [itorVar.type]), ctx)
+        itorSeq.rule := nodeRef(itorSeq.index + 1)
+        rs := addChildren(itorSeq, [itor.seq], ctx, env)
+        ++ iterator variable is added to loop's body environment,
+        ++ but is also known to guards
+        env' := addMode(itor.var, itorVar.type, env')
+        nItors := [[itor.var, rs.nodes.1]$IT, :nItors]
+        loopChildren := [itorSeq, itorVar, :loopChildren]
+
+      debug ["Processing" :: PF, #(lp.guards) :: PF, "guard(s)." :: PF]
+      nGuards : List(N) := []
+      for guard in lp.guards repeat
+        guardNode := addNode!(guard, booleanType, ctx)
+        guardNode.rule := nodeRef(guardNode.index + 1)
+        rs := addChildren(node, [guard], ctx, env')
+        nGuards := [rs.nodes.1, :nGuards]
+        loopChildren := [guardNode, :loopChildren]
+
       debug ["Processing loop body." :: PF]
-      b_rs := addChildren(node, [lp.body], ctx, g_rs.env)
-      [nodeLoop(lp.kind, lp.itors, g_rs.nodes, first b_rs.nodes), b_rs.env]
+      node.children := reverse loopChildren
+      rs := addChildren(node, [lp.body], ctx, env')
+      [nodeLoop(lp.kind, reverse nItors, reverse nGuards, first rs.nodes), env]
 
     --walkSeg (seg, ctx, env) ==
     --  node := addNode! ctx
