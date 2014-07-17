@@ -4,19 +4,28 @@ Test2(A : Type) : Exports == Implementation where
 
   Exports ==> with
     index : (A -> Boolean, List(A)) -> NonNegativeInteger
-    sum : List(I) -> I
+    sumPositive : List(I) -> I
+    sumRange : (List(I), Integer, Integer) -> Integer
 
   Implementation ==> add
     index(pred, l) ==
       i := 1
       while not empty? l repeat
-        if pred(first l) then return i
-        i := i + 1
-        l := rest l
+        if pred(first l) then
+          return i
+        else
+          i := i + 1
+          l := rest l
       0
 
-    --sum (l : List(I)) : I ==
-    --  s := 0
-    --  for i in l repeat
-    --    s := s + i
-    --  s
+    sumPositive l ==
+      s := 0
+      for i in reverse l | i > 0 repeat
+        s := s + i
+      s
+
+    sumRange (l, i, j) ==
+      s := 0
+      for k in i..(j - 1) repeat
+        s := s + elt(l, k)
+      s

@@ -84,6 +84,8 @@ TypeUnifier() : Exports == Implementation where
     occurs? : (MR, N) -> Boolean
     unbound? : N -> Boolean
 
+    freeVars : N -> List(MR)
+
     substitute : (N, MR, N) -> N
     substitute : (N, SUBST) -> N
 
@@ -129,6 +131,21 @@ TypeUnifier() : Exports == Implementation where
         any?(unbound?, [mt.type, :mt.args])
       typeAny? n => false
       typeVar? n or emptyNode? n
+
+    freeVars n ==
+      import List(N)
+
+      apply? n =>
+        app := n :: APP
+        "concat"/[freeVars i for i in [app.function, :app.args]]
+      mappingType? n =>
+        mt := n :: MT
+        "concat"/[freeVars i for i in [mt.type, :mt.args]]
+      typeVar? n => [n :: MR]
+      typeExpr? n =>
+        te := n :: TE
+        concat(freeVars te.type, freeVars te.expr)
+      []
 
     substitute(n : N, var : MR, term : N) : N ==
       apply? n =>
@@ -207,7 +224,7 @@ TypeUnifier() : Exports == Implementation where
         app2 := n2 :: APP
         #(app1.args) ~= #(app2.args) => "failed"
         pairs : List(P) :=
-          [[t1, t2] for t1 in [app1.function, :app2.args] for t2 in [app2.function, :app2.args]]
+          [[t1, t2] for t1 in [app1.function, :app1.args] for t2 in [app2.function, :app2.args]]
         unifyTypeList pairs
       recordType? n1 and recordType? n2 =>
         r1 := n1 :: RT
@@ -802,7 +819,7 @@ SpadTypeChecker() : Exports == Implementation where
     walkImport : (IM, CTX, ENV) -> R
     walkLambda : (LAM, CTX, ENV) -> R
     walkLoop : (LP, CTX, ENV) -> R
-    --walkSeg : (SEG, CTX, ENV) -> R
+    walkSeg : (SEG, CTX, ENV) -> R
     walkSeq : (SEQ, CTX, ENV) -> R
     walkSym : (Symbol, CTX, ENV) -> R
     walkTypeExpr : (TE, CTX, ENV) -> R
@@ -1011,7 +1028,10 @@ SpadTypeChecker() : Exports == Implementation where
       nItors : List(IT) := []
       for itor in lp.itors repeat
         itorVar := addNode!([itor.var], ctx)
-        itorSeq := addNode!(itor.seq, nodeApp(['List], [itorVar.type]), ctx)
+        seqType : List(N) :=
+          [nodeApp(['List], [itorVar.type]),
+           nodeApp(['UniversalSegment], [itorVar.type])]
+        itorSeq := addNode!(itor.seq, seqType, ctx)
         itorSeq.rule := nodeRef(itorSeq.index + 1)
         rs := addChildren(itorSeq, [itor.seq], ctx, env)
         ++ iterator variable is added to loop's body environment,
@@ -1034,9 +1054,27 @@ SpadTypeChecker() : Exports == Implementation where
       rs := addChildren(node, [lp.body], ctx, env')
       [nodeLoop(lp.kind, reverse nItors, reverse nGuards, first rs.nodes), env]
 
-    --walkSeg (seg, ctx, env) ==
-    --  node := addNode! ctx
-    --  addChildren(node, [seg.start, seg.end, seg.step], ctx, env)
+    walkSeg (seg, ctx, env) ==
+      debug ["Processing segment:" :: PF, string(seg :: PF)]
+      segChildren : List(TCN) := []
+      segType := addTypeVar! ctx
+      node := addNode!([seg], nodeApp(['UniversalSegment], [segType]), ctx)
+      segStart := addNode!(emptyNode(), segType, ctx)
+      segStart.rule := nodeRef(segStart.index + 1)
+      rs1 := addChildren(segStart, [seg.start], ctx, env)
+      segChildren := [segStart, :segChildren]
+      if not emptyNode? seg.end then
+        segEnd := addNode!(emptyNode(), segType, ctx)
+        segEnd.rule := nodeRef(segEnd.index + 1)
+        rs2 := addChildren(segEnd, [seg.end], ctx, env)
+        segChildren := [segEnd, :segChildren]
+      if not emptyNode? seg.step then
+        segStep := addNode!(emptyNode(), integerType, ctx)
+        segStep.rule := nodeRef(segStep.index + 1)
+        rs3 := addChildren(segStep, [seg.step], ctx, env)
+        segChildren := [segStep, :segChildren]
+      node.children := reverse segChildren
+      [[seg], env]
 
     walkSeq (s, ctx, env) ==
       debug ["Found sequence of" :: PF, #(s.list) :: PF, "expressions." :: PF]
@@ -1163,7 +1201,7 @@ SpadTypeChecker() : Exports == Implementation where
       integer? n => walkInt(n :: Integer, ctx, env)
       lambda? n => walkLambda(n :: LAM, ctx, env)
       loop? n => walkLoop(n :: LP, ctx, env)
-      --segment? n => walkSeg(n :: SEG, ctx, env)
+      segment? n => walkSeg(n :: SEG, ctx, env)
       sequence? n => walkSeq(n :: SEQ, ctx, env)
       string? n => walkStr(n :: String, ctx, env)
       symbol? n => walkSym(n :: Symbol, ctx, env)
