@@ -15,6 +15,7 @@ SpadNodeFactory() : Exports == Implementation where
     integerType : () -> N
     outputFormType : () -> N
     stringType : () -> N
+    symbolType : () -> N
     voidType : () -> N
 
     typeAny : () -> N
@@ -29,6 +30,7 @@ SpadNodeFactory() : Exports == Implementation where
     integerType () == nodeApp(['Integer], [])
     outputFormType () == nodeApp(['OutputForm], [])
     stringType () == nodeApp(['String], [])
+    symbolType () == nodeApp(['Symbol], [])
     voidType () == nodeApp(['Void], [])
 
     typeAny() == [[0, 'typevar]$MR]
@@ -306,7 +308,7 @@ TCNode() : Exports == Implementation where
 
     construct : (NNI, N, N) -> %
     substitute! : (SUBST, %) -> Void
-    checkAndMarkIfDone! : % -> Void
+    checkAndMarkIfDone! : % -> Boolean
     done? : % -> Boolean
 
   Implementation ==> add
@@ -345,6 +347,8 @@ TCNode() : Exports == Implementation where
     checkAndMarkIfDone! x ==
       import List(N)
       unbound? x.type => false
+      empty? x.children =>
+        x.ni_done := true
       x.ni_done := every?(t +-> not unbound? t, [n.type for n in x.children])
 
     done? x == x.ni_done
@@ -547,6 +551,7 @@ TCNodeArray() : Exports == Implementation where
       true
 
     apply!(substitutions, x) ==
+      empty? substitutions => true
       "and"/[apply!(s.key, s.entry, x) for s in entries substitutions]
 
     nodesMatch! : (TCN, TCN, %) -> Boolean
@@ -669,7 +674,8 @@ TCNodeArray() : Exports == Implementation where
 
       -- initial run => fill up the queue with nodes that aren't done yet
       for n in entries x.nodes repeat 
-        checkAndMarkIfDone! n
+        --BUG: Each rule attached to a node has to be applied at least once!
+        --checkAndMarkIfDone! n
         if not done? n then
           enqueue!(n, q)
 
@@ -702,8 +708,7 @@ TCNodeArray() : Exports == Implementation where
           rewriteIfInferred!(n, x)
 
           ++ if type is inferred for all dependencies the node itself won't change
-          checkAndMarkIfDone! n
-          if done? n then
+          if checkAndMarkIfDone! n then
             debug ["Processing node" :: PF, number(n.index) :: PF, "completed!" :: PF]
           else
             enqueue!(n, newQ)
@@ -830,6 +835,9 @@ SpadTypeChecker() : Exports == Implementation where
     walkApp (a, ctx, env) ==
       if symbol? a.function then
         fn := a.function :: Symbol
+        if fn = 'QUOTE then
+          addNode!([a], symbolType, ctx)
+          return [[a], env]
         mode := getMode(fn, env)
         if recordType? mode then
           eltNode := nodeApp(['elt], [a.function, :a.args])
@@ -961,7 +969,7 @@ SpadTypeChecker() : Exports == Implementation where
         bodyNode := addNode!([mt], mt.type, ctx')
         r := walk(fn.body, ctx', env')
         bodyNode.rule := nodeRef(bodyNode.index + 1)
-        bodyNode.children := [node(bodyNode.index + 1, ctx)]
+        bodyNode.children := [node(bodyNode.index + 1, ctx')]
 
         debug ["Tree ready for unification :" :: PF]
         debug [ctx' :: PF]
@@ -1037,8 +1045,13 @@ SpadTypeChecker() : Exports == Implementation where
     walkLoop (lp, ctx, env) ==
       debug ["Loop statement." :: PF]
       env' := env
-      loopBody := addNode!([lp], voidType, ctx)
-      loopChildren : List(TCN) := []
+      type : N
+
+      loopNode :=
+        lp.kind case "collect" =>
+          type := addTypeVar! ctx
+          addNode!([lp], nodeApp(['List], [type]), ctx)
+        addNode!([lp], voidType, ctx)
 
       debug ["Processing" :: PF, #(lp.itors) :: PF, "iterator(s)." :: PF]
       nItors : List(IT) := []
@@ -1054,8 +1067,8 @@ SpadTypeChecker() : Exports == Implementation where
         ++ iterator variable is added to loop's body environment,
         ++ but is also known to guards
         env' := addMode(itor.var, itorVar.type, env')
-        concat!(nItors, [itor.var, r.node]$IT)
-        concat!(loopChildren, [itorVar, itorSeq])
+        nItors := concat(nItors, [itor.var, r.node]$IT)
+        loopNode.children := concat(loopNode.children, [itorVar, itorSeq])
 
       debug ["Processing" :: PF, #(lp.guards) :: PF, "guard(s)." :: PF]
       nGuards : List(N) := []
@@ -1064,13 +1077,22 @@ SpadTypeChecker() : Exports == Implementation where
         r := walk(guard, ctx, env')
         guardNode.rule := nodeRef(guardNode.index + 1)
         guardNode.children := [node(guardNode.index + 1, ctx)]
-        concat!(nGuards, r.node)
-        concat!(loopChildren, guardNode)
+        nGuards := concat(nGuards, r.node)
+        loopNode.children := concat(loopNode.children, guardNode)
         ++ Guard may introduce a variable and it must be visible in loop's body!
         env' := r.env
 
       debug ["Processing loop body." :: PF]
-      r := walk(lp.body, ctx, env')
+      if lp.kind case "collect" then
+        loopBody := addNode!(emptyNode(), type, ctx)
+        r := walk(lp.body, ctx, env')
+        loopBody.rule := nodeRef(loopBody.index + 1)
+        loopBody.children := [node(loopBody.index + 1, ctx)]
+        loopNode.children := concat(loopNode.children, loopBody)
+      else
+        i := lastIndex ctx + 1
+        r := walk(lp.body, ctx, env')
+        loopNode.children := concat(loopNode.children, node(i, ctx))
       [nodeLoop(lp.kind, nItors, nGuards, r.node), env]
 
     walkSeg (seg, ctx, env) ==
@@ -1091,7 +1113,7 @@ SpadTypeChecker() : Exports == Implementation where
         (newEnd, env') := walk(seg.end, ctx, env)
         segEnd.rule := nodeRef(segEnd.index + 1)
         segEnd.children := [node(segEnd.index + 1, ctx)]
-        concat!(segNode.children, segEnd)
+        segNode.children := concat(segNode.children, segEnd)
 
       newStep := seg.step
       if not emptyNode? seg.step then
@@ -1099,7 +1121,7 @@ SpadTypeChecker() : Exports == Implementation where
         (newStep, env') := walk(seg.step, ctx, env)
         segStep.rule := nodeRef(segStep.index + 1)
         segStep.children := [node(segStep.index + 1, ctx)]
-        concat!(segNode.children, segStep)
+        segNode.children := concat(segNode.children, segStep)
 
       [nodeSeg(newStart, newEnd, newStep), env]
 
