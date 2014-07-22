@@ -874,23 +874,36 @@ SpadTypeChecker() : Exports == Implementation where
           env := addMode(s, addTypeVar! ctx, env)
           intro := true
         
-      node := addNode!([a], type, ctx)
-      rs := addChildren(node, [a.lval, a.rval], ctx, env)
-      ns := [nodeRef(n.index) for n in node.children]
-      node.rule := nodeAssign(ns.1, ns.2)
+      assignNode := addNode!([a], type, ctx)
+      i1 := lastIndex ctx + 1
+      r1 := walk(a.lval, ctx, env)
+      i2 := lastIndex ctx + 1
+      r2 := walk(a.rval, ctx, env)
+      assignNode.children := [node(i1, ctx), node(i2, ctx)]
+      assignNode.rule := nodeAssign(nodeRef(i1), nodeRef(i2))
 
+      ++ Only left-value environment is propagated!
       lval :=
-        not intro => rs.nodes.1
-        nodeTypeExpr('_:, rs.nodes.1, ns.1)
-      [nodeAssign(lval, rs.nodes.2), rs.env]
+        not intro => r1.node
+        nodeTypeExpr('_:, r1.node, nodeRef(i1))
+      [nodeAssign(lval, r2.node), r1.env]
 
     walkCondExpr (ce, ctx, env) ==
       debug ["Processing conditional expression." :: PF]
-      node := addNode!([ce], ctx)
-      rs := addChildren(node, [ce.cond, ce.truebr, ce.falsebr], ctx, env)
-      ns := [nodeRef(n.index) for n in node.children]
-      node.rule := nodeCondExpr(ns.1, ns.2, ns.3)
-      [nodeCondExpr(rs.nodes.1, rs.nodes.2, rs.nodes.3), rs.env]
+      exprNode := addNode!([ce], ctx)
+      i1 := lastIndex ctx + 1
+      r1 := walk(ce.cond, ctx, env)
+      i2 := lastIndex ctx + 1
+      r2 := walk(ce.truebr, ctx, r1.env)
+      i3 := lastIndex ctx + 1
+      r3 := walk(ce.falsebr, ctx, r1.env)
+      exprNode.children := [node(i1, ctx), node(i2, ctx), node(i3, ctx)]
+      exprNode.rule := nodeCondExpr(nodeRef(i1), nodeRef(i2), nodeRef(i3))
+      ++ TODO: "r2.env" and "r3.env" should be merged and passed forward
+      ++ instead of just "env". Merging means that if the same variable was
+      ++ introduced in both branches then it should be present in the final
+      ++ environment.
+      [nodeCondExpr(r1.node, r2.node, r3.node), env]
 
     walkFun (fn, ctx, env) ==
       debug ["Processing function" :: PF, string(fn.name :: PF)]
@@ -945,18 +958,19 @@ SpadTypeChecker() : Exports == Implementation where
         args' := reverse args'
 
         ctx' := nodeArray ctx
-        node := addNode!([mt], mt.type, ctx')
-        rs := addChildren(node, [fn.body], ctx', env')
-        node.rule := nodeRef(2)
+        bodyNode := addNode!([mt], mt.type, ctx')
+        r := walk(fn.body, ctx', env')
+        bodyNode.rule := nodeRef(bodyNode.index + 1)
+        bodyNode.children := [node(bodyNode.index + 1, ctx)]
 
         debug ["Tree ready for unification :" :: PF]
         debug [ctx' :: PF]
 
         if check ctx' then
           ts := types ctx'
-          body := rewrite(rs.nodes.1)$SpadTreeFillInTypes(ts)
+          fnBody := rewrite(r.node)$SpadTreeFillInTypes(ts)
           fnNode.type := [mt]
-          return [nodeFun(fn.name, args', mt.type, body), rs.env]
+          return [nodeFun(fn.name, args', mt.type, fnBody), env]
 
       fail (["No matching signatures for function" :: PF, string bold(fn.name :: PF),
              "found!" :: PF, pile ["Candidates were:" :: PF, :[mt :: PF for mt in sigs]]])
@@ -978,12 +992,13 @@ SpadTypeChecker() : Exports == Implementation where
         env := addMode(arg.name, arg.type, env)
         env := addModemapsFromCategory([arg.name], arg.type, env)
 
-      node := addNode!([ft], sig.type, ctx)
-      rs := addChildren(node, [ft.capsule], ctx, env)
-      node.rule := nodeRef(node.index + 1)
+      ftor := addNode!([ft], sig.type, ctx)
+      r := walk(ft.capsule, ctx, env)
+      ftor.rule := nodeRef(ftor.index + 1)
+      ftor.children := [node(ftor.index + 1, ctx)]
 
       ext := if emptyNode? ft.extends then ['Type] else ft.extends
-      [nodeFtor(ft.name, ft.args, ft.type, ext, rs.nodes.1), rs.env]
+      [nodeFtor(ft.name, ft.args, ft.type, ext, r.node), env]
 
     walkImport (im, ctx, env) ==
       debug ["Importing" :: PF, im.type :: PF]
@@ -1013,15 +1028,16 @@ SpadTypeChecker() : Exports == Implementation where
           args := [[arg.name, nodeRef(node.index)]$NT, :args]
         args := [arg, :args]
       ++ finally, generate a node with result type
-      node := addNode!(emptyNode(), retType, ctx)
-      node.rule := nodeRef(node.index + 1)
-      rs := addChildren(node, [lam.body], ctx, env)
-      [nodeLambda(reverse args, nodeRef(node.index), rs.nodes.1), rs.env]
+      lamBody := addNode!(emptyNode(), retType, ctx)
+      r := walk(lam.body, ctx, env)
+      lamBody.rule := nodeRef(lamBody.index + 1)
+      lamBody.children := [node(lamBody.index + 1, ctx)]
+      [nodeLambda(reverse args, nodeRef(lamBody.index), r.node), env]
 
     walkLoop (lp, ctx, env) ==
       debug ["Loop statement." :: PF]
-      node := addNode!([lp], voidType, ctx)
       env' := env
+      loopBody := addNode!([lp], voidType, ctx)
       loopChildren : List(TCN) := []
 
       debug ["Processing" :: PF, #(lp.itors) :: PF, "iterator(s)." :: PF]
@@ -1032,49 +1048,60 @@ SpadTypeChecker() : Exports == Implementation where
           [nodeApp(['List], [itorVar.type]),
            nodeApp(['UniversalSegment], [itorVar.type])]
         itorSeq := addNode!(itor.seq, seqType, ctx)
+        r := walk(itor.seq, ctx, env)
         itorSeq.rule := nodeRef(itorSeq.index + 1)
-        rs := addChildren(itorSeq, [itor.seq], ctx, env)
+        itorSeq.children := [node(itorSeq.index + 1, ctx)]
         ++ iterator variable is added to loop's body environment,
         ++ but is also known to guards
         env' := addMode(itor.var, itorVar.type, env')
-        nItors := [[itor.var, rs.nodes.1]$IT, :nItors]
-        loopChildren := [itorSeq, itorVar, :loopChildren]
+        concat!(nItors, [itor.var, r.node]$IT)
+        concat!(loopChildren, [itorVar, itorSeq])
 
       debug ["Processing" :: PF, #(lp.guards) :: PF, "guard(s)." :: PF]
       nGuards : List(N) := []
       for guard in lp.guards repeat
         guardNode := addNode!(guard, booleanType, ctx)
+        r := walk(guard, ctx, env')
         guardNode.rule := nodeRef(guardNode.index + 1)
-        rs := addChildren(node, [guard], ctx, env')
-        nGuards := [rs.nodes.1, :nGuards]
-        loopChildren := [guardNode, :loopChildren]
+        guardNode.children := [node(guardNode.index + 1, ctx)]
+        concat!(nGuards, r.node)
+        concat!(loopChildren, guardNode)
+        ++ Guard may introduce a variable and it must be visible in loop's body!
+        env' := r.env
 
       debug ["Processing loop body." :: PF]
-      node.children := reverse loopChildren
-      rs := addChildren(node, [lp.body], ctx, env')
-      [nodeLoop(lp.kind, reverse nItors, reverse nGuards, first rs.nodes), env]
+      r := walk(lp.body, ctx, env')
+      [nodeLoop(lp.kind, nItors, nGuards, r.node), env]
 
     walkSeg (seg, ctx, env) ==
       debug ["Processing segment:" :: PF, string(seg :: PF)]
-      segChildren : List(TCN) := []
       segType := addTypeVar! ctx
-      node := addNode!([seg], nodeApp(['UniversalSegment], [segType]), ctx)
+      segNode := addNode!([seg], nodeApp(['UniversalSegment], [segType]), ctx)
+      segChildren : List(TCN) := []
+
       segStart := addNode!(emptyNode(), segType, ctx)
+      (newStart, env') := walk(seg.start, ctx, env)
       segStart.rule := nodeRef(segStart.index + 1)
-      rs1 := addChildren(segStart, [seg.start], ctx, env)
-      segChildren := [segStart, :segChildren]
+      segStart.children := [node(segStart.index + 1, ctx)]
+      segNode.children := [segStart]
+
+      newEnd := seg.end
       if not emptyNode? seg.end then
         segEnd := addNode!(emptyNode(), segType, ctx)
+        (newEnd, env') := walk(seg.end, ctx, env)
         segEnd.rule := nodeRef(segEnd.index + 1)
-        rs2 := addChildren(segEnd, [seg.end], ctx, env)
-        segChildren := [segEnd, :segChildren]
+        segEnd.children := [node(segEnd.index + 1, ctx)]
+        concat!(segNode.children, segEnd)
+
+      newStep := seg.step
       if not emptyNode? seg.step then
         segStep := addNode!(emptyNode(), integerType, ctx)
+        (newStep, env') := walk(seg.step, ctx, env)
         segStep.rule := nodeRef(segStep.index + 1)
-        rs3 := addChildren(segStep, [seg.step], ctx, env)
-        segChildren := [segStep, :segChildren]
-      node.children := reverse segChildren
-      [[seg], env]
+        segStep.children := [node(segStep.index + 1, ctx)]
+        concat!(segNode.children, segStep)
+
+      [nodeSeg(newStart, newEnd, newStep), env]
 
     walkSeq (s, ctx, env) ==
       debug ["Found sequence of" :: PF, #(s.list) :: PF, "expressions." :: PF]
