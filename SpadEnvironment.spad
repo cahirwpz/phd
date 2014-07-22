@@ -61,7 +61,7 @@ SpadEnvironment() : Exports == Implementation where
     addDomain : (APP, %) -> %
     addModemapsFromCategory : (N, N, %) -> %
 
-    addModemap : (Symbol, APP, List(N), %) -> %
+    addModemap : (Symbol, N, List(N), %) -> %
     getModemap : (Symbol, %) -> List(SpadModemap)
 
     addMode : (Symbol, N, %) -> %
@@ -112,7 +112,7 @@ SpadEnvironment() : Exports == Implementation where
       res
 
     addModemap(op, dom, args, env) ==
-      debug ["EnvAddModeMap" :: PF, paren [op :: PF, dom :: PF, :[arg :: PF for arg in args]]]
+      debug ["EnvAddModeMap" :: PF, paren [op :: PF, dom :: PF, bracket [arg :: PF for arg in args]]]
       sdom := convert dom
       sargs := [convert arg for arg in args]
       m := saveMode()

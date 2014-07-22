@@ -813,7 +813,8 @@ SpadTypeChecker() : Exports == Implementation where
         for f in r.fields repeat
           env := envAddType(f.type, env)
         for f in makeRecordFunList t repeat
-          env := addMode(f.name, f.type, env)
+          mt := (f :: NT).type :: MT
+          env := addModemap(f.name, t, [mt.type, :mt.args], env)
       env
 
     walkApp : (APP, CTX, ENV) -> R
@@ -842,8 +843,7 @@ SpadTypeChecker() : Exports == Implementation where
         if recordType? mode then
           eltNode := nodeApp(['elt], [a.function, :a.args])
           debug ["Rewrote" :: PF, bold(a :: PF), "to" :: PF, bold(eltNode :: PF), "!" :: PF]
-          for f in makeRecordFunList mode repeat
-            env := addMode(f.name, f.type, env)
+          env := envAddType(mode, env)
           ++ hack that adds record field as a type singleton to the environment
           for sym in a.args | symbol? sym repeat
             env := addMode(sym :: Symbol, sym, env)
@@ -871,6 +871,19 @@ SpadTypeChecker() : Exports == Implementation where
         r := walk(nodeAssign(te.expr, a.rval), ctx, r.env)
         a := r.node :: ASS
         [nodeAssign(nodeTypeExpr('_:, a.lval, te.type), a.rval), r.env]
+
+      if apply? a.lval then
+        app := a.lval :: APP
+        fn := app.function :: Symbol
+        mode := getMode(fn, env)
+        if recordType? mode then
+          eltNode := nodeApp(['setelt!], [app.function, :app.args, a.rval])
+          debug ["Rewrote" :: PF, bold(a :: PF), "to" :: PF, bold(eltNode :: PF), "!" :: PF]
+          env := envAddType(mode, env)
+          ++ hack that adds record field as a type singleton to the environment
+          for sym in app.args | symbol? sym repeat
+            env := addMode(sym :: Symbol, sym, env)
+          return walk(eltNode, ctx, env)
       
       type := addTypeVar! ctx
       intro := false
@@ -996,7 +1009,7 @@ SpadTypeChecker() : Exports == Implementation where
       cat := nodeApp(['Category], [])
       for arg in ft.args repeat
         typ := arg.type :: APP
-        env := addModemap(typ.function :: Symbol, typ, [cat], env)
+        env := addModemap(typ.function :: Symbol, [typ], [cat], env)
         env := addMode(arg.name, arg.type, env)
         env := addModemapsFromCategory([arg.name], arg.type, env)
 

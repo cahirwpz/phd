@@ -3,7 +3,11 @@ Test7() : Exports == Implementation where
 
   Exports ==> with
     allPositive? : List(Integer) -> Boolean
+    positive? : List(Integer) -> List(Boolean)
 
   Implementation ==> add
     allPositive? l ==
       every?(i +-> i > 0, l)
+
+    positive? l ==
+      [i > 0 for i in l]

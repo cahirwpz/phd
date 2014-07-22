@@ -1,0 +1,34 @@
+)abbrev domain TEST6 Test6
+Test6() : Exports == Implementation where
+  I ==> Integer
+  NNI ==> NonNegativeInteger
+  PI ==> PositiveInteger
+  F ==> Float
+  S ==> String
+
+  R ==> Record(a : S, b : I, c : F)
+
+  Exports ==> with
+    foo : I -> Record(a : I, b : I)
+
+    getA : R -> S
+    getB : R -> I
+    getC : R -> F
+    setA : (R, S) -> S
+    setB : (R, I) -> I
+    setC : (R, F) -> F
+
+  Implementation ==> add
+    foo x ==
+      [x, 42]
+
+    getA x == x.a
+    getB x == x.b
+    getC x == x.c
+
+    setA(x, n) ==
+      x.a := n
+    setB(x, n) ==
+      x.b := n
+    setC(x, n) ==
+      x.c := n
