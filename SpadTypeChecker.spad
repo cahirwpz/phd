@@ -112,18 +112,31 @@ TypeUnifier() : Exports == Implementation where
     occurs? (tvar, n) ==
       import List(N)
 
+      symbol? n => false
+      typeAny? n => false
+
       apply? n =>
         app := n :: APP
         any?(m +-> occurs?(tvar, m), [app.function, :app.args])
       mappingType? n =>
         mt := n :: MT
         any?(m +-> occurs?(tvar, m), [mt.type, :mt.args])
+      typeOrigin? n =>
+        te := n :: TE
+        occurs?(tvar, te.expr) or occurs?(tvar, te.type)
       typeVar? n =>
         (n :: MR) = tvar
-      false
+
+      fail ["occurs?: case not handled for" :: PF, n :: PF]
+      error ""
 
     unbound? n ==
       import List(N)
+
+      emptyNode? n => true
+      symbol? n => false
+      typeAny? n => false
+      typeVar? n => true
 
       apply? n =>
         app := n :: APP
@@ -131,8 +144,12 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         any?(unbound?, [mt.type, :mt.args])
-      typeAny? n => false
-      typeVar? n or emptyNode? n
+      typeOrigin? n =>
+        te := n :: TE
+        unbound? te.expr or unbound? te.type
+
+      fail ["unbound?: case not handled for" :: PF, n :: PF]
+      error ""
 
     freeVars n ==
       import List(N)
@@ -147,20 +164,31 @@ TypeUnifier() : Exports == Implementation where
       typeExpr? n =>
         te := n :: TE
         concat(freeVars te.type, freeVars te.expr)
-      []
+
+      fail ["freeVars: case not handled for" :: PF, n :: PF]
+      error ""
 
     substitute(n : N, var : MR, term : N) : N ==
+      emptyNode? n or symbol? n or typeAny? n => n
+
       apply? n =>
         app := n :: APP
         lst := [substitute(k, var, term) for k in [app.function, :app.args]]
-        [[first lst, rest lst]$APP]
+        nodeApp(first lst, rest lst)
       mappingType? n =>
         mt := n :: MT
         lst := [substitute(k, var, term) for k in [mt.type, :mt.args]]
         nodeMappingType(rest lst, first lst)
-      typeVar? n and (n :: MR) = var =>
-        term 
-      n
+      typeOrigin? n =>
+        te := n :: TE
+        expr := substitute(te.expr, var, term)
+        type := substitute(te.type, var, term)
+        nodeTypeExpr(te.kind, expr, type)
+      typeVar? n =>
+        if (n :: MR) = var then term else n
+
+      fail ["substitute: case not handled for" :: PF, n :: PF]
+      error ""
 
     substitute(n : N, subst : SUBST) : N ==
       for s in entries subst repeat
@@ -186,12 +214,6 @@ TypeUnifier() : Exports == Implementation where
 
     unifyType(n1 : N, n2 : N) : URES ==
       debug [brace(n1 :: PF), "~" :: PF, brace(n2 :: PF)]
-
-      -- throw away type origin qualifier
-      if typeOrigin? n1 then
-        n1 := (n1 :: TE).expr
-      if typeExpr? n2 then
-        n2 := (n2 :: TE).expr
 
       -- left or right node is a type variable => just generate a substitution
       typeVar? n1 and typeVar? n2 =>
@@ -244,6 +266,16 @@ TypeUnifier() : Exports == Implementation where
         nt2 := n2 :: NT
         nt1.name ~= nt2.name => "failed"
         unifyType(nt1.type, nt2.type)
+      typeOrigin? n1 and typeOrigin? n2 =>
+        te1 := n1 :: TE
+        te2 := n2 :: TE
+        unifyTypeList [[te1.type, te2.type]$P, [te1.expr, te2.expr]$P]
+      typeOrigin? n1 =>
+        te1 := n1 :: TE
+        unifyType(te1.expr, n2)
+      typeOrigin? n2 =>
+        te2 := n2 :: TE
+        unifyType(n1, te2.expr)
 
       -- constants
       symbol? n1 and symbol? n2 and (n1 :: Symbol) = (n2 :: Symbol) => [[]]
@@ -395,6 +427,7 @@ TCNodeArray() : Exports == Implementation where
   ENV ==> SpadEnvironment
   MT ==> SpadMappingType(N)
   MR ==> SpadMarker(N)
+  TE ==> SpadTypeExpr(N)
   SUBST ==> AssociationList(MR, List(N))
   URES ==> Union(SUBST, "failed")
   PF ==> PrintableForm
@@ -521,7 +554,8 @@ TCNodeArray() : Exports == Implementation where
     addType!(n, type, x) ==
       debug ["Adding type alternative of" :: PF, type :: PF, "to node" :: PF, number(n.index) :: PF]
       not typeVar? n.type =>
-        error "addType! works only on type variants"
+        fail ("addType! works only on type variants" :: PF)
+        error ""
       typevars := x.typevars
       tvar := n.type :: MR
       typevars(tvar) := 
@@ -651,7 +685,12 @@ TCNodeArray() : Exports == Implementation where
         nref := node(mr.id, x) -- referenced node
         nodesMatch!(n, nref, x)
 
-      error "inferType: Unknown rule!"
+      typeOrigin? n.rule =>
+        fun := n.children.1
+        nodeType!(n, [fun.type], x)
+
+      fail ["inferType: case not handled for" :: PF, n.rule :: PF]
+      error ""
 
     countProgress : % -> Record(a : Integer, b : Integer)
     countProgress x ==
@@ -1231,8 +1270,12 @@ SpadTypeChecker() : Exports == Implementation where
                "must originate from" :: PF, bold(te.type :: PF),
                "type!" :: PF])
 
+        originNode := addNode!([te], ctx)
         env := envAddType(te.type, env)
+        i := lastIndex ctx + 1
         r := walk(te.expr, ctx, env)
+        originNode.rule := nodeTypeExpr('_$, nodeRef(i), te.type)
+        originNode.children := [node(i, ctx)]
         [r.node, r.env]
 
       fail ["Type expression" :: PF, bold red paren(te :: PF), "not handled yet!" :: PF]
