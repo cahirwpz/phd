@@ -121,6 +121,12 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         any?(m +-> occurs?(tvar, m), [mt.type, :mt.args])
+      namedType? n =>
+        nt := n :: NT
+        occurs?(tvar, nt.type)
+      recordType? n =>
+        rt := n :: RT
+        any?(m +-> occurs?(tvar, m), [f.type for f in rt.fields])
       typeOrigin? n =>
         te := n :: TE
         occurs?(tvar, te.expr) or occurs?(tvar, te.type)
@@ -141,6 +147,12 @@ TypeUnifier() : Exports == Implementation where
       apply? n =>
         app := n :: APP
         any?(unbound?, [app.function, :app.args])
+      namedType? n =>
+        nt := n :: NT
+        unbound? nt.type
+      recordType? n =>
+        rt := n :: RT
+        any?(unbound?, [f.type for f in rt.fields])
       mappingType? n =>
         mt := n :: MT
         any?(unbound?, [mt.type, :mt.args])
@@ -169,7 +181,10 @@ TypeUnifier() : Exports == Implementation where
       error ""
 
     substitute(n : N, var : MR, term : N) : N ==
-      emptyNode? n or symbol? n or typeAny? n => n
+      emptyNode? n => n
+      string? n => n
+      symbol? n => n
+      typeAny? n => n
 
       apply? n =>
         app := n :: APP
@@ -179,6 +194,13 @@ TypeUnifier() : Exports == Implementation where
         mt := n :: MT
         lst := [substitute(k, var, term) for k in [mt.type, :mt.args]]
         nodeMappingType(rest lst, first lst)
+      namedType? n =>
+        nt := n :: NT
+        nodeNamedType(nt.name, substitute(nt.type, var, term))
+      recordType? n =>
+        rt := n :: RT
+        lst := [[f.name, substitute(f.type, var, term)]$NT for f in rt.fields]
+        nodeRecordType(lst)
       typeOrigin? n =>
         te := n :: TE
         expr := substitute(te.expr, var, term)
@@ -388,7 +410,9 @@ TCNode() : Exports == Implementation where
     coerce x ==
       done := if done? x then green("(+)" :: PF) else red("(-)" :: PF)
       p := hconcat [done, right(4, number(x.index) :: PF)]
-      cl := bracket [number(n.index) :: PF for n in x.children]
+      cl :=
+        empty? x.children and value? x.node => bold(x.node :: PF)
+        bracket [number(n.index) :: PF for n in x.children]
       emptyNode? x.rule =>
         spaces [p, cl, "is" :: PF, bold (x.type :: PF)]
       spaces [p, cl, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, bold (x.type :: PF)]

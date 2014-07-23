@@ -57,6 +57,8 @@ SpadNodeCategory() : Category == ParsableCategory with
   typeAny? : % -> Boolean
   typeVar? : % -> Boolean
 
+  value? : % -> Boolean
+
   coerce : % -> DoubleFloat
   coerce : % -> Integer
   coerce : % -> SpadApply(%)
@@ -1211,6 +1213,8 @@ SpadNode() : Exports == Implementation where
     typeVar? n ==
       not n case marker => false
       n.marker.kind = 'typevar and n.marker.id > 0
+
+    value? n == float? n or integer? n or string? n or symbol? n
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]
