@@ -52,17 +52,17 @@ SpadMacroExpander() : Exports == Implementation where
       lastCtx := table()
 
     rewrite (seq : SpadSequence(N)) : N ==
-      seq.kind ~= "Sequence" =>
-        nodeSeq(seq.kind, [rewrite ex for ex in seq.list])
+      seq.kind = "Sequence" or seq.kind = "Capsule" =>
+        newCtx()
+        nodes := [rewrite ex for ex in seq.list]
+        lastCtx := discardCtx()
 
-      newCtx()
-      nodes := [rewrite ex for ex in seq.list]
-      lastCtx := discardCtx()
+        -- eliminate leftovers after consumed macros
+        nodes := [node for node in nodes | not emptyNode? node]
+        empty? nodes => emptyNode()
+        nodeSeq(seq.kind, nodes)
 
-      -- eliminate leftovers after consumed macros
-      nodes := [node for node in nodes | not emptyNode? node]
-      empty? nodes => emptyNode()
-      nodeSeq(seq.kind, nodes)
+      nodeSeq(seq.kind, [rewrite ex for ex in seq.list])
 
     rewrite (app : SpadApply(N)) : N ==
       if symbol? app.function then

@@ -56,6 +56,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   where? : % -> Boolean
   typeAny? : % -> Boolean
   typeVar? : % -> Boolean
+  subType? : % -> Boolean
 
   value? : % -> Boolean
 
@@ -527,6 +528,8 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
         symbol paren(argl)
       funSym = 'construct =>
         bracket argl
+      funSym = 'leave =>
+        "break" :: PF
       funSym = 'exit =>
         hconcat ["exit" :: PF, brace(first argl), paren(rest argl)]
       funSym = 'return =>
@@ -635,7 +638,7 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
 
     construct(k, e, t) ==
       operators : List Symbol :=
-        ['case, 'has, 'is, 'pretend, ':, '::, '@, '_$]
+        ['case, 'has, 'is, 'pretend, ':, '::, '@, '_$, '_<_:]
       not member?(k, operators) =>
         error "Not a type expression operator!"
       [k, e, t]$Rep
@@ -646,8 +649,9 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
         else [symbol ex.1, parse ex.2, parse ex.3]
 
     convert x ==
-      k := if x.kind = '_$ then 'Sel else x.kind
-      convert [convert k, convert x.expr, convert x.type]
+      x.kind = '_$ =>
+        convert [convert 'Sel, convert x.type, convert x.expr]
+      convert [convert x.kind, convert x.expr, convert x.type]
 
     coerce ex ==
       spaces [ex.expr :: PF, ex.kind :: PF, ex.type :: PF]
@@ -1157,6 +1161,7 @@ SpadNode() : Exports == Implementation where
     nodeRef : NNI -> %
     nodeSeg : (%, %, %) -> %
     nodeSeq : (Union("Capsule", "Sequence", "Tuple"), List(%)) -> %
+    nodeSubType : (%, %) -> %
     nodeSumType : (Union("Join", "Domain", "Package", "Body"), List(%)) -> %
     nodeTypeExpr : (Symbol, %, %) -> %
     nodeUnionType : List(%) -> %
@@ -1213,6 +1218,9 @@ SpadNode() : Exports == Implementation where
     typeVar? n ==
       not n case marker => false
       n.marker.kind = 'typevar and n.marker.id > 0
+    subType? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = '_<_:
 
     value? n == float? n or integer? n or string? n or symbol? n
 
@@ -1506,6 +1514,7 @@ SpadNode() : Exports == Implementation where
     nodeSeq (kind, list) == [[kind, list]$SEQ]
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeExpr (kind, expr, type) == [[kind, expr, type]$TE]
+    nodeSubType (type1, type2) == [['_<_:, type1, type2]$TE]
     nodeSumType (kind, types) == [[kind, types]$ST]
     nodeUnionType variants == [[variants]$UT]
     nodeWhere (body, env) == [[body, env]$W]
