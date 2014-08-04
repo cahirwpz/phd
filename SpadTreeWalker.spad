@@ -61,18 +61,12 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeCondExpr(rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr)
 
       rewrite (fn : FN) : N ==
-        argl : List(N) := []
-        for arg in fn.args repeat
-          arg' :=
-            namedType? arg =>
-              t := arg :: NT
-              nodeNamedType(t.name, rewrite t.type)
-            arg
-          argl := [arg', :argl]
-        nodeFun(fn.name, reverse argl, rewrite fn.type, rewrite fn.body)
+        args' := [rewrite arg for arg in fn.args]
+        nodeFun(fn.name, args', rewrite fn.type, rewrite fn.body)
 
       rewrite (ft : FT) : N ==
-        nodeFtor(ft.name, ft.args, rewrite ft.type, rewrite ft.extends, rewrite ft.capsule)
+        args' := [rewrite(arg) :: NT for arg in ft.args]
+        nodeFtor(ft.name, args', rewrite ft.type, rewrite ft.extends, rewrite ft.capsule)
 
       rewrite (im : IM) : N ==
         nodeImport(rewrite im.type)

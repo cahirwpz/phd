@@ -243,6 +243,7 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
 )abbrev domain SPTNAMED SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
+  MT ==> SpadMappingType(N)
 
   Exports ==> ParsableCategory with
     elt : (%, "name") -> Symbol
@@ -273,11 +274,15 @@ SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
       signature? ex =>
         -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
         -- (SIGNATURE name Type constant)
+        -- (SIGNATURE (name) Type constant) ???
+        name :=
+          list? ex.2 => symbol ex.2.1
+          symbol ex.2
         res : N := parse car ex.3
         targs : List(N) := if #ex = 3
           then [parse e for e in destruct cdr ex.3]
-          else [parse ex.4 ]
-        [symbol ex.2, [[targs, res] $ SpadMappingType(N)]]
+          else [parse ex.4]
+        [name, [[targs, res]$MT]]
       error "Cannot parse named type!"
 
     convert x ==

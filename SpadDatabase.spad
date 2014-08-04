@@ -34,22 +34,6 @@ SpadCtorModeMap() : Exports == Implementation where
       ftor := bold hconcat [x.name :: PF, paren [arg :: PF for arg in x.args]]
       pile [spaces [ftor, ":" :: PF], x.type :: PF]
 
-)abbrev domain SPCC SpadCtorCategory
-SpadCtorCategory() : Exports == Implementation where
-  N ==> SpadNode
-  PF ==> PrintableForm
-
-  Exports ==> Join(CoercibleTo(SpadNode), CoercibleTo(PrintableForm)) with
-    convert : SExpression -> %
-
-  Implementation ==> add
-    convert x == x pretend %
-
-    coerce (x : %) : N ==
-      parse (x pretend SExpression)
-    coerce (x : %) : PF ==
-      (x :: N) :: PF
-
 )abbrev domain SPOP SpadOperation
 SpadOperation() : Exports == Implementation where
   N ==> SpadNode
@@ -64,6 +48,8 @@ SpadOperation() : Exports == Implementation where
     elt : (%, "type") -> MT
     elt : (%, "signature") -> NT
     elt : (%, "condition") -> N
+
+    coerce : % -> SpadNode
 
   Implementation ==> add
     import SpadNode
@@ -92,7 +78,13 @@ SpadOperation() : Exports == Implementation where
       #sig < 3 or (symbol? sig.3 and symbol sig.3 = 'T) => emptyNode()
       parse sig.3
 
-    coerce x ==
+    coerce (x : %) : SpadNode ==
+      c := x.condition
+      t := nodeNamedType(x.name, [x.type])
+      emptyNode? c => t
+      nodeCondExpr(c, t, emptyNode())
+
+    coerce (x : %) : PrintableForm ==
       cond := x.condition
       emptyNode? cond => x.signature :: PF 
       pile [x.signature :: PF, spaces [bold("when" :: PF), cond :: PF]]
@@ -104,7 +96,7 @@ SpadDatabase() : with
       ++ returns constructor argument names
     getCtorArgsKind : Symbol -> List Boolean
       ++ returns constructor argument kind: true when a type, false when a value
-    getCtorCategory : Symbol -> SpadCtorCategory
+    getCtorCategory : Symbol -> SpadNode
     getCtorKind : Symbol -> Union("domain", "category", "package")
       ++ returns constructor kind
     getCtorModeMap : Symbol -> SpadCtorModeMap
@@ -112,6 +104,7 @@ SpadDatabase() : with
     getSourceFile : Symbol -> String
   == add
     import SExpression
+    import SpadNode
 
     getOperationList t ==
       -- Integer
@@ -129,7 +122,7 @@ SpadDatabase() : with
     getCtorCategory t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORCATEGORY)$Lisp
       null? sex => error "Unknown constructor!"
-      convert(sex)
+      parse(sex)
 
     getCtorModeMap t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp

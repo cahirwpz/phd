@@ -1,0 +1,100 @@
+)abbrev package STSYMSUB SpadTreeSymbolSubstitute
+SpadTreeSymbolSubstitute(VAR : Symbol, TERM : SpadNode) :
+    SpadTreeWalkerCategory
+  == add
+    rewrite (s : Symbol) : SpadNode ==
+      s = VAR => TERM
+      [s]
+
+)abbrev package SPTYPE SpadType
+SpadType() : Exports == Implementation where
+  PF ==> PrintableForm
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  FT ==> SpadFunctor(N)
+  NT ==> SpadNamedType(N)
+  ST ==> SpadSumType(N)
+
+  Exports ==> with
+    getFunctor : Symbol -> SpadFunctor(N)
+    listHasCategories : (SpadFunctor(N), List(N)) -> List(N)
+
+  Implementation ==> add
+    import SpadDatabase
+    import SpadNode
+    import Logger('Type)
+    import Printer
+
+    getFunctor t ==
+      cmm := getCtorModeMap(t)
+      ops := [op :: SpadNode for op in getOperationList(t)]
+
+      if cmm.type = nodeApp(['Category], []) then
+        body := getCtorCategory(t)
+        for arg in cmm.args repeat
+          var := concat("t", string arg.name) :: Symbol
+          term := [arg.name]$N
+          body := rewrite(body)$SpadTreeSymbolSubstitute(var, term)
+      else
+        body := emptyNode()
+
+      [cmm.name, cmm.args, cmm.type, body, nodeSeq("Capsule", ops)]
+
+    builtinTypes : List(Symbol) :=
+      (['Canonical, 'CommutativeStar, 'Type, 'canonicalUnitNormal,
+        'canonicalsClosed, 'finiteAggregate, 'multiplicativeValuation,
+        'noZeroDivisors, 'shallowlyMutable, 'unitsKnown])
+
+    listHasCategories(ftor, hasList) ==
+      type := 
+        if ftor.type = nodeApp(['Category], [])
+          then ftor.extends
+          else ftor.type
+
+      sumType? type =>
+        sum := type :: ST
+        for t in sum.types | apply? t repeat
+          app := t :: APP
+          sym := app.function :: Symbol
+          member?(t, hasList) => "iterate"
+          hasList := [t, :hasList]
+          member?(sym, builtinTypes) => "iterate"
+          ftor' := getFunctor(sym)
+          for term in app.args for arg in ftor'.args repeat
+            -- NOTE: type of argument is ignored
+            var := (arg :: NT).name
+            ftor' := rewrite([ftor'])$SpadTreeSymbolSubstitute(var, term) :: FT
+          hasList := listHasCategories(ftor', hasList)
+        hasList
+      []
+
+)abbrev package SPTYPET SpadTypeTest
+SpadTypeTest() : Exports == Implementation where
+  PF ==> PrintableForm
+  N ==> SpadNode
+
+  Exports ==> with
+    test1 : () -> Void
+
+  Implementation ==> add
+    import Printer
+    import SpadNode
+    import SpadType
+    import MainLogger
+    import Logger('Test)
+    import SpadTreesymbolSubstitute
+
+    test1 ==
+      loggerDefaultLevel "debug"
+      loggerLevel('Parser, "notice")
+      resetTime()
+
+      hasCategories (t : Symbol) : Void ==
+        ftor := getFunctor(t)
+        debug pile [spaces ["Type" :: PF, bold(t :: PF), "is:" :: PF], ftor :: PF]
+        hasCats := listHasCategories(ftor, [])
+        debug pile([spaces ["Type" :: PF, bold(t :: PF), "has:" :: PF],
+                    :[cat :: PF for cat in hasCats]])
+
+      hasCategories('List)
+      hasCategories('Integer)

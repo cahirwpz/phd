@@ -48,7 +48,9 @@ SpadNodeFactory() : Exports == Implementation where
       for f in r.fields repeat
         s : N := [f.name]
         r : N := f.type
-        funs := [['elt, mt([n, s], r)], ['setelt!, mt([n, s, r], r)], :funs]
+        funs := ([[f.name, mt([['constant]$N], [f.name])],
+                  ['elt, mt([n, s], r)],
+                  ['setelt!, mt([n, s, r], r)], :funs])
       funs
 
     makeUnionFunList n ==
@@ -205,6 +207,9 @@ TypeUnifier() : Exports == Implementation where
 
     freeVars n ==
       import List(N)
+
+      integer? n => []
+      symbol? n => []
 
       apply? n =>
         app := n :: APP
@@ -735,13 +740,14 @@ TCNodeArray() : Exports == Implementation where
               "of" :: PF, n.type :: PF, "type." :: PF])
 
       apply? n.rule =>
-        nfun := first n.children -- function node
-        nargs := rest n.children -- argument nodes
+        r := n.rule :: APP
+        nfun := node((r.function :: MR).id, x) -- function node
+        nargs := [node((arg :: MR).id, x) for arg in r.args] -- argument nodes
         fnType := nodeMappingType([narg.type for narg in nargs], n.type)
-        sig := nodeTypeExpr('_$, fnType, typeAny)
+        --sig := nodeTypeExpr('_$, fnType, typeAny)
         --argslst := product [fetch(narg.type, x) for narg in nargs]
         --sigs2 : List(N) := [[[args, n.type]$MT] for args in argslst]
-        nodeType!(nfun, [sig], x)
+        nodeType!(nfun, [fnType], x)
 
       assign? n.rule =>
         r := n.rule :: ASS
@@ -979,7 +985,7 @@ SpadTypeChecker() : Exports == Implementation where
       if symbol? fun then
         s := fun :: Symbol
         if s = 'return or s = 'error then
-          return [nodeApp(fun, args), rs.env]
+          return [nodeApp(fun, args), env]
         fun := nodeTypeExpr('_$, fun, ns.1)
       --[nodeTypeExpr('_@, nodeApp(fun, args), nodeRef(node.index)), rs.env]
       [nodeApp(fun, args), env]
@@ -1288,7 +1294,13 @@ SpadTypeChecker() : Exports == Implementation where
     walkSym (s, ctx, env) ==
       debug ["Symbol lookup for" :: PF, string(s :: PF)]
       -- types : List(N) := [[mm.type] for mm in getModemap(s, env)]
-      types := [nodeTypeExpr('_$, [mm.type], mm.origin) for mm in getModemap(s, env)]
+      types : List(N) := []
+      for mm in getModemap(s, env) repeat
+        mt := mm.type
+        if #mt.args = 1 and mt.args.1 = ['constant] then
+          types := [nodeTypeExpr('_$, mt.type, mm.origin), :types]
+        else
+          types := [nodeTypeExpr('_$, [mm.type], mm.origin), :types]
       mode := getMode(s, env)
       if not emptyNode? mode then
         types := [mode, :types]
