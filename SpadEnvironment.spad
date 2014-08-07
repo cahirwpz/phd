@@ -11,6 +11,8 @@ SpadModemap() : Exports == Implementation where
     elt : (%, "constraint") -> N
     elt : (%, "template") -> Union(Record(type : MT, arg : N), "failed")
 
+    qualifiedType : % -> N
+
   Implementation ==> add
     Rep := List(List(SEX))
 
@@ -46,6 +48,13 @@ SpadModemap() : Exports == Implementation where
       type := pile [type, spaces [bold magenta("from" :: PF), x.origin :: PF]]
       emptyNode? x.constraint => type
       pile [type, spaces [bold magenta("when" :: PF), x.constraint :: PF]]
+
+    qualifiedType x ==
+      mt := x.type
+      if #mt.args = 1 and mt.args.1 = ['constant] then
+        nodeTypeExpr('_$, mt.type, x.origin)
+      else
+        nodeTypeExpr('_$, [mt], x.origin)
 
 )abbrev domain SPENV SpadEnvironment
 SpadEnvironment() : Exports == Implementation where

@@ -17,6 +17,7 @@ SpadNodeFactory() : Exports == Implementation where
     stringType : () -> N
     symbolType : () -> N
     voidType : () -> N
+    categoryType : () -> N
 
     typeAny : () -> N
     typeVar : NNI -> N
@@ -32,6 +33,7 @@ SpadNodeFactory() : Exports == Implementation where
     stringType () == nodeApp(['String], [])
     symbolType () == nodeApp(['Symbol], [])
     voidType () == nodeApp(['Void], [])
+    categoryType () == nodeApp(['Category], [])
 
     typeAny() == [[0, 'typevar]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
@@ -115,6 +117,7 @@ TypeUnifier() : Exports == Implementation where
     occurs? (tvar, n) ==
       import List(N)
 
+      emptyNode? n => false
       string? n => false
       symbol? n => false
       typeAny? n => false
@@ -371,22 +374,29 @@ TypeUnifier() : Exports == Implementation where
       debug vconcat([pile ["Trying to match:" :: PF, vconcat [t1 :: PF for t1 in terms1]],
                      pile ["with:" :: PF, vconcat [t2 :: PF for t2 in terms2]]])
       terms : List(N) := []
-      subst : List(SUBST) := []
+      substList : List(SUBST) := []
       for t1 in terms1 repeat
         for t2 in terms2 repeat
           ures := unifyType(t1, t2)
           failed? ures => "iterate"
-          -- prefer concrete type instead of wildcard
+          ++ prefer concrete type instead of wildcard
           t := if containsWildcard? t1 then t2 else t1
-          terms := [substitute(t, ures :: SUBST), :terms]
-          subst := [ures :: SUBST, :subst]
-      -- remove wildcard if we have more than one match
+          ++ Avoid wildcard propagation by removing all substitutions with
+          ++ wildcards in them.
+          subst : SUBST := [[]]
+          for s in entries(ures :: SUBST) repeat
+            es := remove(containsWildcard?, s.entry)
+            empty? es => "iterate"
+            subst(s.key) := es
+          terms := [substitute(t, subst), :terms]
+          substList := [subst, :substList]
+      ++ Remove wildcard if we have more than one match.
       if #terms > 1 then
-        terms := [t for t in removeDuplicates terms | not typeAny? t]
-      subst' := mergeSubstitutions subst
+        terms := [t for t in removeDuplicates terms | not containsWildcard? t]
+      subst := mergeSubstitutions substList
       --debug pile ["Substitutions:" :: PF, convert(subst')]
       --debug pile ["Terms:" :: PF, :[t :: PF for t in terms]]
-      [terms, subst']
+      [terms, subst]
 
 )abbrev domain TCNODE TCNode
 TCNode() : Exports == Implementation where
@@ -403,15 +413,21 @@ TCNode() : Exports == Implementation where
     elt : (%, "children") -> List(%)
     elt : (%, "rule") -> N
     elt : (%, "type") -> N
+    elt : (%, "env") -> ENV
     setelt! : (%, "index", NNI) -> NNI
     setelt! : (%, "children", List(%)) -> List(%)
     setelt! : (%, "rule", N) -> N
     setelt! : (%, "type", N) -> N
+    setelt! : (%, "node", N) -> N
+    setelt! : (%, "env", ENV) -> ENV
 
     construct : (NNI, N, N) -> %
     substitute! : (SUBST, %) -> Void
     checkAndMarkIfDone! : % -> Boolean
     done? : % -> Boolean
+
+    nodeRef : % -> N
+    typeRef : % -> N
 
   Implementation ==> add
     Rep := Record(ni_index : NNI,
@@ -419,29 +435,36 @@ TCNode() : Exports == Implementation where
                   ni_children : List(%),
                   ni_rule : N,
                   ni_type : N,
+                  ni_env : ENV,
                   ni_done : Boolean)
 
     import SpadNode
     import Printer
     import TypeUnifier
+    import SpadNodeFactory
 
     elt (x, "index") == x.ni_index
     elt (x, "node") == x.ni_node
     elt (x, "children") == x.ni_children
     elt (x, "rule") == x.ni_rule
     elt (x, "type") == x.ni_type
+    elt (x, "env") == x.ni_env
 
     setelt! (x, "index", i) ==
       x.ni_index := i
+    setelt! (x, "node", n) ==
+      x.ni_node := n
     setelt! (x, "children", cl) ==
       x.ni_children := cl
     setelt! (x, "rule", r) ==
       x.ni_rule := r
     setelt! (x, "type", ts) ==
       x.ni_type := ts
+    setelt! (x, "env", ts) ==
+      x.ni_env := ts
 
     construct (i, n, t) ==
-      [i, n, [], emptyNode(), t, false] $ Rep
+      [i, n, [], emptyNode(), t, new(), false] $ Rep
 
     substitute! (subst, x) ==
       x.type := substitute(x.type, subst)
@@ -455,6 +478,12 @@ TCNode() : Exports == Implementation where
 
     done? x == x.ni_done
 
+    nodeRef x ==
+      nodeRef x.index
+
+    typeRef x ==
+      typeVar x.index
+
     coerce x ==
       done := if done? x then green("(+)" :: PF) else red("(-)" :: PF)
       p := hconcat [done, right(4, number(x.index) :: PF)]
@@ -466,10 +495,11 @@ TCNode() : Exports == Implementation where
       spaces [p, cl, "<-" :: PF, brace (x.rule :: PF), "is" :: PF, bold (x.type :: PF)]
 
 )abbrev package STFITS SpadTreeFillInTypes
-SpadTreeFillInTypes(ns : List(N)) : SpadTreeWalkerCategory == Implementation where
+SpadTreeFillInTypes(ns : List(TCNode)) : SpadTreeWalkerCategory == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
   TE ==> SpadTypeExpr(N)
+  NNI ==> NonNegativeInteger
 
   Implementation ==> add
     import Logger('Fill)
@@ -483,15 +513,18 @@ SpadTreeFillInTypes(ns : List(N)) : SpadTreeWalkerCategory == Implementation whe
       [te]
 
     rewrite (mr : SpadMarker(N)) : N ==
-      not mr.kind = 'noderef => [mr]
-      t := ns.(mr.id)
-      typeOrigin? t =>
-        te := coerce(t)@TE
-        typeOrigin? te.type =>
-          te' := coerce(te.type)@TE
-          te'.type
-        te.type
-      t
+      mr.kind = 'typevar =>
+        t := ns(mr.id).type
+        typeOrigin? t =>
+          te := coerce(t)@TE
+          typeOrigin? te.type =>
+            te' := coerce(te.type)@TE
+            te'.type
+          te.type
+        t
+      mr.kind = 'noderef =>
+        rewrite ns(mr.id).node
+      error ""
 
 )abbrev package TCNA TCNodeArray
 TCNodeArray() : Exports == Implementation where
@@ -512,22 +545,16 @@ TCNodeArray() : Exports == Implementation where
   Exports ==> CoercibleTo(PrintableForm) with
     nodeArray : () -> %
     nodeArray : % -> %
-    types : % -> List(N)
 
-    lastNode : % -> TCN
-    lastIndex : % -> NNI
-    addNode! : (N, %) -> TCN
-    addNode! : (N, N, %) -> TCN
-    addNode! : (N, List(N), %) -> TCN
+    addNode! : % -> TCN
+    addNode! : (%, ENV) -> TCN
     addTypeVar! : % -> N
-    addType! : (TCN, N, %) -> Void
-    setType! : (TCN, N, %) -> Boolean
+    addTypeVar! : (%, List(N)) -> N
+
+    nodes : % -> List(TCN)
 
     apply! : (MR, List(N), %) -> Boolean
     apply! : (SUBST, %) -> Boolean
-
-    node : (NNI, %) -> TCN
-    types : (NNI, %) -> List(N)
 
     coerce : AssociationList(MR, List(N)) -> PF
     check : % -> Boolean
@@ -551,8 +578,6 @@ TCNodeArray() : Exports == Implementation where
     nodeArray x ==
       [flexibleArray [], x.counter, [[]]]
 
-    types x == [n.type for n in entries x.nodes]
-
     coerceTypeVar : (MR, List(N)) -> PF
     coerceTypeVar (tvar : MR, types : List(N)) : PF ==
         ts :=
@@ -568,36 +593,33 @@ TCNodeArray() : Exports == Implementation where
     coerce (x : %) : PF ==
       pile ["Nodes :" :: PF, :[ni :: PF for ni in entries x.nodes]]
 
-    lastNode x ==
-      ns := x.nodes
-      ns(#ns)
-
-    lastIndex x == #(x.nodes)
-
-    addNode!(n, x) ==
-      addNode! (n, addTypeVar! x, x)
-
-    addNode!(n : N, types : List(N), x : %) : TCN ==
-      typevar := addTypeVar! x
-      ni := addNode!(n, typevar, x)
-      typevars := x.typevars
-      typevars(typevar :: MR) := types
+    addNode!(x : %, env : ENV) : TCN ==
+      ni := addNode!(x)
+      ni.env := env
       ni
 
-    addNode!(n : N, type : N, x : %) : TCN ==
-      ni := [#(x.nodes) + 1, n, type]
+    addNode!(x : %) : TCN ==
+      ni := [#(x.nodes) + 1, emptyNode(), emptyNode()]
       concat!(x.nodes, ni)
       ni
 
-    addTypeVar! x ==
+    addTypeVar!(x, types) ==
       x.counter := x.counter + 1
       tvar := typeVar(x.counter)
-      typevars := x.typevars
-      typevars(tvar :: MR) := [emptyNode()]
+      (x.typevars)(tvar :: MR) := types
       tvar
 
-    node (i, x) ==
+    addTypeVar!(x) ==
+      x.counter := x.counter + 1
+      tvar := typeVar(x.counter)
+      (x.typevars)(tvar :: MR) := [emptyNode()]
+      tvar
+
+    node (i : NNI, x : %) : TCN ==
       (x.nodes)(i)
+
+    nodes x ==
+      entries x.nodes
 
     emptyType? : List(N) -> Boolean
     emptyType? nl ==
@@ -610,9 +632,6 @@ TCNodeArray() : Exports == Implementation where
       emptyType? nl => [n]
       nl
 
-    types (i, x) ==
-      fetch(node(i, x).type, x)
-
     unknownType? : (TCN, %) -> Boolean
     unknownType? (n, x) ==
       ++ checks if type attached to the node has form "%a[?]"
@@ -623,25 +642,6 @@ TCNodeArray() : Exports == Implementation where
       types := (x.typevars)(tvar)
       #types > 1 => false
       not unbound? types.1
-
-    setType!(n, type, x) ==
-      debug [number(n.index) :: PF, "is of" :: PF, type :: PF, "type." :: PF]
-      typeVar? n.type =>
-        typevars := x.typevars
-        typevars(n.type :: MR) := [type]
-        true
-      n.type = type
-
-    addType!(n, type, x) ==
-      debug ["Adding type alternative of" :: PF, type :: PF, "to node" :: PF, number(n.index) :: PF]
-      not typeVar? n.type =>
-        fail ("addType! works only on type variants" :: PF)
-        error ""
-      typevars := x.typevars
-      tvar := n.type :: MR
-      typevars(tvar) := 
-        emptyType? typevars(tvar) => [type]
-        [type, :typevars(tvar)]
 
     apply!(var, terms, x) ==
       debug(["Modyfing" :: PF, var :: PF, "type variable with" :: PF,
@@ -747,7 +747,14 @@ TCNodeArray() : Exports == Implementation where
         --sig := nodeTypeExpr('_$, fnType, typeAny)
         --argslst := product [fetch(narg.type, x) for narg in nargs]
         --sigs2 : List(N) := [[[args, n.type]$MT] for args in argslst]
-        nodeType!(nfun, [fnType], x)
+        nodeType!(nfun, [fnType], x) => true
+        
+        ++ Don't panic yet! Let's check the environment for 'elt' function.
+        eltFunList := [qualifiedType(mm) for mm in getModemap('elt, n.env)]
+        fnType := nodeMappingType(cons(nfun.type, [narg.type for narg in nargs]), n.type)
+        ms := findMatches(eltFunList, [fnType])
+        empty? ms.terms => false
+        apply!(ms.subst, x)
 
       assign? n.rule =>
         r := n.rule :: ASS
@@ -890,11 +897,9 @@ SpadTypeChecker() : Exports == Implementation where
   CTX ==> TCNodeArray
   SUBST ==> AssociationList(MR, List(N))
   PF ==> PrintableForm
-  R ==> Record(node : N, env : ENV)
-  RS ==> Record(nodes : List(N), env : ENV)
 
   Exports ==> with
-    walk : (N, CTX, ENV) -> R
+    walk : (N, CTX, ENV) -> TCN
 
   Implementation ==> add
     import SpadEnvironment
@@ -908,19 +913,6 @@ SpadTypeChecker() : Exports == Implementation where
     import PrintableForm
     import TypeUnifier
     import Logger('AST)
-
-    addChildren : (TCN, List(N), CTX, ENV) -> RS
-    addChildren (parent, nodes, ctx, env) ==
-      nl : List(N) := []
-      cl : List(TCN) := []
-      for n in nodes repeat
-        i := lastIndex ctx + 1
-        r := walk(n, ctx, env)
-        env := r.env
-        nl := [r.node, :nl]
-        cl := [node(i, ctx), :cl]
-      parent.children := concat(parent.children, reverse cl)
-      [reverse nl, env]
 
     envAddType : (N, ENV) -> ENV
     envAddType (t, env) ==
@@ -943,364 +935,427 @@ SpadTypeChecker() : Exports == Implementation where
           env := addModemap(f.name, t, [mt.type, :mt.args], env)
       env
 
-    walkApp : (APP, CTX, ENV) -> R
-    walkAssign : (ASS, CTX, ENV) -> R
-    walkCondExpr : (CE, CTX, ENV) -> R
-    walkFun : (FN, CTX, ENV) -> R
-    walkFtor : (FT, CTX, ENV) -> R
-    walkImport : (IM, CTX, ENV) -> R
-    walkLambda : (LAM, CTX, ENV) -> R
-    walkLoop : (LP, CTX, ENV) -> R
-    walkSeg : (SEG, CTX, ENV) -> R
-    walkSeq : (SEQ, CTX, ENV) -> R
-    walkSym : (Symbol, CTX, ENV) -> R
-    walkTypeExpr : (TE, CTX, ENV) -> R
-    walkInt : (Integer, CTX, ENV) -> R
-    walkFlt : (DoubleFloat, CTX, ENV) -> R
-    walkStr : (String, CTX, ENV) -> R
+    walkApp : (APP, CTX, ENV) -> TCN
+    walkAssign : (ASS, CTX, ENV) -> TCN
+    walkCondExpr : (CE, CTX, ENV) -> TCN
+    walkFun : (FN, CTX, ENV) -> TCN
+    walkFtor : (FT, CTX, ENV) -> TCN
+    walkImport : (IM, CTX, ENV) -> TCN
+    walkLambda : (LAM, CTX, ENV) -> TCN
+    walkLoop : (LP, CTX, ENV) -> TCN
+    walkSeg : (SEG, CTX, ENV) -> TCN
+    walkSeq : (SEQ, CTX, ENV) -> TCN
+    walkSym : (Symbol, CTX, ENV) -> TCN
+    walkTypeExpr : (TE, CTX, ENV) -> TCN
+    walkInt : (Integer, CTX, ENV) -> TCN
+    walkFlt : (DoubleFloat, CTX, ENV) -> TCN
+    walkStr : (String, CTX, ENV) -> TCN
+    walkEmpty : (N, CTX, ENV) -> TCN
 
     walkApp (a, ctx, env) ==
-      if symbol? a.function then
-        fn := a.function :: Symbol
-        if fn = 'QUOTE then
-          addNode!([a], symbolType, ctx)
-          return [[a], env]
-        mode := getMode(fn, env)
-        if recordType? mode then
-          eltNode := nodeApp(['elt], [a.function, :a.args])
-          debug ["Rewrote" :: PF, bold(a :: PF), "to" :: PF, bold(eltNode :: PF), "!" :: PF]
-          env := envAddType(mode, env)
-          ++ hack that adds record field as a type singleton to the environment
-          for sym in a.args | symbol? sym repeat
-            env := addMode(sym :: Symbol, sym, env)
-          return walk(eltNode, ctx, env)
+      ++ rewrite QUOTE(symbol) to value 'symbol
+      a.function = ['QUOTE] and #a.args = 1 =>
+        this := addNode!(ctx, env)
+        this.type := symbolType
+        this.node := first a.args
+        this
 
       debug ["Processing function application." :: PF]
-      node := addNode!([a], ctx)
-      rs := addChildren(node, [a.function, :a.args], ctx, env)
-      ns := [nodeRef(n.index) for n in node.children]
-      node.rule := nodeApp(first ns, rest ns)
-      fun := first rs.nodes
-      args := rest rs.nodes
-      if symbol? fun then
-        s := fun :: Symbol
-        if s = 'return or s = 'error then
-          return [nodeApp(fun, args), env]
-        fun := nodeTypeExpr('_$, fun, ns.1)
-      --[nodeTypeExpr('_@, nodeApp(fun, args), nodeRef(node.index)), rs.env]
-      [nodeApp(fun, args), env]
+
+      this := addNode!(ctx, env)
+      this.type := addTypeVar!(ctx)
+
+      funExpr := walk(a.function, ctx, env)
+      argExprList := [walk(arg, ctx, env) for arg in a.args]
+
+      ++ Add origin to function expression. But... is it really necessary?
+      if not(funExpr.node = ['return] or funExpr.node = ['error]) then
+        funExpr.node := nodeTypeExpr('_$, funExpr.node, typeRef(funExpr))
+
+      this.children := [funExpr, :argExprList] 
+      this.rule := 
+        nodeApp(nodeRef(funExpr), [nodeRef(argExpr) for argExpr in argExprList])
+      this.node :=
+        nodeApp(funExpr.node, [argExpr.node for argExpr in argExprList])
+      this
 
     walkAssign (a, ctx, env) ==
-      typeExpr? a.lval => ++ handle "symbol : Type := value"
-        te := a.lval :: TE
-        r := walkTypeExpr(te, ctx, env) -- add to context
-        te := r.node :: TE
-        r := walk(nodeAssign(te.expr, a.rval), ctx, r.env)
-        a := r.node :: ASS
-        [nodeAssign(nodeTypeExpr('_:, a.lval, te.type), a.rval), r.env]
+      this := addNode!(ctx)
+      this.type := addTypeVar!(ctx)
 
-      if apply? a.lval then
-        app := a.lval :: APP
-        fn := app.function :: Symbol
-        mode := getMode(fn, env)
-        if recordType? mode then
-          eltNode := nodeApp(['setelt!], [app.function, :app.args, a.rval])
-          debug ["Rewrote" :: PF, bold(a :: PF), "to" :: PF, bold(eltNode :: PF), "!" :: PF]
-          env := envAddType(mode, env)
-          ++ hack that adds record field as a type singleton to the environment
-          for sym in app.args | symbol? sym repeat
-            env := addMode(sym :: Symbol, sym, env)
-          return walk(eltNode, ctx, env)
-      
-      type := addTypeVar! ctx
-      intro := false
-
+      varIntro? : Boolean
       if symbol? a.lval then
         s := a.lval :: Symbol
         if emptyNode? getMode(s, env) then
           debug ["Processing fresh assignment" :: PF, string(s :: PF)]
-          env := addMode(s, addTypeVar! ctx, env)
-          intro := true
+          env := addMode(s, addTypeVar!(ctx), env)
+          varIntro? := true
+      else
+        varIntro? := false
         
-      assignNode := addNode!([a], type, ctx)
-      i1 := lastIndex ctx + 1
-      r1 := walk(a.lval, ctx, env)
-      i2 := lastIndex ctx + 1
-      r2 := walk(a.rval, ctx, env)
-      assignNode.children := [node(i1, ctx), node(i2, ctx)]
-      assignNode.rule := nodeAssign(nodeRef(i1), nodeRef(i2))
+      left := walk(a.lval, ctx, env)
+      right := walk(a.rval, ctx, env)
+
+      if varIntro? then
+        left.node := nodeTypeExpr('_:, left.node, typeRef(left))
 
       ++ Only left-value environment is propagated!
-      lval :=
-        not intro => r1.node
-        nodeTypeExpr('_:, r1.node, nodeRef(i1))
-      [nodeAssign(lval, r2.node), r1.env]
+      this.env := left.env
+      this.children := [left, right]
+      this.rule := nodeAssign(nodeRef(left), nodeRef(right))
+      this.node := nodeAssign(left.node, right.node)
+      this
 
     walkCondExpr (ce, ctx, env) ==
       debug ["Processing conditional expression." :: PF]
-      exprNode := addNode!([ce], ctx)
-      i1 := lastIndex ctx + 1
-      r1 := walk(ce.cond, ctx, env)
-      i2 := lastIndex ctx + 1
-      r2 := walk(ce.truebr, ctx, r1.env)
-      i3 := lastIndex ctx + 1
-      r3 := walk(ce.falsebr, ctx, r1.env)
-      exprNode.children := [node(i1, ctx), node(i2, ctx), node(i3, ctx)]
-      exprNode.rule := nodeCondExpr(nodeRef(i1), nodeRef(i2), nodeRef(i3))
-      ++ TODO: "r2.env" and "r3.env" should be merged and passed forward
-      ++ instead of just "env". Merging means that if the same variable was
-      ++ introduced in both branches then it should be present in the final
+      this := addNode!(ctx)
+      this.type := addTypeVar!(ctx)
+
+      cond := walk(ce.cond, ctx, env)
+      truebr := walk(ce.truebr, ctx, cond.env)
+      falsebr := walk(ce.falsebr, ctx, cond.env)
+
+      ++ TODO: "truebr.env" and "falsebr.env" should be merged and passed
+      ++ forward instead of just "env". Merging means that if the same variable
+      ++ was introduced in both branches then it should be present in the final
       ++ environment.
-      [nodeCondExpr(r1.node, r2.node, r3.node), env]
+      ++
+      ++ Q: What if a variable "x : T" is defined only in one branch?
+      ++ A: In merged envrionment introduce "x" with type Union(T, "undefined"),
+      ++    and emit a warning when subtyping rule is applied.
+      this.env := env
+      this.children := [cond, truebr, falsebr]
+      this.rule := nodeCondExpr(nodeRef(cond), nodeRef(truebr), nodeRef(falsebr))
+      this.node := nodeCondExpr(cond.node, truebr.node, falsebr.node)
+      this
 
     walkFun (fn, ctx, env) ==
       debug ["Processing function" :: PF, string(fn.name :: PF)]
 
-      i : NNI := lastIndex ctx + 1
-      (fnType, env) := walk([fn.name], ctx, env)
+      fnType : MT := signature fn
 
-      sig := (signature fn).type
-      name := funsig(fn.name, #fn.args)
+      ++ Take the type of function and replace those components, that were not
+      ++ specified, with type variables.
+      typeList : List(N) :=
+        ([(emptyNode?(t) => typeVar(i); t)
+          for i in 1.. for t in [fnType.result, :fnType.args]])
 
-      -- fetch signatures from domain's definition
-      mappings : List(N) := []
-      for t in types(i, ctx) repeat
-        mappingType? t =>
-          mappings := cons(t, mappings)
-        typeOrigin? t =>
-          te := t :: TE
-          te.type = ["%" :: Symbol] =>
-            mappings := cons(t, mappings)
-        "iterate"
+      fnType' := nodeMappingType(rest typeList, first typeList)
 
-      info(["Found" :: PF, string bold(name :: PF), "with signatures :" :: PF,
-            bold bracket [t :: PF for t in mappings]])
+      debug(["Signature associated with function definition :" :: PF,
+             fnType' :: PF])
 
-      -- signature associated with function definition
-      mt := sig :: MT
-      debug ["Signature associated with function definition :" :: PF, mt :: PF]
+      ++ Fetch signatures from the environment, including those defined by
+      ++ the domain / package / function. Filter out those that don't match
+      ++ the type calculated above.
+      candidateList : List(MT) := []
+      for mm in getModemap(fn.name, env) repeat
+        te := qualifiedType(mm) :: TE
+        if te.type = ["%" :: Symbol] then
+          candidate := te.expr
+          ures := unifyType(fnType', candidate)
+          failed? ures => "iterate"
+          candidate := substitute(fnType', ures :: SUBST)
+          candidateList := [candidate :: MT, :candidateList]
 
-      -- prepare function signature for unification
-      types : List(N) := []
-      for type in [mt.type, :mt.args] for i in 1.. repeat
-        if emptyNode? type then
-          type := typeVar(i)
-        types := [type, :types]
-      types := reverse types
-      sig := nodeMappingType(rest types, first types)
+      ++ TODO: Filter out function which have been already defined.
 
-      -- calculate eligible signatures
-      sigs : List(MT) := []
-      for m in mappings repeat
-        ures := unifyType(sig, m)
-        failed? ures => "iterate"
-        sigs := [substitute(sig, ures :: SUBST) :: MT, :sigs]
-      sigs := reverse sigs
+      if not empty? candidateList then
+        info(["Environment contains" :: PF, string bold(fn.name :: PF),
+              "with signatures:" :: PF,
+              bold bracket [c :: PF for c in candidateList]])
+      else
+        info(["Considering" :: PF, string bold(fn.name :: PF),
+              "of type" :: PF, bold(fnType :: PF),
+              "to be a local function!" :: PF])
+        candidateList := [fnType]
 
-      empty? sigs =>
-        fail ("No signature corresponding to the function!" :: PF)
-        error ""
+      debug(["Will perform type check for" :: PF, string bold(fn.name :: PF),
+             "function with following candidate signatures:" :: PF,
+             brace [c :: PF for c in candidateList]])
 
-      debug ["Eligible signatures :" :: PF, brace [sig :: PF for sig in sigs]]
+      this := addNode!(ctx, env)
 
-      fnNode := addNode!([fn], ctx)
+      ++ Perform a type check for each candidate signature.
+      for candidate in candidateList repeat
+        info ["Assume" :: PF, fn.name :: PF, "has type :" :: PF, candidate :: PF]
 
-      -- try to check type for each eligible signature
-      for mt in sigs repeat
-        info ["Assume" :: PF, name :: PF, "has type :" :: PF, mt :: PF]
+        ctx' := nodeArray(ctx)
+        env' := env
 
-        args' : List(N) := []
-        env' := envAddType([mt], env)
-        for arg in fn.args for argType in mt.args repeat
-          argName := (arg :: NT).name
-          args' := [nodeNamedType(argName, argType), :args']
-          env' := addMode(argName, argType, env')
-        args' := reverse args'
+        this := addNode!(ctx', env)
 
-        ctx' := nodeArray ctx
-        bodyNode := addNode!([mt], mt.type, ctx')
-        i := bodyNode.index
-        r := walk(fn.body, ctx', env')
-        bodyNode.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-        bodyNode.children := [node(i + 1, ctx')]
+        ++ For each undefined argument type, add a node with type variable.
+        argList : List(N) := []
+        argTypeList : List(N) := []
+
+        for n in fn.args for t in candidate.args repeat
+          ++ Augment the environment if argument type is known upfront.
+          argName := (n :: NT).name
+          argType :=
+            not emptyNode?(t) => t
+            t := addTypeVar!(ctx')
+            arg := addNode!(ctx', env)
+            arg.type := t
+            arg.node := [argName]
+            this.children := [arg, :this.children]
+            typeRef(arg)
+          argList := [nodeNamedType(argName, argType), :argList]
+          argTypeList := [t, :argTypeList]
+          ++ Make the argument visible inside function body.
+          debug(["Function argument" :: PF, string bold(argName :: PF),
+                 "has type" :: PF, bold(t :: PF)])
+          if not typeVar?(t) then
+            env' := envAddType(t, env')
+          env' := addMode(argName, t, env')
+
+        ++ Add a node that represents the type of function body, always.
+        fnRes := addNode!(ctx', env)
+        fnRes.type :=
+          emptyNode? candidate.result => addTypeVar!(ctx')
+          addTypeVar!(ctx', [candidate.result])
+        fnRes.node := typeRef(fnRes)
+        ++ Augment the environment if result type is known upfront.
+        if not emptyNode? candidate.result then
+          env' := envAddType(candidate.result, env')
+        this.children := [fnRes, :this.children]
+
+        fnBody := walk(fn.body, ctx', env')
+
+        fnRes.children := [fnBody]
+        fnRes.rule := nodeSubType(nodeRef(fnBody), nodeRef(fnRes))
+        fnRes.node := nodeRef(fnBody)
+
+        this.children := reverse this.children
+        this.type := nodeMappingType(reverse argTypeList, fnRes.type)
+        this.node := nodeFun(fn.name, reverse argList, typeRef(fnRes), fnBody.node)
 
         debug ["Tree ready for unification :" :: PF]
         debug [ctx' :: PF]
 
         if check ctx' then
-          ts := types ctx'
-          fnBody := rewrite(r.node)$SpadTreeFillInTypes(ts)
-          fnNode.type := [mt]
-          return [nodeFun(fn.name, args', mt.type, fnBody), env]
+          ns := nodes ctx'
+          this.node := rewrite(this.node)$SpadTreeFillInTypes(ns)
+          return this
 
-      fail (["No matching signatures for function" :: PF, string bold(fn.name :: PF),
-             "found!" :: PF, pile ["Candidates were:" :: PF, :[mt :: PF for mt in sigs]]])
+      fail (["No matching type for function" :: PF, string bold(fn.name :: PF),
+             "found!" :: PF, pile(["Candidates were:" :: PF,
+                                   :[c :: PF for c in candidateList]])])
       error ""
 
     walkFtor (ft, ctx, env) ==
       sig := signature ft
+
       debug ["Processing functor :" :: PF, sig :: PF]
-      self := "$" :: Symbol
       env := addMode(sig.name, sig.type, env)
-      env := addMode(self, ft.type, env)
-      env := addModemapsFromCategory([self], ft.type, env)
+      env := addMode("$" :: Symbol, ft.type, env)
+      env := addModemapsFromCategory(["$" :: Symbol], ft.type, env)
 
       ++ process functor's arguments
-      cat := nodeApp(['Category], [])
       for arg in ft.args repeat
-        env := addModemap(arg.name :: Symbol, arg.type, [cat], env)
+        env := addModemap(arg.name :: Symbol, arg.type, [categoryType], env)
         env := addMode(arg.name, arg.type, env)
         env := addModemapsFromCategory([arg.name], arg.type, env)
 
-      ftor := addNode!([ft], sig.type, ctx)
-      r := walk(ft.capsule, ctx, env)
-      ftor.rule := nodeRef(ftor.index + 1)
-      ftor.children := [node(ftor.index + 1, ctx)]
+      this := addNode!(ctx, env)
 
-      ext := if emptyNode? ft.extends then ['Type] else ft.extends
-      [nodeFtor(ft.name, ft.args, ft.type, ext, r.node), env]
+      ftorBody := walk(ft.capsule, ctx, env)
+      extendType := if emptyNode? ft.extends then ['Type] else ft.extends
 
-    walkImport (im, ctx, env) ==
+      this.type := sig.type
+      this.children := [ftorBody]
+      this.rule := nodeRef(ftorBody)
+      this.node := nodeFtor(ft.name, ft.args, ft.type, extendType, ftorBody.node)
+      this
+
+    walkImport (im, ctx, env) == ++ done
       debug ["Importing" :: PF, im.type :: PF]
       env := envAddType(im.type, env)
-      addNode!([im], voidType, ctx)
-      [[im], env]
+      this := addNode!(ctx, env)
+      this.type := voidType
+      this.node := [im]
+      this
 
     walkLambda (lam, ctx, env) ==
-      ++ replace unknown types with type variables and add arguments
-      ++ to the environment
-      argTypes : List(N) := []
+      this := addNode!(ctx, env)
+
+      ++ Replace unknown types with type variables and add arguments to the
+      ++ environment. Rewrite those lambda arguments that miss the type.
+      argList : List(NT) := []
+      argTypeList : List(N) := []
+
       for arg in lam.args repeat
-        argType := (emptyNode? arg.type => addTypeVar! ctx; arg.type)
-        argTypes := [argType, :argTypes]
+        if emptyNode? arg.type then
+          argType := addTypeVar! ctx
+
+          lamArg := addNode!(ctx, env)
+          lamArg.type := argType
+          lamArg.node := [arg.name]
+
+          arg := [arg.name, typeRef(lamArg)]$NT
+          this.children := [lamArg, :this.children]
+        else
+          argType := arg.type
+        argList := [arg, :argList]
+        argTypeList := [argType, :argTypeList]
         env := addMode(arg.name, argType, env)
+
+      argList := reverse argList
+      argTypeList := reverse argTypeList
+
       retType := (emptyNode? lam.type => addTypeVar! ctx; lam.type)
-      lamType : MT := [reverse argTypes, retType]
+      lamType := [argTypeList, retType]$MT
+
       debug ["Lambda expression of type" :: PF, bold(lamType :: PF)]
+
+      ++ generate a node with result type
+      lamBodyType := addNode!(ctx, env)
+      lamBody := walk(lam.body, ctx, env)
+      lamBodyType.type := retType
+      lamBodyType.children := [lamBody]
+      lamBodyType.rule := nodeSubType(nodeRef(lamBody), nodeRef(lamBodyType))
+      lamBodyType.node := nodeRef(lamBody)
+
       ++ add a node with type of the lambda expression just for dependants
-      addNode!([lam], [lamType], ctx)
-      ++ generate nodes for all types that were assigned type variables
-      ++ and prepare lambda's arguments to be filled out in final phase
-      args : List(NT) := []
-      for argType in argTypes for arg in lam.args repeat
-        typeVar? argType =>
-          node := addNode!([arg.name], argType, ctx)
-          args := [[arg.name, nodeRef(node.index)]$NT, :args]
-        args := [arg, :args]
-      ++ finally, generate a node with result type
-      lamBody := addNode!(emptyNode(), retType, ctx)
-      i := lamBody.index
-      r := walk(lam.body, ctx, env)
-      lamBody.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-      lamBody.children := [node(i + 1, ctx)]
-      [nodeLambda(reverse args, nodeRef(i), r.node), env]
+      this.type := [lamType]
+      this.children := [lamBodyType, :this.children]
+      this.node := nodeLambda(argList, nodeRef(lamBodyType), nodeRef(lamBody))
+      this
 
     walkLoop (lp, ctx, env) ==
       debug ["Loop statement." :: PF]
+      this := addNode!(ctx, env)
       env' := env
       type : N
 
-      loopNode :=
-        lp.kind case "collect" =>
-          type := addTypeVar! ctx
-          addNode!([lp], nodeApp(['List], [type]), ctx)
-        addNode!([lp], voidType, ctx)
+      if lp.kind case "collect" then
+        type := addTypeVar!(ctx)
+        this.type := nodeApp(['List], [type])
+      else
+        this.type := voidType
 
       debug ["Processing" :: PF, #(lp.itors) :: PF, "iterator(s)." :: PF]
-      nItors : List(IT) := []
-      for itor in lp.itors repeat
-        itorVar := addNode!([itor.var], ctx)
-        seqType : List(N) :=
-          [nodeApp(['List], [itorVar.type]),
-           nodeApp(['UniversalSegment], [itorVar.type])]
-        itorSeq := addNode!(itor.seq, seqType, ctx)
-        i := itorSeq.index
-        r := walk(itor.seq, ctx, env)
-        itorSeq.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-        itorSeq.children := [node(i + 1, ctx)]
-        ++ iterator variable is added to loop's body environment,
-        ++ but is also known to guards
-        env' := addMode(itor.var, itorVar.type, env')
-        nItors := concat(nItors, [itor.var, r.node]$IT)
-        loopNode.children := concat(loopNode.children, [itorVar, itorSeq])
+      itorList : List(IT) := []
+      for i in lp.itors repeat
+        varType := addTypeVar!(ctx)
+
+        ++ Iterator variable is added to loop's body environment,
+        ++ but is also known to guards.
+        env' := addMode(i.var, varType, env')
+        varExpr := walk([i.var], ctx, env')
+
+        seqType := addNode!(ctx, env)
+        seqExpr := walk(i.seq, ctx, env)
+        seqType.type :=
+          addTypeVar!(ctx, [nodeApp(['List], [varType]),
+                            nodeApp(['UniversalSegment], [varType])])
+        seqType.rule := nodeSubType(nodeRef(seqExpr), nodeRef(seqType))
+        seqType.children := [varExpr, seqExpr]
+        seqType.node := nodeRef(seqExpr)
+
+        itorList := [[i.var, seqExpr.node]$IT, :itorList]
+        this.children := [seqType, varExpr, :this.children]
 
       debug ["Processing" :: PF, #(lp.guards) :: PF, "guard(s)." :: PF]
-      nGuards : List(N) := []
-      for guard in lp.guards repeat
-        guardNode := addNode!(guard, booleanType, ctx)
-        i := guardNode.index
-        r := walk(guard, ctx, env')
-        guardNode.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-        guardNode.children := [node(i + 1, ctx)]
-        nGuards := concat(nGuards, r.node)
-        loopNode.children := concat(loopNode.children, guardNode)
-        ++ Guard may introduce a variable and it must be visible in loop's body!
-        env' := r.env
+      guardList : List(N) := []
+      for g in lp.guards repeat
+        guardType := addNode!(ctx, env')
+        guardExpr := walk(g, ctx, env')
+
+        guardType.type := booleanType
+        guardType.rule := nodeSubType(nodeRef(guardExpr), nodeRef(guardType))
+        guardType.children := [guardExpr]
+        guardType.node := nodeRef(guardExpr)
+
+        guardList := [guardExpr.node, :guardList]
+        this.children := [guardType, :this.children]
 
       debug ["Processing loop body." :: PF]
       if lp.kind case "collect" then
-        loopBody := addNode!(emptyNode(), type, ctx)
-        i := loopBody.index
-        r := walk(lp.body, ctx, env')
-        loopBody.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-        loopBody.children := [node(loopBody.index + 1, ctx)]
-        loopNode.children := concat(loopNode.children, loopBody)
-      else
-        i := lastIndex ctx + 1
-        r := walk(lp.body, ctx, env')
-        loopNode.children := concat(loopNode.children, node(i, ctx))
-      [nodeLoop(lp.kind, nItors, nGuards, r.node), env]
+        bodyType := addNode!(ctx, env')
+        bodyExpr := walk(lp.body, ctx, env')
 
-    walkSeg (seg, ctx, env) ==
+        bodyType.type := type
+        bodyType.rule := nodeSubType(nodeRef(bodyExpr), nodeRef(bodyType))
+        bodyType.children := [bodyExpr]
+
+        this.children := [bodyType, :this.children]
+      else
+        bodyExpr := walk(lp.body, ctx, env')
+        this.children := [bodyExpr, :this.children]
+
+      this.children := reverse this.children
+      this.node := nodeLoop(lp.kind, itorList, guardList, bodyExpr.node)
+      this
+
+    walkSeg (seg, ctx, env) == ++ done
       debug ["Processing segment:" :: PF, string(seg :: PF)]
       segType := addTypeVar! ctx
-      segNode := addNode!([seg], nodeApp(['UniversalSegment], [segType]), ctx)
-      segChildren : List(TCN) := []
 
-      segStart := addNode!(emptyNode(), segType, ctx)
-      i := segStart.index
-      (newStart, env') := walk(seg.start, ctx, env)
-      segStart.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-      segStart.children := [node(i + 1, ctx)]
-      segNode.children := [segStart]
+      this := addNode!(ctx)
 
-      newEnd := seg.end
+      startExpr := walk(seg.start, ctx, env)
+      startType := addNode!(ctx)
+      startType.env := env
+      startType.type := segType
+      startType.children := [startExpr]
+      startType.rule := nodeSubType(nodeRef(startExpr), nodeRef(startType))
+      startType.node := nodeRef(startExpr)
+      this.children := [startType, :this.children]
+
       if not emptyNode? seg.end then
-        segEnd := addNode!(emptyNode(), segType, ctx)
-        i := segEnd.index
-        (newEnd, env') := walk(seg.end, ctx, env)
-        segEnd.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-        segEnd.children := [node(segEnd.index + 1, ctx)]
-        segNode.children := concat(segNode.children, segEnd)
+        endExpr := walk(seg.end, ctx, env)
+        endType := addNode!(ctx)
+        endType.env := env
+        endType.type := segType
+        endType.children := [endExpr]
+        endType.rule := nodeSubType(nodeRef(endExpr), nodeRef(endType))
+        endType.node := nodeRef(endExpr)
+        this.children := [endType, :this.children]
+        endNode := endType.node
+      else
+        endNode := emptyNode()
 
-      newStep := seg.step
       if not emptyNode? seg.step then
-        segStep := addNode!(emptyNode(), integerType, ctx)
-        i := segStep.index
-        (newStep, env') := walk(seg.step, ctx, env)
-        segStep.rule := nodeSubType(nodeRef(i + 1), nodeRef(i))
-        segStep.children := [node(i + 1, ctx)]
-        segNode.children := concat(segNode.children, segStep)
+        stepExpr := walk(seg.step, ctx, env)
+        stepType := addNode!(ctx)
+        stepType.env := env
+        stepType.type := integerType
+        stepType.children := [stepExpr]
+        stepType.rule := nodeSubType(nodeRef(stepExpr), nodeRef(stepType))
+        stepType.node := nodeRef(stepExpr)
+        this.children := [stepType, :this.children]
+        stepNode := stepType.node
+      else
+        stepNode := emptyNode()
 
-      [nodeSeg(newStart, newEnd, newStep), env]
+      this.env := env
+      this.type := nodeApp(['UniversalSegment], [segType])
+      this.node := nodeSeg(startExpr.node, endNode, stepNode)
+      this
 
-    walkSeq (s, ctx, env) ==
+    walkSeq (s, ctx, env) == ++ done
       debug ["Found sequence of" :: PF, #(s.list) :: PF, "expressions." :: PF]
-      node := addNode!([s], ctx)
-      rs := addChildren(node, s.list, ctx, env)
-      node.rule := nodeSubType(nodeRef (last node.children).index, nodeRef node.index)
-      [nodeSeq(s.kind, rs.nodes), rs.env]
+      this := addNode!(ctx)
+      
+      exprList : List(TCN) := []
+      for e in s.list repeat
+        expr := walk(e, ctx, env)
+        env := expr.env
+        exprList := [expr, :exprList]
+      lastExpr := first exprList
+      exprList := reverse exprList
 
-    walkSym (s, ctx, env) ==
+      this.type := addTypeVar!(ctx)
+      this.children := exprList
+      this.rule := nodeSubType(nodeRef(lastExpr), nodeRef(this))
+      this.node := nodeSeq(s.kind, [expr.node for expr in exprList])
+      this.env := lastExpr.env
+      this
+
+    walkSym (s, ctx, env) == ++ done
       debug ["Symbol lookup for" :: PF, string(s :: PF)]
-      -- types : List(N) := [[mm.type] for mm in getModemap(s, env)]
-      types : List(N) := []
-      for mm in getModemap(s, env) repeat
-        mt := mm.type
-        if #mt.args = 1 and mt.args.1 = ['constant] then
-          types := [nodeTypeExpr('_$, mt.type, mm.origin), :types]
-        else
-          types := [nodeTypeExpr('_$, [mm.type], mm.origin), :types]
+      types := [qualifiedType(mm) for mm in getModemap(s, env)]
       mode := getMode(s, env)
       if not emptyNode? mode then
         types := [mode, :types]
@@ -1317,57 +1372,67 @@ SpadTypeChecker() : Exports == Implementation where
         errorType := nodeMappingType([stringType], typeAny)
         types := [errorType, :types]
       if s = 'return then
-        returnType := nodeMappingType([integerType, node(1, ctx).type], typeAny)
+        returnType := nodeMappingType([integerType, typeVar(1)], typeAny)
         types := [returnType, :types]
       empty? types =>
         fail ["Undefined symbol:" :: PF, bold red string (s :: PF), "!" :: PF]
         error ""
-      if #types = 1
-        then addNode!([s], first types, ctx)
-        else addNode!([s], types, ctx)
       info(["Found" :: PF, string bold(s :: PF), "with type :" :: PF,
             bold bracket [t :: PF for t in types]])
-      [[s], env]
+      this := addNode!(ctx)
+      this.env := env
+      this.type :=
+        #types = 1 and typeVar? types.1 => types.1
+        addTypeVar!(ctx, types)
+      this.node := [s]
+      this 
 
     walkTypeExpr (te, ctx, env) ==
       te.kind = '_: => 
-        debug ["Expression" :: PF, te.expr :: PF, "has type" :: PF, te.type :: PF]
+        debug(["Expression" :: PF, te.expr :: PF, "has type" :: PF, te.type :: PF])
 
         not symbol? te.expr =>
           fail ["Type annotation works only for symbols!" :: PF]
           error ""
 
-        -- type definition for a symbol:
+        -- Type definition for a symbol:
         -- add it to the environment or crash if already defined
         s := te.expr :: Symbol
-        not emptyNode? getMode(s, env) =>
-          warn([bold yellow ("Warning!" :: PF), "Symbol" :: PF, string(s :: PF),
-                "already defined as" :: PF, getMode(s, env) :: PF, "!" :: PF])
-          [[te], env]
+        t := getMode(s, env)
 
-        addNode!([te], te.type, ctx)
+        (not emptyNode? t) and (t ~= te.type) =>
+          fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
+                "already defined as" :: PF, getMode(s, env) :: PF, "!" :: PF])
+          error ""
+
         env := addMode(s, te.type, env)
-        [[te], env]
+
+        this := addNode!(ctx, env)
+        this.type := te.type
+        this.node := [te]
+        this
 
       te.kind = '_@ =>
-        debug (["[*]" :: PF, "Expression" :: PF, te.expr :: PF,
-                 "has to return type" :: PF, te.type :: PF])
+        debug(["Expression" :: PF, te.expr :: PF,
+               "has to return type" :: PF, te.type :: PF])
 
         not apply? te.expr =>
           fail ["Type cut operator works only for function application!" :: PF]
           error ""
 
         env := envAddType(te.type, env)
-        next := lastIndex ctx + 1
-        r := walk(te.expr, ctx, env)
-        setType!(node(next, ctx), te.type, ctx)
-        [nodeTypeExpr(te.kind, r.node, te.type), r.env]
+        this := addNode!(ctx, env)
+        expr := walk(te.expr, ctx, env)
+
+        this.type := te.type
+        this.children := [expr]
+        this.rule := nodeSubType(nodeRef(expr), nodeRef(this))
+        this.node := nodeRef(expr)
+        this
 
       te.kind = '_:_: =>
         debug ["Expression" :: PF, te.expr :: PF, "have to coerce to" :: PF, te.type :: PF]
-        -- convert "::" to "coerce" function call
-        r := walk(nodeApp(['coerce], [te.expr]), ctx, env)
-        [nodeTypeExpr(te.kind, r.node, te.type), env]
+        walk(nodeApp(['coerce], [te.expr]), ctx, env)
     
       te.kind = '_$ =>
         not symbol? te.expr =>
@@ -1378,33 +1443,51 @@ SpadTypeChecker() : Exports == Implementation where
                "must originate from" :: PF, bold(te.type :: PF),
                "type!" :: PF])
 
-        originNode := addNode!([te], ctx)
         env := envAddType(te.type, env)
-        i := lastIndex ctx + 1
-        r := walk(te.expr, ctx, env)
-        originNode.rule := nodeTypeExpr('_$, nodeRef(i), te.type)
-        originNode.children := [node(i, ctx)]
-        [r.node, r.env]
+        this := addNode!(ctx, env)
+        expr := walk(te.expr, ctx, env)
+
+        this.type := addTypeVar!(ctx)
+        this.rule := nodeTypeExpr('_$, nodeRef(expr), te.type)
+        this.children := [expr]
+        this.node := nodeRef(expr)
+        this
 
       fail ["Type expression" :: PF, bold red paren(te :: PF), "not handled yet!" :: PF]
       error ""
 
     walkInt (i, ctx, env) ==
       debug [i :: PF, "is" :: PF, integerType :: PF, ":)" :: PF]
-      addNode!([i], integerType, ctx)
-      [[i], env]
+      this := addNode!(ctx)
+      this.env := env
+      this.type := integerType
+      this.node := [i]
+      this
 
     walkFlt (f, ctx, env) ==
       debug [f :: PF, "is" :: PF, floatType :: PF, ":)" :: PF]
-      addNode!([f], floatType, ctx)
-      [[f], env]
+      this := addNode!(ctx)
+      this.env := env
+      this.type := floatType
+      this.node := [f]
+      this
 
     walkStr (s, ctx, env) ==
       debug [string(s :: PF), "is" :: PF, stringType :: PF, ":)" :: PF]
-      addNode!([s], [[string(s :: Symbol)], stringType], ctx)
-      [[s], env]
+      this := addNode!(ctx)
+      this.env := env
+      this.type := addTypeVar!(ctx, [[string(s :: Symbol)], stringType])
+      this.node := [s]
+      this
 
-    walk (n : N, ctx : CTX, env : ENV) : R ==
+    walkEmpty (e, ctx, env) ==
+      this := addNode!(ctx)
+      this.env := env
+      this.type := voidType
+      this.node := e
+      this
+
+    walk (n, ctx, env) ==
       apply? n => walkApp(n :: APP, ctx, env)
       assign? n => walkAssign(n :: ASS, ctx, env)
       condExpr? n => walkCondExpr(n :: CE, ctx, env)
@@ -1420,9 +1503,7 @@ SpadTypeChecker() : Exports == Implementation where
       symbol? n => walkSym(n :: Symbol, ctx, env)
       typeExpr? n => walkTypeExpr(n :: TE, ctx, env)
       function? n => walkFun(n :: FN, ctx, env)
+      emptyNode? n => walkEmpty(n, ctx, env)
       -- namedType, mappingType, recordType, sumType, unionType, macro, where
-      emptyNode? n =>
-        addNode!(n, voidType, ctx)
-        [n, env]
       fail ["Expression" :: PF, bold red paren(n :: PF), "not handled yet!" :: PF]
       error ""
