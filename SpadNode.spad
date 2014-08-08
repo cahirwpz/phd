@@ -1539,3 +1539,74 @@ SpadNode() : Exports == Implementation where
     nodeSumType (kind, types) == [[kind, types]$ST]
     nodeUnionType variants == [[variants]$UT]
     nodeWhere (body, env) == [[body, env]$W]
+
+)abbrev package SPNFACT SpadNodeFactory
+SpadNodeFactory() : Exports == Implementation where
+  NNI ==> NonNegativeInteger
+  N ==> SpadNode
+  MR ==> SpadMarker(N)
+  NT ==> SpadNamedType(N)
+  MT ==> SpadMappingType(N)
+  RT ==> SpadRecordType(N)
+  UT ==> SpadUnionType(N)
+  mt ==> nodeMappingType
+
+  Exports ==> with
+    booleanType : () -> N
+    floatType : () -> N
+    integerType : () -> N
+    outputFormType : () -> N
+    stringType : () -> N
+    symbolType : () -> N
+    voidType : () -> N
+    categoryType : () -> N
+
+    typeAny : () -> N
+    typeVar : NNI -> N
+
+    makeRecordFunList : N -> List(NT)
+    makeUnionFunList : N -> List(NT)
+
+  Implementation ==> add
+    booleanType () == nodeApp(['Boolean], [])
+    floatType () == nodeApp(['DoubleFloat], [])
+    integerType () == nodeApp(['Integer], [])
+    outputFormType () == nodeApp(['OutputForm], [])
+    stringType () == nodeApp(['String], [])
+    symbolType () == nodeApp(['Symbol], [])
+    voidType () == nodeApp(['Void], [])
+    categoryType () == nodeApp(['Category], [])
+
+    typeAny() == [[0, 'typevar]$MR]
+    typeVar(i) == [[i, 'typevar]$MR]
+
+    makeRecordFunList n ==
+      r := n :: RT
+      funs : List(NT) :=
+       ([['=, mt([n, n], booleanType())],
+         ['~=, mt([n, n], booleanType())],
+         ['copy, mt([n], n)],
+         ['coerce, mt([n], outputFormType())],
+         ['construct, mt([f.type for f in r.fields], n)]
+        ])
+      for f in r.fields repeat
+        s : N := [f.name]
+        r : N := f.type
+        funs := ([[f.name, mt([['constant]$N], [f.name])],
+                  ['elt, mt([n, s], r)],
+                  ['setelt!, mt([n, s, r], r)], :funs])
+      funs
+
+    makeUnionFunList n ==
+      u := n :: UT
+      n := ['%]
+      funs : List(NT) :=
+       ([['=, mt([n, n], booleanType())],
+         ['~=, mt([n, n], booleanType())],
+         ['coerce, mt([n], outputFormType())]
+        ])
+      vs := u.variants
+      if not namedType? vs.1 then
+        for v in vs repeat
+          funs := [['construct, mt([v], n)], ['coerce, mt([n], v)], :funs]
+      funs
