@@ -16,7 +16,6 @@ SpadCompilerTest() : Exports == Implementation where
     import Printer 
     import SpadNode
     import SpadTreeMacroExpander
-    import TCNodeArrayOps
     import MainLogger
     import Logger('Main)
 
@@ -55,9 +54,10 @@ SpadCompilerTest() : Exports == Implementation where
       n := rewrite(n) $ SpadMacroExpander
 
       notice pile ["Tree ready for type checking:" :: PF, n :: PF]
-      narr : TCNodeArray := nodeArray ()
+      ctx : TypeCheckerNodeArray := nodeArray ()
       env : SpadEnvironment := new ()
-      r := walk(n, narr, env) $ SpadTypeChecker
+      r := walk(n, ctx, env) $ SpadTypeChecker
+      check ctx
 
       notice pile ["Final tree with type annotations:" :: PF, r.node :: PF]
       e := convert(r.node)

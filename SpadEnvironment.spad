@@ -52,7 +52,7 @@ SpadModemap() : Exports == Implementation where
     qualifiedType x ==
       mt := x.type
       if #mt.args = 1 and mt.args.1 = ['constant] then
-        nodeTypeExpr('_$, mt.type, x.origin)
+        nodeTypeExpr('_$, mt.result, x.origin)
       else
         nodeTypeExpr('_$, [mt], x.origin)
 

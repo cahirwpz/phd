@@ -31,6 +31,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : FN -> N
       rewrite : FT -> N
       rewrite : IM -> N
+      rewrite : IT -> N
       rewrite : LAM -> N
       rewrite : LP -> N
       rewrite : M -> N
@@ -71,13 +72,16 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (im : IM) : N ==
         nodeImport(rewrite im.type)
 
+      rewrite (it : IT) : N ==
+        nodeIterator(it.var, rewrite it.seq)
+
       rewrite (l : LAM) : N ==
         nargs := [[arg.name, rewrite arg.type]$NT for arg in l.args]
         nodeLambda(nargs, rewrite l.type, rewrite l.body)
 
       rewrite (lp : LP) : N ==
         -- BUG: parser cannot accept a multi-line list constructor
-        nitors := [[itor.var, rewrite itor.seq]$IT for itor in lp.itors]
+        nitors := [rewrite itor for itor in lp.itors]
         nguards := [rewrite guard for guard in lp.guards]
         nodeLoop(lp.kind, nitors, nguards, rewrite lp.body)
 
@@ -87,7 +91,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (mr : MR) : N == [mr]
 
       rewrite (mt : MT) : N ==
-        nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.type)
+        nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.result)
 
       rewrite (nt : NT) : N ==
         nodeNamedType(nt.name, rewrite nt.type)
@@ -124,6 +128,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         function? n => rewrite (n :: FN)
         functor? n => rewrite (n :: FT)
         import? n => rewrite (n :: IM)
+        iterator? n => rewrite (n :: IT)
         lambda? n => rewrite (n :: LAM)
         loop? n => rewrite (n :: LP)
         macro? n => rewrite (n :: M)

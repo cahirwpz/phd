@@ -6,6 +6,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadFunction(%) -> %
   construct : SpadFunctor(%) -> %
   construct : SpadImport(%) -> %
+  construct : SpadIterator(%) -> %
   construct : SpadLambda(%) -> %
   construct : SpadLoop(%) -> %
   construct : SpadMacro(%) -> %
@@ -36,6 +37,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   functor? : % -> Boolean
   import? : % -> Boolean
   integer? : % -> Boolean
+  iterator? : % -> Boolean
   lambda? : % -> Boolean
   loop? : % -> Boolean
   macro? : % -> Boolean
@@ -68,6 +70,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadFunction(%)
   coerce : % -> SpadFunctor(%)
   coerce : % -> SpadImport(%)
+  coerce : % -> SpadIterator(%)
   coerce : % -> SpadLambda(%)
   coerce : % -> SpadLoop(%)
   coerce : % -> SpadMacro(%)
@@ -138,19 +141,17 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> ParsableCategory with
     elt : (%, "args") -> List(N)
-    elt : (%, "type") -> N
     elt : (%, "result") -> N
     construct : (List(N), N) -> %
 
   Implementation ==> add
-    Rep := Record(m_args : List(N), m_type : N)
+    Rep := Record(m_args : List(N), m_result : N)
 
     import ParserTools
     import SExpression
 
     elt(x, "args") == x.m_args
-    elt(x, "type") == x.m_type
-    elt(x, "result") == x.m_type
+    elt(x, "result") == x.m_result
 
     construct(al, t) == [al, t]$Rep
 
@@ -163,7 +164,7 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       [ rest sig, first sig ]
 
     convert x ==
-      ts := [convert t for t in [x.type, :x.args]]
+      ts := [convert t for t in [x.result, :x.args]]
       convert [convert ("Mapping" :: Symbol), :ts]
 
     coerce n ==
@@ -171,13 +172,10 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
         if emptyNode? t then "?" :: PF else t :: PF
       ts := [coerceType t for t in n.args]
       src := if #ts ~= 1 then paren ts else first ts
-      spaces [src, "->" :: PF, coerceType n.type]
+      spaces [src, "->" :: PF, coerceType n.result]
 
     n = m ==
-      for n' in [n.type, :n.args]
-        for m' in [m.type, :m.args] repeat
-          n' ~= m' => return false
-      true
+      "and"/[a = b for a in [n.result, :n.args] for b in [m.result, :m.args]]
 
 )abbrev domain SPTSUM SpadSumType
 SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
@@ -683,14 +681,14 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> ParsableCategory with
     elt : (%, "kind") -> K
-    elt : (%, "itors") -> List(IT)
+    elt : (%, "itors") -> List(N)
     elt : (%, "guards") -> List(N)
     elt : (%, "body") -> N
-    construct : (K, List(IT), List(N), N) -> %
+    construct : (K, List(N), List(N), N) -> %
 
   Implementation ==> add
     Rep := Record(lp_kind : K,
-                  lp_itors : List(IT),
+                  lp_itors : List(N),
                   lp_guards : List(N),
                   lp_body : N)
 
@@ -716,7 +714,7 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       -- println [convert(car ex), paren [convert e for e in lst]]
 
       range : SpadSegment(N)
-      l_itors : List(IT) := []
+      l_itors : List(N) := []
       l_guards : List(N) := []
 
       for e in lst repeat
@@ -725,14 +723,14 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
         -- 2) a while statement can occur inside collect statement
         itor? e =>
           -- (IN item sequence)
-          l_itors := [[symbol e.2, parse e.3], :l_itors]
+          l_itors := [[[symbol e.2, parse e.3]$IT], :l_itors]
         step? e =>
           -- (STEP i m k n) -> i := m..n by k
           -- (STEP i m k) -> i := m.. by k
           range : SpadSegment(N) := if #e = 4
             then [parse e.3, parse e.4]
             else [parse e.3, parse e.5, parse e.4]
-          l_itors := [[symbol e.2, construct range], :l_itors]
+          l_itors := [[[symbol e.2, [range]]$IT], :l_itors]
         guard? e or while? e =>
           -- should they be mixed together ?
           -- ('| cond)
@@ -1173,8 +1171,9 @@ SpadNode() : Exports == Implementation where
     nodeFtor : (Symbol, List(NT), %, %, %) -> %
     nodeFun : (Symbol, List(%), %, %) -> %
     nodeImport : % -> %
+    nodeIterator : (Symbol, %) -> %
     nodeLambda : (List(NT), %, %) -> %
-    nodeLoop : (Union("loop", "collect", "repeat"), List(IT), List(%), %) -> %
+    nodeLoop : (Union("loop", "collect", "repeat"), List(%), List(%), %) -> %
     nodeMacro : (Symbol, List(Symbol), %) -> %
     nodeMappingType : (List(%), %) -> %
     nodeNamedType : (Symbol, %) -> %
@@ -1191,8 +1190,8 @@ SpadNode() : Exports == Implementation where
   Implementation ==> add
     Rep := Union(empty : "$EmptyNode",
                  apply : APP, assign : ASS, cond : CE, lambda : LAM, loop : LP,
-                 mapping : MT, named : NT, record : RT, segment : SEG,
-                 seq : SEQ, ftor : FT, func : FN, simport : IM, smacro : M,
+                 mapping : MT, named : NT, record : RT, itor : IT, seq : SEQ,
+                 segment : SEG, ftor : FT, func : FN, simport : IM, smacro : M,
                  sum : ST, swhere : W, typeexpr : TE, union : UT, marker : MR,
                  dfloat : DF, int : Integer, str : String, sym : Symbol)
 
@@ -1209,6 +1208,7 @@ SpadNode() : Exports == Implementation where
     functor? n == n case ftor
     import? n == n case simport
     integer? n == n case int
+    iterator? n == n case itor
     lambda? n == n case lambda
     loop? n == n case loop 
     macro? n == n case smacro 
@@ -1275,6 +1275,10 @@ SpadNode() : Exports == Implementation where
     coerce (n : %) : LAM == 
       lambda? n => n.lambda
       CoerceError("SpadLambda")
+
+    coerce (n : %) : IT == 
+      iterator? n => n.itor
+      CoerceError("SpadIterator")
 
     coerce (n : %) : LP ==
       loop? n => n.loop
@@ -1353,6 +1357,7 @@ SpadNode() : Exports == Implementation where
     construct (n : FN) : % == [n]$Rep
     construct (n : FT) : % == [n]$Rep
     construct (n : IM) : % == [n]$Rep
+    construct (n : IT) : % == [n]$Rep
     construct (n : LAM) : % == [n]$Rep
     construct (n : LP) : % == [n]$Rep
     construct (n : M) : % == [n]$Rep
@@ -1455,6 +1460,7 @@ SpadNode() : Exports == Implementation where
       functor? n => (n :: FT) :: PF
       import? n => (n :: IM) :: PF
       integer? n => (n :: Integer) :: PF
+      iterator? n => (n :: IT) :: PF
       lambda? n => (n :: LAM) :: PF
       loop? n => (n :: LP) :: PF
       macro? n => (n :: M) :: PF
@@ -1483,6 +1489,7 @@ SpadNode() : Exports == Implementation where
       functor? n => convert(n :: FT)
       import? n => convert(n :: IM)
       integer? n => convert(n :: Integer)
+      iterator? n => convert(n :: IT)
       lambda? n => convert(n :: LAM)
       loop? n => convert(n :: LP)
       macro? n => convert(n :: M)
@@ -1508,6 +1515,7 @@ SpadNode() : Exports == Implementation where
       float? n and float? m => (n :: DF) = (m :: DF)
       function? n and function? m => (n :: FN) = (m :: FN)
       integer? n and integer? m => (n :: Integer) = (m :: Integer)
+      iterator? n and iterator? m => (n :: IT) = (m :: IT)
       mappingType? n and mappingType? m => (n :: MT) = (m :: MT)
       marker? n and marker? m => (n :: MR) = (m :: MR)
       namedType? n and namedType? m => (n :: NT) = (m :: NT)
@@ -1525,6 +1533,7 @@ SpadNode() : Exports == Implementation where
     nodeFun (name, args, type, body) == [[name, args, type, body]$FN]
     nodeFtor (name, args, type, ext, caps) == [[name, args, type, ext, caps]$FT]
     nodeImport type == [[type]$IM]
+    nodeIterator (var, seq) == [[var, seq]$IT]
     nodeLambda (args, type, body) == [[args, type, body]$LAM]
     nodeLoop (kind, itors, guards, body) == [[kind, itors, guards, body]$LP]
     nodeMacro (name, args, body) == [[name, args, body]$M]
