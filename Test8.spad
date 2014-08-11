@@ -1,0 +1,12 @@
+)abbrev package TEST8 Test8
+Test8 : Exports == Implementation where
+
+  Exports ==> with
+   foo : (Integer, Integer) -> Integer
+
+  Implementation ==> add
+   import Vector(Integer)
+   my_vec : Integer -> Vector(Integer)
+   foo(i : Integer, j : Integer) : Integer ==
+       v := my_vec(i + 1)
+       v(j + 1)

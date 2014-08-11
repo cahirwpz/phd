@@ -11,11 +11,10 @@ Test2(A : Type) : Exports == Implementation where
     index(pred, l) ==
       i := 1
       while not empty? l repeat
-        if pred(first l) then
-          return i
-        else
-          i := i + 1
-          l := rest l
+        h := first l
+        pred h => return i
+        i := i + 1
+        l := rest l
       0
 
     sumPositive l ==
@@ -27,5 +26,5 @@ Test2(A : Type) : Exports == Implementation where
     sumRange (l, i, j) ==
       s := 0
       for k in i..(j - 1) repeat
-        s := s + elt(l, k)
+        s := s + l.k
       s
