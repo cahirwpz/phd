@@ -37,6 +37,8 @@ TypeUnifier() : Exports == Implementation where
     matches? : (N, List(N)) -> Boolean
     findMatches : (List(N), List(N)) -> Record(terms : List(N), subst : SUBST)
 
+    isSubType : (N, N) -> Boolean
+
   Implementation ==> add
     import SpadNode
     import Printer
@@ -372,3 +374,65 @@ TypeUnifier() : Exports == Implementation where
       --debug pile ["Substitutions:" :: PF, convert(subst')]
       --debug pile ["Terms:" :: PF, :[t :: PF for t in terms]]
       [terms, subst]
+
+    ++ INFO: Given a subtyping relation X <: Y, that reads as X is safe to use
+    ++ in context where Y is used, we say that:
+    ++ X <: Y => F(X) <: F(Y), then F is covariant
+    ++ X <: Y => F(Y) <: F(X), then F is contravariant
+    ++ otherwise F is invariant
+    isSubType(t1, t2) ==
+      t1 = t2 => true
+
+      unionType? t2 =>
+        if unionType? t1 then
+          ++ {Union(T1, T2, ..., Tn)} <: {Union(S1, S2, ..., Sm)}
+          ut1 := t1 :: UT
+          ut2 := t2 :: UT
+          #ut1.variants > #ut2.variants => false
+          for v1 in ut1.variants for v2 in ut2.variants repeat
+            isSubType(v1, v2) => "iterate"
+            return false
+          true
+        else
+          ++ {Ti} <: {Union(T1, T2, ..., Ti, ...)}
+          for v in (t2 :: UT).variants repeat
+            not isSubType(t1, v) => "iterate"
+            return true
+          false
+
+      recordType? t1 and recordType? t2 =>
+        ++ {Record(F1 : T1, F2 : T2, ..., Fn : Tn)}
+        ++   <: {Record(F1 : S1, F2 : S2, ..., Fn : Sn)}
+        rt1 := t1 :: RT
+        rt2 := t2 :: RT
+        #rt1.fields ~= #rt2.fields => false
+        for f1 in rt1.fields for f2 in rt2.fields repeat
+          f1.name = f2.name and isSubType(f1.type, f2.type) => "iterate"
+          return false
+        true
+
+      mappingType? t1 and mappingType? t2 =>
+        ++ {(T1, T2, ..., Tn) -> T0} <: (S1, S2, ..., Sn) -> S0
+        ++ Mapping type is contravariant in the input types, and covariant in
+        ++ the output type, i.e. S1 <: T1, S2 <: T2, ..., T0 <: S0
+        mt1 := t1 :: MT
+        mt2 := t2 :: MT
+        #mt1.args ~= #mt2.args => false
+        for s1 in [mt1.result, :mt2.args]
+          for s2 in [mt2.result, :mt1.args] repeat
+            isSubType(s1, s2) => "iterate"
+            return false
+        true
+
+      apply? t1 and apply? t2 =>
+        ++ {T0(T1, T2, ..., Tk)} <: {S0(S1, S2, ..., Sk)}
+        ++ AFAIK functors in SPAD are invariant for the time being.
+        ++ However, we have several builtin relations.
+        t1 = nodeApp(['PositiveInteger], []) =>
+          isSubType(nodeApp(['NonNegativeInteger], []), t2)
+        t1 = nodeApp(['NonNegativeInteger], []) =>
+          isSubType(nodeApp(['Integer], []), t2)
+        false
+
+      fail ["subType: case not handled for" :: PF, paren [t1 :: PF, t2 :: PF]]
+      error ""

@@ -6,8 +6,8 @@ SpadTreeSymbolSubstitute(VAR : Symbol, TERM : SpadNode) :
       s = VAR => TERM
       [s]
 
-)abbrev package SPTYPE SpadType
-SpadType() : Exports == Implementation where
+)abbrev package TYPEVAL TypeEvaluator
+TypeEvaluator() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)
@@ -68,8 +68,8 @@ SpadType() : Exports == Implementation where
         hasList
       []
 
-)abbrev package SPTYPET SpadTypeTest
-SpadTypeTest() : Exports == Implementation where
+)abbrev package TYPEVALT TypeEvaluatorTest
+TypeEvaluatorTest() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
 
@@ -79,7 +79,7 @@ SpadTypeTest() : Exports == Implementation where
   Implementation ==> add
     import Printer
     import SpadNode
-    import SpadType
+    import TypeEvaluator
     import MainLogger
     import Logger('Test)
     import SpadTreesymbolSubstitute
