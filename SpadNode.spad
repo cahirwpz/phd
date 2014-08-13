@@ -123,14 +123,12 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
       (n.id = m.id) and (n.kind = m.kind)
 
     coerce (m : %) : Symbol ==
+      m.kind = 'typeany => "%?" :: Symbol
       s : String :=
         m.kind = 'typevar => "%"
         m.kind = 'noderef => "#"
-        "%"
-      n : String :=
-        m.id > 0 => string(m.id :: Integer)
-        "?"
-      concat(s, n) :: Symbol
+        "*"
+      concat(s, string(m.id)) :: Symbol
 
     coerce (n : %) : PF ==
       (n :: Symbol) :: PF
@@ -388,8 +386,9 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
             warn ("Mixing tagged and untagged variants is not allowed." :: PF)
             return false
           n := v :: NT 
-          not (recordType? n.type or unionType? n.type or mappingType? n.type or
-               apply? n.type or string? n.type or symbol? n.type) =>
+          t := n.type
+          not (recordType? t or unionType? t or mappingType? t or apply? t or
+               string? t or symbol? t or typeVar? t) =>
             warn (["Unions has a variant" :: PF, string(n.name :: PF),
                    "with wrong type:" :: PF, n.type :: PF])
             return false
@@ -407,7 +406,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
           warn ("Mixing tagged and untagged variants is not allowed." :: PF)
           return false
         not (recordType? t or unionType? t or mappingType? t or
-             apply? t or string? t or symbol? t) =>
+             apply? t or string? t or symbol? t or typeVar? t) =>
           warn ["Union has a variant with wrong type:" :: PF, t :: PF]
           return false
         member?(t, types) =>
@@ -1235,15 +1234,16 @@ SpadNode() : Exports == Implementation where
     where? n == n case swhere
     typeAny? n ==
       not n case marker => false
-      n.marker.kind = 'typevar and n.marker.id = 0
+      n.marker.kind = 'typeany
     typeVar? n ==
       not n case marker => false
-      n.marker.kind = 'typevar and n.marker.id > 0
+      n.marker.kind = 'typevar
     subType? n ==
       not n case typeexpr => false
       n.typeexpr.kind = '_<_:
 
-    value? n == float? n or integer? n or string? n or symbol? n
+    value? n ==
+      float? n or integer? n or string? n or symbol? n
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]
@@ -1586,7 +1586,7 @@ SpadNodeFactory() : Exports == Implementation where
     voidType () == nodeApp(['Void], [])
     categoryType () == nodeApp(['Category], [])
 
-    typeAny() == [[0, 'typevar]$MR]
+    typeAny() == [[0, 'typeany]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
 
     makeRecordFunList n ==

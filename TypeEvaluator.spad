@@ -1,10 +1,69 @@
-)abbrev package STSYMSUB SpadTreeSymbolSubstitute
-SpadTreeSymbolSubstitute(VAR : Symbol, TERM : SpadNode) :
-    SpadTreeWalkerCategory
-  == add
-    rewrite (s : Symbol) : SpadNode ==
-      s = VAR => TERM
-      [s]
+)abbrev package STSYMBOL SpadTreeSymbolReplace
+SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
+  N ==> SpadNode
+  CTX ==> AssociationList(Symbol, N)
+  WALKER ==> SpadTreeWalkerCategory 
+
+  Implementation ==> add
+    rewrite (s : Symbol) : N ==
+      r := assoc(s, ctx)
+      r case "failed" => [s]
+      r.entry
+
+)abbrev package STFTHAS SpadFunctorListHasArguments
+SpadFunctorListHasArguments(hasArgs : Stack(N)) : WALKER == Implementation where
+  N ==> SpadNode
+  TE ==> SpadTypeExpr(N)
+  WALKER ==> SpadTreeWalkerCategory 
+
+  Implementation ==> add
+    rewrite (te : TE) : N ==
+      if te.kind = 'has then
+        push!(te.expr, hasArgs)
+      nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
+
+)abbrev package STFTEVAL SpadFunctorEvaluate
+SpadFunctorEvaluate(ctx : CTX) : WALKER == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  CE ==> SpadCondExpr(N)
+  TE ==> SpadTypeExpr(N)
+  MR ==> SpadMarker(N)
+  CTX ==> AssociationList(MR, List(N))
+  WALKER ==> SpadTreeWalkerCategory 
+
+  Implementation ==> add
+    rewrite (app : APP) : N ==
+      app := [rewrite app.function, [rewrite arg for arg in app.args]]$APP
+      app.function = ['OR] and #app.args = 2 =>
+        "or"/[arg = ['true] for arg in app.args] => ['true]
+        "and"/[arg = ['false] for arg in app.args] => ['false]
+        app.args.1 = ['false] => app.args.2
+        app.args.2 = ['false] => app.args.1
+        [app]
+      app.function = ['AND] and #app.args = 2 =>
+        "and"/[arg = ['true] for arg in app.args] => ['true]
+        "or"/[arg = ['false] for arg in app.args] => ['false]
+        app.args.1 = ['true] => app.args.2
+        app.args.2 = ['true] => app.args.1
+        [app]
+      [app]
+
+    rewrite (cn : CE) : N ==
+      ce := [rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr]$CE
+      ce.cond = ['true] => ce.truebr
+      ce.cond = ['false] => ce.falsebr
+      [ce]
+
+    rewrite (te : TE) : N ==
+      if typeVar? te.expr and te.kind = 'has then
+        res := assoc(te.expr :: MR, ctx)
+        if not (res case "failed") then
+          if member?(te.type, res.entry) then
+            return ['true]
+          else
+            return ['false]
+      nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
 
 )abbrev package TYPEVAL TypeEvaluator
 TypeEvaluator() : Exports == Implementation where
@@ -14,38 +73,61 @@ TypeEvaluator() : Exports == Implementation where
   FT ==> SpadFunctor(N)
   NT ==> SpadNamedType(N)
   ST ==> SpadSumType(N)
+  MR ==> SpadMarker(N)
+  CTX ==> AssociationList(Symbol, N)
 
   Exports ==> with
-    getFunctor : Symbol -> SpadFunctor(N)
-    listHasCategories : (SpadFunctor(N), List(N)) -> List(N)
+    getFunctor : Symbol -> FT
+    listHasCategories : (FT, List(N)) -> List(N)
+    listHasCategories : FT -> List(N)
+    listHasArguments : FT -> List(N)
 
   Implementation ==> add
     import SpadDatabase
     import SpadNode
+    import SpadNodeFactory
     import Logger('Type)
     import Printer
+    import String
+
+    symbol(s1 : String, s2 : String) : Symbol ==
+      concat(s1, s2)$String :: Symbol
 
     getFunctor t ==
       cmm := getCtorModeMap(t)
-      ops := [op :: SpadNode for op in getOperationList(t)]
+
+      ++ Some symbols will be rewritten to type variables.
+      ctx : CTX := [[]]
+      ++ "%" => "%0"
+      ctx("%" :: Symbol) := typeVar(0)
+      ++ "#1" => "%1", "#2" => "%2", ...
+      for i in 1..#cmm.args repeat
+        ctx(symbol("#", string i)) := typeVar(i)
+
+      ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
+      ++ change name.
+      args := ([[symbol("%", string i), arg.type]$NT
+                for arg in cmm.args for i in 1..])
 
       if cmm.type = nodeApp(['Category], []) then
+        ++ "t#1" => "%1", "t#2" => "%2", ...
+        for arg in cmm.args for i in 1.. repeat
+          ctx(symbol("t", string arg.name)) := typeVar(i)
         body := getCtorCategory(t)
-        for arg in cmm.args repeat
-          var := concat("t", string arg.name) :: Symbol
-          term := [arg.name]$N
-          body := rewrite(body)$SpadTreeSymbolSubstitute(var, term)
       else
         body := emptyNode()
 
-      [cmm.name, cmm.args, cmm.type, body, nodeSeq("Capsule", ops)]
+      capsule := nodeSeq("Capsule", [op :: N for op in getOperationList(t)])
+
+      ftor := [cmm.name, args, cmm.type, body, capsule]$FT
+      rewrite(ftor)$SpadTreeSymbolReplace(ctx) :: FT
 
     builtinTypes : List(Symbol) :=
       (['Canonical, 'CommutativeStar, 'Type, 'canonicalUnitNormal,
         'canonicalsClosed, 'finiteAggregate, 'multiplicativeValuation,
         'noZeroDivisors, 'shallowlyMutable, 'unitsKnown])
 
-    listHasCategories(ftor, hasList) ==
+    listHasCategories(ftor : FT, hasList : List(N)) : List(N) ==
       type := 
         if ftor.type = nodeApp(['Category], [])
           then ftor.extends
@@ -60,18 +142,30 @@ TypeEvaluator() : Exports == Implementation where
           hasList := [t, :hasList]
           member?(sym, builtinTypes) => "iterate"
           ftor' := getFunctor(sym)
-          for term in app.args for arg in ftor'.args repeat
-            -- NOTE: type of argument is ignored
-            var := (arg :: NT).name
-            ftor' := rewrite([ftor'])$SpadTreeSymbolSubstitute(var, term) :: FT
+          -- Substitute functor arguments, types are ignored. 
+          ctx : CTX := [[]]
+          for arg in ftor'.args for term in app.args repeat
+            ctx((arg :: NT).name) := term
+          ftor' := rewrite(ftor')$SpadTreeSymbolReplace(ctx) :: FT
           hasList := listHasCategories(ftor', hasList)
         hasList
       []
+
+    listHasCategories(ftor : FT) : List(N) ==
+      listHasCategories(ftor, [])
+
+    listHasArguments ftor ==
+      stack : Stack(N) := empty()
+      rewrite(ftor)$SpadFunctorListHasArguments(stack)
+      removeDuplicates members stack
 
 )abbrev package TYPEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
+  MR ==> SpadMarker(N)
+  FT ==> SpadFunctor(N)
+  CTX ==> AssociationList(MR, List(N))
 
   Exports ==> with
     test1 : () -> Void
@@ -79,7 +173,9 @@ TypeEvaluatorTest() : Exports == Implementation where
   Implementation ==> add
     import Printer
     import SpadNode
+    import SpadNodeFactory
     import TypeEvaluator
+    import TypeUnifier
     import MainLogger
     import Logger('Test)
     import SpadTreesymbolSubstitute
@@ -91,10 +187,13 @@ TypeEvaluatorTest() : Exports == Implementation where
 
       hasCategories (t : Symbol) : Void ==
         ftor := getFunctor(t)
-        debug pile [spaces ["Type" :: PF, bold(t :: PF), "is:" :: PF], ftor :: PF]
-        hasCats := listHasCategories(ftor, [])
-        debug pile([spaces ["Type" :: PF, bold(t :: PF), "has:" :: PF],
+        debug [arg :: PF for arg in listHasArguments(ftor)]
+        hasCats := [cat for cat in listHasCategories(ftor) | not unbound? cat]
+        ctx : CTX := dictionary [[typeVar(0) :: MR, hasCats]]
+        ftor := rewrite(ftor)$SpadFunctorEvaluate(ctx) :: FT 
+        debug pile([spaces ["Type" :: PF, bold hconcat [t :: PF, paren [arg.name :: PF for arg in ftor.args]] , "has:" :: PF],
                     :[cat :: PF for cat in hasCats]])
+        debug pile [spaces ["Type" :: PF, bold(t :: PF), "is:" :: PF], ftor :: PF]
 
       hasCategories('List)
       hasCategories('Integer)
