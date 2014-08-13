@@ -314,18 +314,25 @@ TypeCheckerNodeArray() : Exports == Implementation where
       #types > 1 => false
       not unbound? types.1
 
+    killNode!(n : TCN, x : %) : Void ==
+      info ["Killing" :: PF, number(n.index) :: PF, "node!" :: PF]
+      n.done := true
+      if typeVar? n.type then
+        remove!(n.type :: MR, x.typevars)
+        n.type := emptyNode()
+
     checkAndMarkIfDone! (n, x) ==
-      import List(N)
       unbound? n.type => false
-      empty? children(n) =>
+      #n.rules = 0 =>
         n.done := true
-      for r in n.rules repeat
-        n.done := every?(t +-> not unbound? t, 
-                         [node(j, x).type for j in children(r)])
-        if n.done then
-          n.node := (first n.rules).result
-          break
-      n.done
+      ++ We only care about first rule, because it produced actual result.
+      rule := first n.rules
+      "or"/[unbound? node(j, x).type for j in children rule] => false
+      ++ Remove leftovers from other alternative rules.
+      for victim in setDifference(children n.rules, children rule) repeat
+        killNode!(node(victim, x), x)
+      n.node := rule.result
+      n.done := true
 
     removeAlias! (var : MR, alias : N, x : %) : Void ==
       debug ["Removing alias:" :: PF, var :: PF, "=>" :: PF, alias :: PF]
@@ -434,7 +441,19 @@ TypeCheckerNodeArray() : Exports == Implementation where
         nfun := node((r.function :: MR).id, x) -- function node
         nargs := [node((arg :: MR).id, x) for arg in r.args] -- argument nodes
         fnType := nodeMappingType([narg.type for narg in nargs], n.type)
-        nodeType!(nfun, [fnType], x)
+        not nodeType!(nfun, [fnType], x) => false
+        ++ Fetch all inferred function signatures.
+        sigs : List(MT) := []
+        for t in fetch(nfun.type, x) repeat
+          if typeOrigin? t then
+            t := (t :: TE).expr
+          if mappingType? t then
+            sigs := [t :: MT, :sigs]
+        ++ Propagate function arguments and return type down the tree.
+        for i in 1..#nargs for narg in nargs repeat
+          nodeType!(narg, removeDuplicates [(sig.args)(i) for sig in sigs], x)
+        nodeType!(n, removeDuplicates [sig.result for sig in sigs], x) 
+        true
 
       assign? rule =>
         r := rule :: ASS
@@ -448,15 +467,21 @@ TypeCheckerNodeArray() : Exports == Implementation where
         tn := node((r.truebr :: MR).id, x) -- true branch node
         fn := node((r.falsebr :: MR).id, x) -- false branch node
         not nodeType!(cn, [booleanType], x) => false
-        if nodesMatch!(tn, fn, x)
-          then nodeType!(n, [tn.type, fn.type], x)
-          else nodeType!(n, [voidType], x)
+        nodeType!(n, [tn.type, fn.type], x) => true
+        nodeType!(n, [voidType], x)
 
       subType? rule =>
         te := rule :: TE
         mr1 := te.expr :: MR
         mr2 := te.type :: MR
-        nodesMatch!(node(mr2.id, x), node(mr1.id, x), x)
+        n1 := node(mr1.id, x)
+        n2 := node(mr2.id, x)
+        nodesMatch!(n2, n1, x) => true
+        for t in fetch(n1.type, x) | unionType? t repeat
+          ut := t :: UT
+          if nodeType!(n2, ut.variants, x) then
+            return true
+        false
 
       typeOrigin? rule =>
         te := rule :: TE
@@ -469,27 +494,16 @@ TypeCheckerNodeArray() : Exports == Implementation where
     applyRule(r : TCR, n : TCN, x : %) : Boolean ==
       "and"/[applySubRule(c, n, x) for c in entries r]
 
-    killNode!(n : TCN, x : %) : Void ==
-      info ["Killing" :: PF, number(n.index) :: PF, "node!" :: PF]
-      n.done := true
-      if typeVar? n.type then
-        remove!(n.type :: MR, x.typevars)
-        n.type := emptyNode()
-
     applyAnyRule(n : TCN, x : %) : Boolean ==
       rules := n.rules
       empty? rules => true
-      rules' := []
-      for r in rules for i in 0.. | applyRule(r, n, x) repeat
-        rules' := 
-          if checkAndMarkIfDone!(n, x)
-            then [first rules]
-            else rest(rules, i)
-        break
-      empty? rules' => false
-      for victim in setDifference(children rules, children rules') repeat
+      while not applyRule(first rules, n, x) repeat
+        rules := rest rules
+      empty? rules => false
+      ++ Immediately remove rules that fail to apply.
+      for victim in setDifference(children n.rules, children rules) repeat
         killNode!(node(victim, x), x)
-      n.rules := rules'
+      n.rules := rules
       true
 
     countProgress (x : %) : Record(a : Integer, b : Integer) ==
@@ -507,13 +521,15 @@ TypeCheckerNodeArray() : Exports == Implementation where
           else p.b := p.b + #types
       p
 
+    walkPostOrder(n : TCN, x : %) : List(TCN) ==
+      lst := [walkPostOrder(node(i, x), x) for i in children(n)]
+      "concat"/concat(lst, [n])
+
     check x ==
       q : Queue(TCN) := empty()
 
-      -- initial run => fill up the queue with nodes that aren't done yet
-      for n in entries x.nodes repeat 
-        if not done? n then
-          enqueue!(n, q)
+      for n in walkPostOrder(x.nodes.1, x) repeat 
+        enqueue!(n, q)
 
       p := countProgress x
       s := 1 :: NNI
@@ -521,17 +537,19 @@ TypeCheckerNodeArray() : Exports == Implementation where
       while p.a > 0 or p.b > 0 repeat
         newQ : Queue(TCN) := empty()
 
-        step := paren (s :: PF)
-
         ++ perform meta-step
         while not empty? q repeat
           n := dequeue! q
           done? n => "iterate"
 
-          --debug([step, "Queue state" :: PF, "=>" :: PF, number(n.index) :: PF, ":" :: PF,
+          --debug([number(s) :: PF, "Queue state" :: PF, "=>" :: PF,
+          --       number(n.index) :: PF, ":" :: PF,
           --       bracket [number(m.index) :: PF for m in members q]])
 
           not applyAnyRule(n, x) =>
+            for n' in entries x.nodes repeat
+              rewriteIfInferred!(n', x)
+
             fail pile([spaces ["Type error for node:" :: PF, number(n.index) :: PF],
                        red(n.node :: PF)])
             debug (x :: PF)
