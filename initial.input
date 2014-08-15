@@ -6,6 +6,7 @@
 )compile SpadEnvironment.spad
 )compile SpadTreeWalker.spad
 )compile TypeUnifier.spad
+)compile TypeEvaluator.spad
 )compile SpadTypeChecker.spad
 )compile SpadCompilerPasses.spad
 )compile SpadCompilerTest.spad

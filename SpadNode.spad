@@ -59,6 +59,8 @@ SpadNodeCategory() : Category == ParsableCategory with
   typeAny? : % -> Boolean
   typeVar? : % -> Boolean
   subType? : % -> Boolean
+  caseExpr? : % -> Boolean
+  typeDecl? : % -> Boolean
 
   value? : % -> Boolean
 
@@ -173,6 +175,7 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       spaces [src, "->" :: PF, coerceType n.result]
 
     n = m ==
+      #n.args ~= #m.args => false
       "and"/[a = b for a in [n.result, :n.args] for b in [m.result, :m.args]]
 
 )abbrev domain SPTSUM SpadSumType
@@ -303,7 +306,7 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> ParsableCategory with
     elt : (%, "fields") -> List(NT)
-    construct : List(NT) -> %
+    construct : List(NT) -> Union(%, "failed")
     wellFormed : % -> Boolean
 
   Implementation ==> add
@@ -316,11 +319,9 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "fields") == x.r_fields
 
     construct fl ==
-      r := [fl]$Rep
-      not wellFormed r =>
-        fail ["Malformed type" :: PF, bold(r :: PF), "!" :: PF]
-        error ""
-      r
+      record := [fl]$Rep
+      wellFormed record => record
+      "failed"
 
     wellFormed x ==
       names : List(Symbol) := []
@@ -345,7 +346,10 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
                  "- malformed field" :: PF, bold convert(field), "!":: PF])
           error ""
         fields := [[symbol field.2, parse field.3], :fields]
-      [reverse fields]
+      r := [reverse fields]$Rep
+      wellFormed r => r
+      fail ["Malformed record type" :: PF, bold(r :: PF), "!" :: PF]
+      error ""
 
     convert x ==
       fs := [convert f for f in x.fields]
@@ -366,7 +370,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
   Exports ==> ParsableCategory with
     elt : (%, "variants") -> List(N)
     wellFormed : % -> Boolean
-    construct : List(N) -> %
+    construct : List(N) -> Union(%, "failed")
 
   Implementation ==> add
     Rep := Record(u_variants : List(N))
@@ -376,6 +380,11 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
     import Logger('Parser)
 
     elt(x, "variants") == x.u_variants
+
+    construct vl ==
+      union := [vl]$Rep
+      wellFormed union => union
+      "failed"
 
     wellFormed x ==
       ++ tagged union
@@ -415,19 +424,15 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
         types := [t, :types]
       true
 
-    construct vl ==
-      union := [vl]$Rep
-      not wellFormed union =>
-        fail ["Malformed union:" :: PF, union :: PF]
-        error ""
-      union
-
     parse ex ==
       -- (Union (: field1 Type1) (: field2 Type2) ...)
       -- (Union Type1 Type2 ...)
       parseUnionField (s : SExpression) : N ==
         if var? s then [[symbol s.2, parse s.3]$NT] else parse s
-      [[parseUnionField e for e in destruct cdr ex]]
+      union := [[parseUnionField e for e in destruct cdr ex]]$Rep
+      wellFormed union => union
+      fail ["Malformed union type:" :: PF, bold(union :: PF), "!" :: PF]
+      error ""
 
     convert x ==
       vs := [convert v for v in x.variants]
@@ -563,11 +568,8 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
 
     n = m ==
       #n.args ~= #m.args => false
-      for n' in [n.function, :n.args]
-        for m' in [m.function, :m.args] repeat
-          n' ~= m' =>
-            return false
-      true
+      "and"/([f = g for f in [n.function, :n.args]
+                    for g in [m.function, :m.args]])
 
 )abbrev domain SPSEG SpadSegment
 SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
@@ -671,6 +673,9 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce ex ==
       spaces [ex.expr :: PF, ex.kind :: PF, ex.type :: PF]
+
+    n = m ==
+      n.kind = m.kind and n.expr = m.expr and n.type = m.type
 
 )abbrev domain SPLOOP SpadLoop
 SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
@@ -1241,6 +1246,12 @@ SpadNode() : Exports == Implementation where
     subType? n ==
       not n case typeexpr => false
       n.typeexpr.kind = '_<_:
+    caseExpr? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = 'case
+    typeDecl? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = '_:
 
     value? n ==
       float? n or integer? n or string? n or symbol? n
@@ -1524,6 +1535,7 @@ SpadNode() : Exports == Implementation where
       sumType? n and sumType? m => (n :: ST) = (m :: ST)
       symbol? n and symbol? m => (n :: Symbol) = (m :: Symbol)
       unionType? n and unionType? m => (n :: UT) = (m :: UT)
+      typeExpr? n and typeExpr? m => (n :: TE) = (m :: TE)
       emptyNode? n and emptyNode? m => true
       false
 
@@ -1539,14 +1551,20 @@ SpadNode() : Exports == Implementation where
     nodeMacro (name, args, body) == [[name, args, body]$M]
     nodeMappingType (args, type) == [[args, type]$MT]
     nodeNamedType (name, type) == [[name, type]$NT]
-    nodeRecordType fields == [[fields]$RT]
+    nodeRecordType fields ==
+      rt := [fields]$RT
+      rt case "failed" => emptyNode()
+      [rt]
     nodeRef (i) == [[i, 'noderef]$MR]
     nodeSeq (kind, list) == [[kind, list]$SEQ]
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeExpr (kind, expr, type) == [[kind, expr, type]$TE]
     nodeSubType (type1, type2) == [['_<_:, type1, type2]$TE]
     nodeSumType (kind, types) == [[kind, types]$ST]
-    nodeUnionType variants == [[variants]$UT]
+    nodeUnionType variants ==
+      ut := [variants]$UT
+      ut case "failed" => emptyNode()
+      [ut]
     nodeWhere (body, env) == [[body, env]$W]
 
 )abbrev package SPNFACT SpadNodeFactory

@@ -365,7 +365,12 @@ TypeUnifier() : Exports == Implementation where
             es := remove(containsWildcard?, s.entry)
             empty? es => "iterate"
             subst(s.key) := es
-          terms := [substitute(t, subst), :terms]
+          t := substitute(t, subst)
+          ++ Sometimes, by applying substitutions, unions will become
+          ++ ill-formed (i.e. contain two fields of same type),
+          ++ filter out such cases.
+          emptyNode? t => "iterate"
+          terms := [t, :terms]
           substList := [subst, :substList]
       ++ Remove wildcard if we have more than one match.
       if #terms > 1 then
@@ -382,6 +387,7 @@ TypeUnifier() : Exports == Implementation where
     ++ otherwise F is invariant
     isSubType(t1, t2) ==
       t1 = t2 => true
+      typeVar? t1 or typeVar? t2 => true
 
       unionType? t2 =>
         if unionType? t1 then
@@ -434,5 +440,4 @@ TypeUnifier() : Exports == Implementation where
           isSubType(nodeApp(['Integer], []), t2)
         false
 
-      fail ["subType: case not handled for" :: PF, paren [t1 :: PF, t2 :: PF]]
-      error ""
+      false

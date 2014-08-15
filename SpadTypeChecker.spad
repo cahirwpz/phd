@@ -141,16 +141,16 @@ TypeCheckerNode() : Exports == Implementation where
       not empty? x.rules =>
         r := sepBy(" | " :: PF, [(r :: PF) for r in x.rules])
         spaces([prefix, r, "is" :: PF, bold (x.type :: PF)])
+      n :=
+        typeOrigin? x.node or typeDecl? x.node => (x.node :: TE).expr
+        x.node
       node :=
-        value? x.node =>
-          bold(x.node :: PF)
-        typeExpr? x.node and value? (x.node :: TE).expr =>
-          bold((x.node :: TE).expr :: PF)
-        function? x.node =>
-          fn := x.node :: FN
-          bold cyan(fn.name :: PF)
-        bold red("?" :: PF)
-      import? x.node =>
+        value? n =>
+          bold(n :: PF)
+        function? n =>
+          bold cyan((n :: FN).name :: PF)
+        bold ("?" :: PF)
+      import? n =>
         spaces [prefix, "import" :: PF, bold (x.type ::PF)]
       spaces [prefix, node, ":" :: PF, bold (x.type :: PF)]
 
@@ -307,7 +307,8 @@ TypeCheckerNodeArray() : Exports == Implementation where
 
     unknownType? (n : TCN, x : %) : Boolean ==
       ++ checks if type attached to the node has form "%a[?]"
-      typeVar? n.type and emptyType? fetch(n.type, x)
+      not typeVar? n.type => false
+      emptyType?((x.typevars)(n.type :: MR))
 
     typeInferred? (tvar : MR, x : %) : Boolean ==
       types := (x.typevars)(tvar)
@@ -323,7 +324,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
 
     checkAndMarkIfDone! (n, x) ==
       unbound? n.type => false
-      #n.rules = 0 =>
+      empty? n.rules =>
         n.done := true
       ++ We only care about first rule, because it produced actual result.
       rule := first n.rules
@@ -334,10 +335,24 @@ TypeCheckerNodeArray() : Exports == Implementation where
       n.node := rule.result
       n.done := true
 
+    rewriteTypevars! (var : MR, term : N, x : %) : Void ==
+      debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
+             "in all type variables." :: PF])
+      for tv in entries x.typevars | not emptyType? tv.entry repeat
+        ts : List(N) := []
+        for t in tv.entry repeat
+          t := substitute(t, var, term)
+          ++ Remove duplicates.
+          member?(t, ts) => "iterate"
+          ++ Avoid ill-formed types (for now only unions).
+          emptyNode? t => "iterate"
+          ts := [t, :ts]
+        tv.entry := reverse ts
+
     removeAlias! (var : MR, alias : N, x : %) : Void ==
+      var = (alias :: MR) => void() ++ BUG? Handle degenerate case!
       debug ["Removing alias:" :: PF, var :: PF, "=>" :: PF, alias :: PF]
-      for tv in entries(x.typevars) repeat
-        tv.entry := [substitute(t, var, alias) for t in tv.entry]
+      rewriteTypevars!(var, alias, x)
       for n in entries(x.nodes) | occurs?(var, n.type) repeat
         n.type := substitute(n.type, var, alias)
         debug (["Rewrote" :: PF, number(n.index) :: PF, "with" :: PF,
@@ -403,6 +418,25 @@ TypeCheckerNodeArray() : Exports == Implementation where
           (x.typevars)(n.type :: MR) := ms.terms
       apply!(ms.subst, x)
 
+    nodeSubType! (sn : TCN, tn : TCN, x : %) : Boolean ==
+      ++ %s[?] and %t[?] => this should not happen?
+      unknownType?(sn, x) and unknownType?(tn, x) => false
+      ++ (%s[s1, s2, ...] | S) <: (%t[t1, t2, ...] | T)
+      sl : List(N) := []
+      tl : List(N) := []
+      for s in fetch(sn.type, x) repeat
+        for t in fetch(tn.type, x) repeat
+          unionType? t and not wellFormed(t :: UT) => "iterate"
+          if isSubType(s, t) then
+            if not member?(s, sl) then
+              sl := [s, :sl]
+            if not member?(t, tl) then
+              tl := [t, :tl]
+      empty? sl or empty? tl => false
+      typeVar? sn.type and not applyOne!(sn.type :: MR, sl, x) => false
+      typeVar? tn.type and not applyOne!(tn.type :: MR, tl, x) => false
+      true
+
     -- rewrite all nodes with type that contains given variable
     rewriteNodes! (var : MR, term : N, x : %) : Void ==
       nodes := [n for n in nodes(x) | occurs?(var, n.type)] 
@@ -420,10 +454,9 @@ TypeCheckerNodeArray() : Exports == Implementation where
       term := first (x.typevars)(var)
       debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
              "in all type variables." :: PF])
-      for tv in entries x.typevars repeat
-        tv.entry := [substitute(t, var, term) for t in tv.entry]
+      rewriteTypevars!(var, term, x)
       debug ["Removing" :: PF, bold(var :: PF), "type variable." :: PF]
-      term := first(remove!(var, x.typevars) :: List(N))
+      remove!(var, x.typevars)
       info (["Type inferred for node" :: PF, number(n.index) :: PF,
              ":" :: PF, bold(term :: PF)])
       rewriteNodes!(var, term, x)
@@ -467,8 +500,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
         tn := node((r.truebr :: MR).id, x) -- true branch node
         fn := node((r.falsebr :: MR).id, x) -- false branch node
         not nodeType!(cn, [booleanType], x) => false
-        nodeType!(n, [tn.type, fn.type], x) => true
-        nodeType!(n, [voidType], x)
+        nodeSubType!(tn, n, x) and nodeSubType!(fn, n, x)
 
       subType? rule =>
         te := rule :: TE
@@ -476,12 +508,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
         mr2 := te.type :: MR
         n1 := node(mr1.id, x)
         n2 := node(mr2.id, x)
-        nodesMatch!(n2, n1, x) => true
-        for t in fetch(n1.type, x) | unionType? t repeat
-          ut := t :: UT
-          if nodeType!(n2, ut.variants, x) then
-            return true
-        false
+        nodesMatch!(n1, n2, x) or nodeSubType!(n1, n2, x)
 
       typeOrigin? rule =>
         te := rule :: TE
@@ -497,7 +524,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
     applyAnyRule(n : TCN, x : %) : Boolean ==
       rules := n.rules
       empty? rules => true
-      while not applyRule(first rules, n, x) repeat
+      while not empty? rules and not applyRule(first rules, n, x) repeat
         rules := rest rules
       empty? rules => false
       ++ Immediately remove rules that fail to apply.
@@ -547,8 +574,8 @@ TypeCheckerNodeArray() : Exports == Implementation where
           --       bracket [number(m.index) :: PF for m in members q]])
 
           not applyAnyRule(n, x) =>
-            for n' in entries x.nodes repeat
-              rewriteIfInferred!(n', x)
+            --for n' in entries x.nodes repeat
+            --  rewriteIfInferred!(n', x)
 
             fail pile([spaces ["Type error for node:" :: PF, number(n.index) :: PF],
                        red(n.node :: PF)])
@@ -613,6 +640,7 @@ TypeCheckerRuleFactory() : Exports == Implementation where
       (Union("Capsule", "Sequence", "Tuple"), TCN, List(TCN)) -> TCR
     typeOriginRule : (TCN, N) -> TCR
     subTypeRule : (TCN, TCN) -> TCR
+    superTypeRule : (TCN, TCN) -> TCR
 
   Implementation ==> add
     import SpadNode
@@ -681,6 +709,11 @@ TypeCheckerRuleFactory() : Exports == Implementation where
       deps : List(N) :=
         [nodeRef(subtype), nodeSubType(nodeRef(subtype), nodeRef(type))]
       newRule(deps, nodeRef(subtype))
+
+    superTypeRule (super, type) ==
+      deps : List(N) :=
+        [nodeRef(type), nodeSubType(nodeRef(super), nodeRef(type))]
+      newRule(deps, nodeRef(type))
 
 )abbrev package STYPCHK SpadTypeChecker
 SpadTypeChecker() : Exports == Implementation where
@@ -749,6 +782,10 @@ SpadTypeChecker() : Exports == Implementation where
         for f in makeRecordFunList t repeat
           mt := (f :: NT).type :: MT
           env := addModemap(f.name, t, [mt.result, :mt.args], env)
+      if unionType? t then
+        ut := t :: UT
+        for v in ut.variants repeat
+          env := envAddType(v, env)
       env
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TCN ==
@@ -821,11 +858,15 @@ SpadTypeChecker() : Exports == Implementation where
     walkCondExpr (ce : CE, ctx : CTX, env : ENV) : TCN ==
       debug ["Processing conditional expression." :: PF]
       this := addNode!(ctx, [ce])
-      this.type := addTypeVar!(ctx)
 
       cond := walk(ce.cond, ctx, env)
       truebr := walk(ce.truebr, ctx, cond.env)
-      falsebr := walk(ce.falsebr, ctx, cond.env)
+      falsebr := walk(ce.falsebr, ctx, (caseExpr? ce.cond => env; cond.env))
+
+      this.type := addTypeVar!(ctx,
+        [truebr.type, falsebr.type,
+         nodeUnionType [truebr.type, falsebr.type],
+         nodeUnionType [falsebr.type, truebr.type]])
 
       ++ TODO: "truebr.env" and "falsebr.env" should be merged and passed
       ++ forward instead of just "env". Merging means that if the same variable
@@ -1213,6 +1254,7 @@ SpadTypeChecker() : Exports == Implementation where
 
       te.kind = '_:_: =>
         debug ["Expression" :: PF, te.expr :: PF, "have to coerce to" :: PF, te.type :: PF]
+        env := envAddType(te.type, env)
         walk(nodeApp(['coerce], [te.expr]), ctx, env)
     
       te.kind = '_$ =>
@@ -1231,6 +1273,24 @@ SpadTypeChecker() : Exports == Implementation where
         expr := walk(te.expr, ctx, env)
 
         this.rules := [typeOriginRule(expr, te.type)]
+        this
+
+      te.kind = 'case =>
+        env := envAddType(te.type, env)
+
+        this := addNode!(ctx, [te], env)
+        this.type := addTypeVar!(ctx, [booleanType])
+
+        if symbol? te.expr then
+          this.env := addMode(te.expr :: Symbol, te.type, env)
+
+        exprType := addNode!(ctx, te.type, env)
+        exprType.type := te.type
+
+        expr := walk(te.expr, ctx, env)
+        exprType.rules := [superTypeRule(exprType, expr)]
+
+        this.rules := [newRule([nodeRef(exprType)], [te])]
         this
 
       fail ["Type expression" :: PF, bold red paren(te :: PF), "not handled yet!" :: PF]
