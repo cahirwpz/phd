@@ -320,7 +320,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       n.done := true
       if typeVar? n.type then
         remove!(n.type :: MR, x.typevars)
-        n.type := emptyNode()
+        n.type := typeUndef()
 
     checkAndMarkIfDone! (n, x) ==
       unbound? n.type => false
@@ -375,7 +375,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       -- 2) typevars(%x) = [s1, s2, s3, ...], %x = [t1, t2, t3, ...]
       -- Unify proposed values with already stored in the variable
       -- store only matching ones (without performing substitutions).
-      ms := findMatches(typevars(var), terms)
+      ms := unifyTypePairwise(typevars(var), terms)
       empty? ms.terms => false
       typevars(var) := ms.terms
       true
@@ -384,7 +384,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       empty? substitutions => true
       "and"/[applyOne!(s.key, s.entry, x) for s in entries substitutions]
 
-    nodesMatch! (ln : TCN, rn : TCN, x : %) : Boolean ==
+    nodesTypeMatch! (ln : TCN, rn : TCN, x : %) : Boolean ==
       ++ %a[?] ~ %b[?]
       unknownType?(ln, x) and unknownType?(rn, x) =>
         ures := unifyType(ln.type, rn.type)
@@ -397,7 +397,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       not unknownType?(ln, x) and unknownType?(rn, x) =>
         applyOne!(rn.type :: MR, [ln.type], x)
       ++ (%a[t1, t2, ...] | T) ~ (%b[s1, s2, ...] | S)
-      ms := findMatches(fetch(ln.type, x), fetch(rn.type, x))
+      ms := unifyTypePairwise(fetch(ln.type, x), fetch(rn.type, x))
       empty? ms.terms => false
       if not aliasType? ms.terms then
         if typeVar? ln.type then
@@ -411,30 +411,62 @@ TypeCheckerNodeArray() : Exports == Implementation where
       unknownType?(n, x) =>
         applyOne!(n.type :: MR, types, x)
       ++ (%a[t1, t2, ...] | T) ~ [s1, s2, ...]
-      ms := findMatches(fetch(n.type, x), types)
+      ms := unifyTypePairwise(fetch(n.type, x), types)
       empty? ms.terms => false
       if not aliasType? ms.terms then
         if typeVar? n.type then
           (x.typevars)(n.type :: MR) := ms.terms
       apply!(ms.subst, x)
 
+    ++ With limited knowledge this routine tries to constraint types in given
+    ++ nodes to pairs which are (possibly) in subtyping relation.
     nodeSubType! (sn : TCN, tn : TCN, x : %) : Boolean ==
-      ++ %s[?] and %t[?] => this should not happen?
-      unknownType?(sn, x) and unknownType?(tn, x) => false
-      ++ (%s[s1, s2, ...] | S) <: (%t[t1, t2, ...] | T)
+      ++ {%s[s1, s2, ...] | S} <: {%t[?]} or {%s[?]} <: {%t[t1, t2, ...] | T}
+      ++ In both cases we can assume nothing... one should just run
+      ++ type unification as a fallback.
+      unknownType?(sn, x) or unknownType?(tn, x) => false
+      ++ {%s[s1, s2, ...] | S} <: {%t[t1, t2, ...] | T}
       sl : List(N) := []
       tl : List(N) := []
-      for s in fetch(sn.type, x) repeat
-        for t in fetch(tn.type, x) repeat
-          unionType? t and not wellFormed(t :: UT) => "iterate"
+      ++ {%s | S} <: {%t[t1, t2, ...] | T}
+      ++ Consider subtyping between %s and %t as if structure of %s was unknown
+      ++ for the time being.
+      for t in fetch(tn.type, x) repeat
+        if isSubType(sn.type, t) then
+          tl := [t, :tl]
+      if not empty? tl then
+        sl := fetch(sn.type, x)
+      ++ KBa: In %s and %t there are usually some type variables. We could
+      ++ start normalizing terms to find out what's their exact structure, but
+      ++ I consider it to be dangerous.
+      ++ Deal with them later with type unification.
+      sl := concat([s for s in fetch(sn.type, x) | unbound? s], sl)
+      tl := concat([t for t in fetch(tn.type, x) | unbound? t], tl)
+      ++ With terms of known structure we can deal quite well.
+      for s in fetch(sn.type, x) | not unbound? s repeat
+        for t in fetch(tn.type, x) | not unbound? t repeat
           if isSubType(s, t) then
-            if not member?(s, sl) then
-              sl := [s, :sl]
-            if not member?(t, tl) then
-              tl := [t, :tl]
+            sl := [s, :sl]
+            tl := [t, :tl]
       empty? sl or empty? tl => false
-      typeVar? sn.type and not applyOne!(sn.type :: MR, sl, x) => false
-      typeVar? tn.type and not applyOne!(tn.type :: MR, tl, x) => false
+      if typeVar? sn.type then
+        (x.typevars)(sn.type :: MR) := removeDuplicates sl
+      if typeVar? tn.type then
+        (x.typevars)(tn.type :: MR) := removeDuplicates tl
+      true
+
+    nodeSubTypeOfList! (sn : TCN, types : List(N), x : %) : Boolean ==
+      ++ {%s[?]} <: [t1, t2, ...]
+      unknownType?(sn, x) => false
+      ++ {%s[s1, s2, ...] | S} <: [t1, t2, ...]
+      sl : List(N) := []
+      for s in fetch(sn.type, x) repeat
+        for t in types repeat
+          if isSubType(s, t) then
+            sl := [s, :sl]
+      empty? sl => false
+      if typeVar? sn.type then
+        (x.typevars)(sn.type :: MR) := removeDuplicates sl
       true
 
     -- rewrite all nodes with type that contains given variable
@@ -473,8 +505,16 @@ TypeCheckerNodeArray() : Exports == Implementation where
         r := rule :: APP
         nfun := node((r.function :: MR).id, x) -- function node
         nargs := [node((arg :: MR).id, x) for arg in r.args] -- argument nodes
+        ++ Currently seen function type - may contain type variables.
         fnType := nodeMappingType([narg.type for narg in nargs], n.type)
-        not nodeType!(nfun, [fnType], x) => false
+        ++ If result type is not known yet, we have to cheat.
+        ++ Otherwise subtyping will fail.
+        fnSuperType := nodeMappingType([narg.type for narg in nargs],
+                                       (unknownType?(n, x) => typeAny(); n.type))
+        debug ["Current function type:" :: PF, fnType :: PF]
+        ++ Either match the type with types stored in function node or try
+        ++ to identify subtype that will accept current arguments and return type.
+        not (nodeType!(nfun, [fnType], x) or nodeSubTypeOfList!(nfun, [fnSuperType], x)) => false
         ++ Fetch all inferred function signatures.
         sigs : List(MT) := []
         for t in fetch(nfun.type, x) repeat
@@ -492,7 +532,8 @@ TypeCheckerNodeArray() : Exports == Implementation where
         r := rule :: ASS
         ln := node((r.lval :: MR).id, x) -- left node
         rn := node((r.rval :: MR).id, x) -- right node
-        nodesMatch!(ln, rn, x) and nodeType!(n, [ln.type, rn.type], x)
+        not (nodeSubType!(rn, ln, x) or nodesTypeMatch!(ln, rn, x)) => false
+        nodeType!(n, [ln.type], x)
 
       condExpr? rule =>
         r := rule :: CE
@@ -500,7 +541,15 @@ TypeCheckerNodeArray() : Exports == Implementation where
         tn := node((r.truebr :: MR).id, x) -- true branch node
         fn := node((r.falsebr :: MR).id, x) -- false branch node
         not nodeType!(cn, [booleanType], x) => false
-        nodeSubType!(tn, n, x) and nodeSubType!(fn, n, x)
+        nodeSubType!(tn, n, x) and nodeSubType!(fn, n, x) => true
+        nodesTypeMatch!(n, tn, x) and nodesTypeMatch!(n, fn, x) => true
+        typeUndef? tn.type and nodeType!(fn, [typeAny], x) =>
+          killNode!(n, x)
+          true
+        typeUndef? fn.type and nodeType!(tn, [typeAny], x) =>
+          killNode!(n, x)
+          true
+        false
 
       subType? rule =>
         te := rule :: TE
@@ -508,7 +557,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
         mr2 := te.type :: MR
         n1 := node(mr1.id, x)
         n2 := node(mr2.id, x)
-        nodesMatch!(n1, n2, x) or nodeSubType!(n1, n2, x)
+        nodeSubType!(n1, n2, x) or nodesTypeMatch!(n1, n2, x)
 
       typeOrigin? rule =>
         te := rule :: TE
@@ -1316,7 +1365,7 @@ SpadTypeChecker() : Exports == Implementation where
 
     walkEmpty (e : N, ctx : CTX, env : ENV) : TCN ==
       this := addNode!(ctx, e, env)
-      this.type := voidType
+      this.type := typeUndef
       this
 
     walk (n, ctx, env) ==

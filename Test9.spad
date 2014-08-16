@@ -1,12 +1,6 @@
 )abbrev package TEST9 Test9
 Test9 : Exports == Implementation where
   Exports ==> with
-    blah : String -> Union(String, Integer)
-    blah : Integer -> Union(String, Integer)
-    blah : NonNegativeInteger -> Integer
-    blah : Union(String, Integer) -> Union(String, Integer, Float)
-    blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
-
     check : (Integer, Integer, Integer) -> Union(Integer, "failed")
 
     addZero : Union(Integer, String) -> Union(Integer, String)
@@ -14,12 +8,6 @@ Test9 : Exports == Implementation where
     mycoerce : Integer -> Union(NonNegativeInteger, "failed")
 
   Implementation ==> add
-    blah (x : String) == x
-    blah (x : Integer) == x
-    blah (x : NonNegativeInteger) == x
-    blah (x : Union(String, Integer)) == x
-    blah (x : Record(a : NonNegativeInteger, b : String)) == x
-
     check (x, min, max) ==
       x < min => "failed"
       x > max => "failed"

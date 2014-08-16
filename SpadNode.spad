@@ -58,6 +58,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   where? : % -> Boolean
   typeAny? : % -> Boolean
   typeVar? : % -> Boolean
+  typeUndef?: % -> Boolean
   subType? : % -> Boolean
   caseExpr? : % -> Boolean
   typeDecl? : % -> Boolean
@@ -125,7 +126,8 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
       (n.id = m.id) and (n.kind = m.kind)
 
     coerce (m : %) : Symbol ==
-      m.kind = 'typeany => "%?" :: Symbol
+      m.kind = 'typeany => "%any" :: Symbol
+      m.kind = 'typeundef => "%undef" :: Symbol
       s : String :=
         m.kind = 'typevar => "%"
         m.kind = 'noderef => "#"
@@ -134,6 +136,9 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce (n : %) : PF ==
       (n :: Symbol) :: PF
+
+    n = m ==
+      n.id = m.id and n.kind = m.kind
 
 )abbrev domain SPTMAP SpadMappingType
 SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
@@ -1243,6 +1248,9 @@ SpadNode() : Exports == Implementation where
     typeVar? n ==
       not n case marker => false
       n.marker.kind = 'typevar
+    typeUndef? n ==
+      not n case marker => false
+      n.marker.kind = 'typeundef
     subType? n ==
       not n case typeexpr => false
       n.typeexpr.kind = '_<_:
@@ -1536,6 +1544,7 @@ SpadNode() : Exports == Implementation where
       symbol? n and symbol? m => (n :: Symbol) = (m :: Symbol)
       unionType? n and unionType? m => (n :: UT) = (m :: UT)
       typeExpr? n and typeExpr? m => (n :: TE) = (m :: TE)
+      marker? n and marker? m => (n :: MR) = (m :: MR)
       emptyNode? n and emptyNode? m => true
       false
 
@@ -1590,6 +1599,7 @@ SpadNodeFactory() : Exports == Implementation where
 
     typeAny : () -> N
     typeVar : NNI -> N
+    typeUndef : () -> N
 
     makeRecordFunList : N -> List(NT)
     makeUnionFunList : N -> List(NT)
@@ -1605,6 +1615,7 @@ SpadNodeFactory() : Exports == Implementation where
     categoryType () == nodeApp(['Category], [])
 
     typeAny() == [[0, 'typeany]$MR]
+    typeUndef() == [[0, 'typeundef]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
 
     makeRecordFunList n ==

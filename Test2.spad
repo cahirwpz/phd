@@ -6,17 +6,9 @@ Test2(A : Type) : Exports == Implementation where
     index : (A -> Boolean, List(A)) -> NonNegativeInteger
     sumPositive : List(I) -> I
     sumRange : (List(I), Integer, Integer) -> Integer
+    countPositive : List(I) -> I
 
   Implementation ==> add
-    index(pred, l) ==
-      i := 1
-      while not empty? l repeat
-        h := first l
-        pred h => return i
-        i := i + 1
-        l := rest l
-      0
-
     sumPositive l ==
       s := 0
       for i in reverse l | i > 0 repeat
@@ -26,5 +18,22 @@ Test2(A : Type) : Exports == Implementation where
     sumRange (l, i, j) ==
       s := 0
       for k in i..(j - 1) repeat
-        s := s + l.k
+        s := s + l(k)
       s
+
+    index(pred, l) ==
+      i := 1
+      while not empty? l repeat
+        h := first l
+        pred h =>
+          return i
+        i := i + 1
+        l := rest l
+      0
+
+    countPositive l ==
+      i := 0
+      for k in l repeat
+        if k > 0 then
+          i := i + 1
+      i
