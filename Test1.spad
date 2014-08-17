@@ -8,30 +8,31 @@ Test1() : Exports == Implementation where
     foo : I -> I
     foo : S -> F
     foo : (F, I) -> S
-    --sum : List(I) -> I
+    bar : (Integer, Integer) -> Integer
 
   Implementation ==> add
-    --import List(I)
-
-    import String
-    import PositiveInteger
-    import NonNegativeInteger
     import Float
- 
-    -- foo : Integer -> Float
-    bar : (Integer, String) -> Float
+    import NonNegativeInteger
 
-    foo(a : I) ==
-      a2 := a * a
+    -- doesn't work yet
+    --foo : Integer -> Float
+
+    foo a ==
+      a2 := (a * a) $ Integer
       ma := - a
       if a >= 0
-        then ma
-        else a2
+        then ma * 2
+        else a2 + 2
 
-    -- baz : (NonNegativeInteger, Integer) -> String
+    baz : (NonNegativeInteger, Integer) -> String
 
-    --sum (l : List(I)) : I ==
-    --  s := 0
-    --  for i in l repeat
-    --    s := s + i
-    --  s
+    bar (x, y) ==
+      -- cannot remove next line, because branch merging doesn't work
+      nx : Integer
+      if x > 0 then
+        y := -10
+        nx := x * y
+      else
+        nx := -x 
+      nx + y
+

@@ -1,6 +1,7 @@
 )abbrev domain TEST2 Test2
 Test2(A : Type) : Exports == Implementation where
   I ==> Integer
+  NNI ==> NonNegativeInteger
 
   Exports ==> with
     index : (A -> Boolean, List(A)) -> NonNegativeInteger
@@ -22,7 +23,7 @@ Test2(A : Type) : Exports == Implementation where
       s
 
     index(pred, l) ==
-      i := 1
+      i := 1 :: NNI
       while not empty? l repeat
         h := first l
         pred h =>

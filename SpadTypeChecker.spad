@@ -551,7 +551,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
         mr2 := te.type :: MR
         n1 := node(mr1.id, x)
         n2 := node(mr2.id, x)
-        nodeSubType!(n1, n2, x) or nodesTypeMatch!(n1, n2, x)
+        nodesTypeMatch!(n1, n2, x) or nodeSubType!(n1, n2, x)
 
       typeOrigin? rule =>
         te := rule :: TE
@@ -1296,7 +1296,14 @@ SpadTypeChecker() : Exports == Implementation where
       te.kind = '_:_: =>
         debug ["Expression" :: PF, te.expr :: PF, "have to coerce to" :: PF, te.type :: PF]
         env := envAddType(te.type, env)
-        walk(nodeApp(['coerce], [te.expr]), ctx, env)
+
+        this := addNode!(ctx, [te], env)
+        this.type := addTypeVar!(ctx, [te.type])
+
+        expr := walk(te.expr, ctx, env)
+        coerceFun := walk(['coerce], ctx, env)
+        this.rules := [subTypeRule(expr, this), applyRule(coerceFun, [expr])]
+        this
     
       te.kind = '_$ =>
         not symbol? te.expr =>

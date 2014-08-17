@@ -5,6 +5,7 @@ Test3() : Exports == Implementation where
     hello1 : () -> Void
     hello2 : () -> Void
     foobar : Integer -> Integer
+    baz : Integer -> String
 
   Implementation ==> add
     import Integer
@@ -23,3 +24,6 @@ Test3() : Exports == Implementation where
     foobar x ==
       x < 0 => error "Cannot accept negative integer!"
       x
+
+    baz x ==
+      error "Not implemented!"

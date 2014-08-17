@@ -458,6 +458,8 @@ TypeUnifier() : Exports == Implementation where
       typeOrigin? n2 =>
         te2 := n2 :: TE
         isSubType'(n1, te2.expr)
+      ++ Everything is subtype of wildcard type!
+      typeAny? n2 => true
 
       false
 
