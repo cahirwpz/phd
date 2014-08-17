@@ -349,6 +349,26 @@ TypeCheckerNodeArray() : Exports == Implementation where
           ts := [t, :ts]
         tv.entry := reverse ts
 
+    -- rewrite all nodes with type that contains given variable
+    rewriteNodes! (var : MR, term : N, x : %) : Void ==
+      for n in nodes(x) | occurs?(var, n.type) repeat
+        n.type := substitute(n.type, var, term)
+        debug (["Rewrote" :: PF, number(n.index) :: PF, "with" :: PF,
+                brace spaces [var :: PF, "=>" :: PF, term :: PF]])
+
+    rewriteIfInferred! (n : TCN, x : %) : Boolean ==
+      not typeVar? n.type => false
+      var := n.type :: MR
+      not typeInferred?(var, x) => false
+      term := first (x.typevars)(var)
+      rewriteTypevars!(var, term, x)
+      debug ["Removing" :: PF, bold(var :: PF), "type variable." :: PF]
+      remove!(var, x.typevars)
+      info (["Type inferred for node" :: PF, number(n.index) :: PF,
+             ":" :: PF, bold(term :: PF)])
+      rewriteNodes!(var, term, x)
+      true
+
     removeAlias! (var : MR, alias : N, x : %) : Void ==
       var = (alias :: MR) => void() ++ BUG? Handle degenerate case!
       debug ["Removing alias:" :: PF, var :: PF, "=>" :: PF, alias :: PF]
@@ -361,8 +381,8 @@ TypeCheckerNodeArray() : Exports == Implementation where
       remove!(var, x.typevars)
 
     applyOne! (var : MR, terms : List(N), x : %) : Boolean ==
-      debug(["Modyfing" :: PF, var :: PF, "type variable with" :: PF,
-             bracket [t :: PF for t in terms]])
+      debug(["Modyfing" :: PF, bold(var :: PF), "type variable with" :: PF,
+             bracket [bold(t :: PF) for t in terms]])
       typevars := x.typevars
       -- 1) typevars(%x) = [?]
       emptyType? typevars(var) =>
@@ -469,31 +489,6 @@ TypeCheckerNodeArray() : Exports == Implementation where
         (x.typevars)(sn.type :: MR) := removeDuplicates sl
       true
 
-    -- rewrite all nodes with type that contains given variable
-    rewriteNodes! (var : MR, term : N, x : %) : Void ==
-      nodes := [n for n in nodes(x) | occurs?(var, n.type)] 
-      for n in nodes repeat
-        n.type := substitute(n.type, var, term)
-        debug (["Rewrote" :: PF, number(n.index) :: PF, "with" :: PF,
-                brace spaces [var :: PF, "=>" :: PF, term :: PF]])
-      for n in nodes repeat
-        checkAndMarkIfDone!(n, x)
-
-    rewriteIfInferred! (n : TCN, x : %) : Boolean ==
-      not typeVar? n.type => false
-      var := n.type :: MR
-      not typeInferred?(var, x) => false
-      term := first (x.typevars)(var)
-      debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
-             "in all type variables." :: PF])
-      rewriteTypevars!(var, term, x)
-      debug ["Removing" :: PF, bold(var :: PF), "type variable." :: PF]
-      remove!(var, x.typevars)
-      info (["Type inferred for node" :: PF, number(n.index) :: PF,
-             ":" :: PF, bold(term :: PF)])
-      rewriteNodes!(var, term, x)
-      true
-
     applySubRule(rule : N, n : TCN, x : %) : Boolean ==
       emptyNode? rule => true
       nodeRef? rule => true
@@ -511,7 +506,6 @@ TypeCheckerNodeArray() : Exports == Implementation where
         ++ Otherwise subtyping will fail.
         fnSuperType := nodeMappingType([narg.type for narg in nargs],
                                        (unknownType?(n, x) => typeAny(); n.type))
-        debug ["Current function type:" :: PF, fnType :: PF]
         ++ Either match the type with types stored in function node or try
         ++ to identify subtype that will accept current arguments and return type.
         not (nodeType!(nfun, [fnType], x) or nodeSubTypeOfList!(nfun, [fnSuperType], x)) => false
@@ -605,7 +599,11 @@ TypeCheckerNodeArray() : Exports == Implementation where
       q : Queue(TCN) := empty()
 
       for n in walkPostOrder(x.nodes.1, x) repeat 
+        rewriteIfInferred!(n, x)
         enqueue!(n, q)
+
+      info vconcat(["Tree ready for type checking..." :: PF,
+                    x :: PF, x.typevars :: PF])
 
       p := countProgress x
       s := 1 :: NNI
@@ -623,23 +621,20 @@ TypeCheckerNodeArray() : Exports == Implementation where
           --       bracket [number(m.index) :: PF for m in members q]])
 
           not applyAnyRule(n, x) =>
-            --for n' in entries x.nodes repeat
-            --  rewriteIfInferred!(n', x)
-
             fail pile([spaces ["Type error for node:" :: PF, number(n.index) :: PF],
                        red(n.node :: PF)])
             debug (x :: PF)
             debug (x.typevars :: PF)
             return false
 
-          ++ check if we're done with processing type variable tied to this node
+          ++ Check if we're done with processing type variable tied to this node.
           rewriteIfInferred!(n, x)
 
-          ++ if type is inferred for all dependencies the node itself won't change
-          if checkAndMarkIfDone!(n, x) then
+          ++ If type is inferred for all dependencies the node itself won't change
+          checkAndMarkIfDone!(n, x) =>
             debug ["Processing node" :: PF, number(n.index) :: PF, "completed!" :: PF]
-          else
-            enqueue!(n, newQ)
+
+          enqueue!(n, newQ)
 
         ++ check if during meta-step the problem was reduced compared to
         ++ previous meta-step
@@ -1033,9 +1028,6 @@ SpadTypeChecker() : Exports == Implementation where
         this.rules := ([newRule(
           reverse deps,
           nodeFun(fn.name, reverse argList, typeRef(fnRes), nodeRef(fnBody)))])
-
-        debug ["Tree ready for unification :" :: PF]
-        debug [ctx' :: PF]
 
         if check ctx' then
           this' := addNode!(ctx, [fn], env)

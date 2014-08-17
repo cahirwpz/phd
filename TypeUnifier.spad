@@ -42,10 +42,6 @@ TypeUnifier() : Exports == Implementation where
     import SpadNodeFactory
     import Logger('Unify)
 
-    convert : SUBST -> PF
-    convert subst ==
-      vconcat [spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst]
-
     failed? t == t case "failed"
 
     occurs? (tvar, n) ==
@@ -266,19 +262,19 @@ TypeUnifier() : Exports == Implementation where
         merged(s.key) := removeDuplicates s.entry
       merged
 
+    unifyType' : (N, N) -> URES
+
     unifyTypeList(pairs : List(P)) : URES ==
       subst : SUBST := [[]]
       while not empty? pairs repeat
         pair := first pairs
-        ures := unifyType(pair.t1, pair.t2)
+        ures := unifyType'(pair.t1, pair.t2)
         failed? ures => return "failed"
         subst := concat (subst, ures :: SUBST)
         pairs := [[substitute(pair.t1, subst), substitute(pair.t2, subst)]$P for pair in rest pairs]
       subst
 
-    unifyType(n1 : N, n2 : N) : URES ==
-      debug [brace(n1 :: PF), "~" :: PF, brace(n2 :: PF)]
-
+    unifyType'(n1 : N, n2 : N) : URES ==
       -- left or right node is a type variable => just generate a substitution
       typeVar? n1 and typeVar? n2 =>
         mr1 := n1 :: MR
@@ -331,17 +327,17 @@ TypeUnifier() : Exports == Implementation where
         nt1 := n1 :: NT
         nt2 := n2 :: NT
         nt1.name ~= nt2.name => "failed"
-        unifyType(nt1.type, nt2.type)
+        unifyType'(nt1.type, nt2.type)
       typeOrigin? n1 and typeOrigin? n2 =>
         te1 := n1 :: TE
         te2 := n2 :: TE
         unifyTypeList ([[te1.type, te2.type]$P, [te1.expr, te2.expr]$P])
       typeOrigin? n1 =>
         te1 := n1 :: TE
-        unifyType(te1.expr, n2)
+        unifyType'(te1.expr, n2)
       typeOrigin? n2 =>
         te2 := n2 :: TE
-        unifyType(n1, te2.expr)
+        unifyType'(n1, te2.expr)
 
       -- constants
       symbol? n1 and symbol? n2 and (n1 :: Symbol) = (n2 :: Symbol) => [[]]
@@ -350,12 +346,26 @@ TypeUnifier() : Exports == Implementation where
 
       "failed"
 
+    convert (subst : SUBST) : PF ==
+      bracket [spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst]
+
+    unifyType(n1, n2) ==
+      ures := unifyType'(n1, n2)
+      summary : PF :=
+        ures case "failed" =>
+          paren bold red("no" :: PF)
+        ures case SUBST =>
+          spaces [paren bold green("yes" :: PF), convert(ures)]
+      debug([brace bold(n1 :: PF), bold yellow("~" :: PF),
+             brace bold(n2 :: PF), summary])
+      ures
+
     unifyTypePairwise(terms1, terms2) ==
       terms : List(N) := []
       substList : List(SUBST) := []
       for t1 in terms1 repeat
         for t2 in terms2 repeat
-          ures := unifyType(t1, t2)
+          ures := unifyType'(t1, t2)
           failed? ures => "iterate"
           ++ prefer concrete type instead of wildcard
           t := if containsWildcard? t1 then t2 else t1
@@ -377,8 +387,10 @@ TypeUnifier() : Exports == Implementation where
       if #terms > 1 then
         terms := [t for t in removeDuplicates terms | not containsWildcard? t]
       subst := mergeSubstitutions substList
-      --debug pile ["Substitutions:" :: PF, convert(subst')]
-      --debug pile ["Terms:" :: PF, :[t :: PF for t in terms]]
+      debug spaces(
+        [bracket [bold(t1 :: PF) for t1 in terms1], bold yellow("~" :: PF),
+         bracket [bold(t2 :: PF) for t2 in terms2],
+         paren bold(empty? terms => red("no" :: PF); green("yes" :: PF))])
       [terms, subst]
 
     ++ INFO: Given a subtyping relation X <: Y, that reads as X is safe to use
@@ -386,9 +398,7 @@ TypeUnifier() : Exports == Implementation where
     ++ X <: Y => F(X) <: F(Y), then F is covariant
     ++ X <: Y => F(Y) <: F(X), then F is contravariant
     ++ otherwise F is invariant
-    isSubType(n1, n2) ==
-      debug [brace(n1 :: PF), "<:" :: PF, brace(n2 :: PF)]
-
+    isSubType'(n1 : N, n2 : N) : Boolean ==
       n1 = n2 => true
 
       mappingType? n1 and mappingType? n2 =>
@@ -400,7 +410,7 @@ TypeUnifier() : Exports == Implementation where
         #mt1.args ~= #mt2.args => false
         for s in [mt1.result, :mt2.args]
           for t in [mt2.result, :mt1.args] repeat
-            if not isSubType(s, t) then
+            if not isSubType'(s, t) then
               return false
         true
       apply? n1 and apply? n2 =>
@@ -408,9 +418,9 @@ TypeUnifier() : Exports == Implementation where
         ++ AFAIK functors in SPAD are invariant (!) for the time being.
         ++ Handle built-in subtyping relations.
         n1 = nodeApp(['PositiveInteger], []) =>
-          isSubType(nodeApp(['NonNegativeInteger], []), n2)
+          isSubType'(nodeApp(['NonNegativeInteger], []), n2)
         n1 = nodeApp(['NonNegativeInteger], []) =>
-          isSubType(nodeApp(['Integer], []), n2)
+          isSubType'(nodeApp(['Integer], []), n2)
         false
       recordType? n1 and recordType? n2 =>
         ++ {Record(F1 : T1, F2 : T2, ..., Fn : Tn)}
@@ -419,7 +429,7 @@ TypeUnifier() : Exports == Implementation where
         rt2 := n2 :: RT
         #rt1.fields ~= #rt2.fields => false
         for f1 in rt1.fields for f2 in rt2.fields repeat
-          if f1.name ~= f2.name or not isSubType(f1.type, f2.type) then
+          if f1.name ~= f2.name or not isSubType'(f1.type, f2.type) then
             return false
         true
       unionType? n2 =>
@@ -429,25 +439,31 @@ TypeUnifier() : Exports == Implementation where
           ut2 := n2 :: UT
           #ut1.variants > #ut2.variants => false
           for v1 in ut1.variants for v2 in ut2.variants repeat
-            if not isSubType(v1, v2) then
+            if not isSubType'(v1, v2) then
               return false
           true
         else
           ++ {Ti} <: {Union(T1, T2, ..., Ti, ...)}
           for v in (n2 :: UT).variants repeat
-            if isSubType(n1, v) then
+            if isSubType'(n1, v) then
               return true
           false
       namedType? n1 and namedType? n2 =>
         nt1 := n1 :: NT
         nt2 := n2 :: NT
-        nt1.name = nt2.name and isSubType(nt1.type, nt2.type)
+        nt1.name = nt2.name and isSubType'(nt1.type, nt2.type)
       typeOrigin? n1 =>
         te1 := n1 :: TE
-        isSubType(te1.expr, n2)
+        isSubType'(te1.expr, n2)
       typeOrigin? n2 =>
         te2 := n2 :: TE
-        isSubType(n1, te2.expr)
-      typeAny? n1 or typeAny? n2 => true
+        isSubType'(n1, te2.expr)
 
       false
+
+    isSubType(n1, n2) ==
+      r := isSubType'(n1, n2)
+      debug (
+        [brace(bold(n1 :: PF)), bold yellow("<:" :: PF), brace(bold(n2 :: PF)),
+         paren(bold(r => green("yes" :: PF); red("no" :: PF)))])
+      r
