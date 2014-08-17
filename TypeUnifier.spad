@@ -31,6 +31,7 @@ TypeUnifier() : Exports == Implementation where
     substitute : (N, MR, N) -> N
     substitute : (N, SUBST) -> N
 
+    unify? : (N, N) -> Boolean
     unifyType : (N, N) -> URES
     unifyTypePairwise : (List(N), List(N)) -> Record(terms : List(N), subst : SUBST)
 
@@ -359,6 +360,9 @@ TypeUnifier() : Exports == Implementation where
       debug([brace bold(n1 :: PF), bold yellow("~" :: PF),
              brace bold(n2 :: PF), summary])
       ures
+
+    unify?(n1, n2) ==
+      unifyType(n1, n2) case SUBST
 
     unifyTypePairwise(terms1, terms2) ==
       terms : List(N) := []

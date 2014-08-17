@@ -19,6 +19,8 @@ TypeCheckerRule() : Exports == Implementation where
     elt : (%, "deps") -> List(N)
     elt : (%, "result") -> N
 
+    setelt! : (%, "deps", List(N)) -> List(N)
+
   Implementation ==> add
     Rep := Record(r_deps : List(N), r_result : N)
 
@@ -38,6 +40,9 @@ TypeCheckerRule() : Exports == Implementation where
 
     elt (x, "deps") == x.r_deps
     elt (x, "result") == x.r_result
+
+    setelt!(x, "deps", l) ==
+      x.r_deps := l
 
     coerceSubRule (r : N) : PF ==
       condExpr? r =>
@@ -145,7 +150,7 @@ TypeCheckerNode() : Exports == Implementation where
         typeOrigin? x.node or typeDecl? x.node => (x.node :: TE).expr
         x.node
       node :=
-        value? n =>
+        value? n or typeVar? n =>
           bold(n :: PF)
         function? n =>
           bold cyan((n :: FN).name :: PF)
@@ -850,18 +855,31 @@ SpadTypeChecker() : Exports == Implementation where
 
       ++ Second case: element indexing or record field access.
       eltFunList : List(N) := []
-      for mm in getModemap('elt, env) repeat
-        n := qualifiedType(mm)
-        eltFun := (n :: TE).expr :: MT
-        if #eltFun.args = #a.args + 1 then
-          eltFunList := [n, :eltFunList]
+      if not unify?(a.function, ['elt]) then
+        for mm in getModemap('elt, env) repeat
+          n := qualifiedType(mm)
+          eltFun := (n :: TE).expr :: MT
+          if #eltFun.args = #a.args + 1 then
+            eltFunList := [n, :eltFunList]
+
+      ++ Third case: arbitrary function construction.
+      if unify?(a.function, ['construct]) then
+        var := addTypeVar!(ctx)
+        item := addNode!(ctx, var, env)
+        item.type := var
+        constructFun := addNode!(ctx, ['construct], env)
+        constructFun.type := 
+          nodeMappingType([var for i in 1..#a.args], nodeApp(['List], [var]))
+        rule := applyRule(constructFun, argExprList)
+        rule.deps := [nodeRef(item), :rule.deps]
+        this.rules := [rule, :this.rules]
 
       if not empty? eltFunList then
         argExprList' := [funExpr, :argExprList]
         eltFunExpr := addNode!(ctx, ['elt], env)
         eltFunExpr.type := addTypeVar!(ctx, eltFunList)
         eltFunExpr.node := nodeTypeExpr('_$, eltFunExpr.node, typeRef(eltFunExpr))
-        this.rules := [applyRule(eltFunExpr, argExprList')]
+        this.rules := [applyRule(eltFunExpr, argExprList'), :this.rules]
 
       ++ Add origin to function expression.
       if not(funExpr.node = ['return] or funExpr.node = ['error]) then
