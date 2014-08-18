@@ -1637,7 +1637,6 @@ SpadNodeFactory() : Exports == Implementation where
 
     makeUnionFunList n ==
       u := n :: UT
-      n := ['%]
       funs : List(NT) :=
        ([['=, mt([n, n], booleanType())],
          ['~=, mt([n, n], booleanType())],
@@ -1646,5 +1645,6 @@ SpadNodeFactory() : Exports == Implementation where
       vs := u.variants
       if not namedType? vs.1 then
         for v in vs repeat
-          funs := [['construct, mt([v], n)], ['coerce, mt([n], v)], :funs]
+          funs := [['construct, mt([v], n)], 
+                   ['coerce, mt([n], v)], :funs]
       funs

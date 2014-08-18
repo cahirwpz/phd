@@ -866,6 +866,9 @@ SpadTypeChecker() : Exports == Implementation where
         ut := t :: UT
         for v in ut.variants repeat
           env := envAddType(v, env)
+        for f in makeUnionFunList t repeat
+          mt := (f :: NT).type :: MT
+          env := addModemap(f.name, t, [mt.result, :mt.args], env)
       env
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TCN ==
