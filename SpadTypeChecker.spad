@@ -315,11 +315,6 @@ TypeCheckerNodeArray() : Exports == Implementation where
       not typeVar? n.type => false
       emptyType?((x.typevars)(n.type :: MR))
 
-    typeInferred? (tvar : MR, x : %) : Boolean ==
-      types := (x.typevars)(tvar)
-      #types > 1 => false
-      not unbound? types.1
-
     killNode!(n : TCN, x : %) : Void ==
       info ["Killing" :: PF, number(n.index) :: PF, "node!" :: PF]
       n.done := true
@@ -364,8 +359,9 @@ TypeCheckerNodeArray() : Exports == Implementation where
     rewriteIfInferred! (n : TCN, x : %) : Boolean ==
       not typeVar? n.type => false
       var := n.type :: MR
-      not typeInferred?(var, x) => false
-      term := first (x.typevars)(var)
+      terms := (x.typevars)(var)
+      emptyType? terms or #terms > 1 => false
+      term := first terms
       rewriteTypevars!(var, term, x)
       debug ["Removing" :: PF, bold(var :: PF), "type variable." :: PF]
       remove!(var, x.typevars)
@@ -400,9 +396,16 @@ TypeCheckerNodeArray() : Exports == Implementation where
       -- 2) typevars(%x) = [s1, s2, s3, ...], %x = [t1, t2, t3, ...]
       -- Unify proposed values with already stored in the variable
       -- store only matching ones (without performing substitutions).
-      ms := unifyTypePairwise(typevars(var), terms)
-      empty? ms.terms => false
-      typevars(var) := ms.terms
+      ms := findMatches(typevars(var), terms)
+      not empty? ms.terms =>
+        typevars(var) := ms.terms
+        true
+      -- Unification failed, as a last resort use subtyping.
+      for term in terms repeat
+        for t in typevars(var) repeat
+          if not isSubType(t, term) then
+            return false
+      typevars(var) := terms
       true
 
     apply! (substitutions : SUBST, x : %) : Boolean ==
@@ -422,7 +425,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       not unknownType?(ln, x) and unknownType?(rn, x) =>
         applyOne!(rn.type :: MR, [ln.type], x)
       ++ (%a[t1, t2, ...] | T) ~ (%b[s1, s2, ...] | S)
-      ms := unifyTypePairwise(fetch(ln.type, x), fetch(rn.type, x))
+      ms := findMatches(fetch(ln.type, x), fetch(rn.type, x))
       empty? ms.terms => false
       if not aliasType? ms.terms then
         if typeVar? ln.type then
@@ -436,7 +439,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       unknownType?(n, x) =>
         applyOne!(n.type :: MR, types, x)
       ++ (%a[t1, t2, ...] | T) ~ [s1, s2, ...]
-      ms := unifyTypePairwise(fetch(n.type, x), types)
+      ms := findMatches(fetch(n.type, x), types)
       empty? ms.terms => false
       if not aliasType? ms.terms then
         if typeVar? n.type then
@@ -505,26 +508,54 @@ TypeCheckerNodeArray() : Exports == Implementation where
         r := rule :: APP
         nfun := node((r.function :: MR).id, x) -- function node
         nargs := [node((arg :: MR).id, x) for arg in r.args] -- argument nodes
-        ++ Currently seen function type - may contain type variables.
-        fnType := nodeMappingType([narg.type for narg in nargs], n.type)
-        ++ If result type is not known yet, we have to cheat.
-        ++ Otherwise subtyping will fail.
-        fnSuperType := nodeMappingType([narg.type for narg in nargs],
-                                       (unknownType?(n, x) => typeAny(); n.type))
-        ++ Either match the type with types stored in function node or try
-        ++ to identify subtype that will accept current arguments and return type.
-        not (nodeType!(nfun, [fnType], x) or nodeSubTypeOfList!(nfun, [fnSuperType], x)) => false
-        ++ Fetch all inferred function signatures.
-        sigs : List(MT) := []
+
+        sigs : List(N) := []
+        substList : List(SUBST) := []
         for t in fetch(nfun.type, x) repeat
+          ++ 1) Consider signature types with correct number of arguments.
+          t' := (typeOrigin? t => (t :: TE).expr; t)
+          not mappingType? t' => "iterate"
+          sig := t' :: MT
+          #sig.args ~= #nargs => "iterate"
+          debug ["Checking signature:" :: PF, bold(t :: PF)]
+          ++ 2) Check if arguments can be applied to function of given
+          ++    signature.
+          argsOk? := true
+          for arg in sig.args for narg in nargs | argsOk? repeat
+            argTypes := fetch(narg.type, x)
+            ures := unifyType(arg, argTypes)
+            ures case SUBST =>
+              substList := [ures :: SUBST, :substList]
+            "or"/[isSubType(argType, arg) for argType in argTypes] => "iterate"
+            argsOk? := false
+          not argsOk? => "iterate"
+          ++ 3) Check if result type is correct for given signature.
+          ures := unifyType(sig.result, fetch(n.type, x))
+          ures case "failed" => "iterate"
+          ++ 4) Collect variable substitutions and valid signature.
+          substList := [ures :: SUBST, :substList]
+          sigs := [t, :sigs]
+        subst := mergeSubstitutions(substList)
+
+        empty? sigs => false
+
+        if typeVar? nfun.type then
+          applyOne!(nfun.type :: MR, sigs, x)
+
+        for s in entries subst repeat
+          applyOne!(s.key, s.entry, x)
+
+        ++ Fetch all inferred mappings.
+        mappings : List(MT) := []
+        for t in sigs repeat
           if typeOrigin? t then
             t := (t :: TE).expr
-          if mappingType? t then
-            sigs := [t :: MT, :sigs]
+          not mappingType? t => "iterate"
+          mappings := [t :: MT, :mappings]
         ++ Propagate function arguments and return type down the tree.
         for i in 1..#nargs for narg in nargs repeat
-          nodeType!(narg, removeDuplicates [(sig.args)(i) for sig in sigs], x)
-        nodeType!(n, removeDuplicates [sig.result for sig in sigs], x) 
+          nodeType!(narg, [(mt.args)(i) for mt in mappings], x)
+        nodeType!(n, [mt.result for mt in mappings], x) 
         true
 
       assign? rule =>

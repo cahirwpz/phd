@@ -11,7 +11,7 @@ Test10 : Exports == Implementation where
     foo : PositiveInteger -> Float
     bar : Integer -> Float
 
-    triplet : (Integer, Integer, Integer) -> List(Integer)
+    triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 
   Implementation ==> add
     ++ various subtyping cases

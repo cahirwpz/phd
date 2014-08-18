@@ -31,9 +31,15 @@ TypeUnifier() : Exports == Implementation where
     substitute : (N, MR, N) -> N
     substitute : (N, SUBST) -> N
 
+    coerce : SUBST -> PF
+
+    mergeSubstitutions : List(SUBST) -> SUBST
+
     unify? : (N, N) -> Boolean
     unifyType : (N, N) -> URES
-    unifyTypePairwise : (List(N), List(N)) -> Record(terms : List(N), subst : SUBST)
+    unifyType : (N, List(N)) -> URES
+
+    findMatches : (List(N), List(N)) -> Record(terms : List(N), subst : SUBST)
 
     isSubType : (N, N) -> Boolean
 
@@ -249,8 +255,11 @@ TypeUnifier() : Exports == Implementation where
           n := substitute(n, var, term)
       n
 
-    mergeSubstitutions(substitutionsList : List(SUBST)) : SUBST ==
-      merged : SUBST := [[]]
+    coerce (subst : SUBST) : PF ==
+      bracket [spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst]
+
+    mergeSubstitutions substitutionsList ==
+      merged : SUBST := empty()
       -- merge list for each valid substitution
       for substitutions in substitutionsList repeat
         for s in entries substitutions repeat
@@ -266,7 +275,7 @@ TypeUnifier() : Exports == Implementation where
     unifyType' : (N, N) -> URES
 
     unifyTypeList(pairs : List(P)) : URES ==
-      subst : SUBST := [[]]
+      subst : SUBST := empty()
       while not empty? pairs repeat
         pair := first pairs
         ures := unifyType'(pair.t1, pair.t2)
@@ -347,24 +356,39 @@ TypeUnifier() : Exports == Implementation where
 
       "failed"
 
-    convert (subst : SUBST) : PF ==
-      bracket [spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst]
-
-    unifyType(n1, n2) ==
+    unifyType(n1 : N , n2 : N) : URES ==
       ures := unifyType'(n1, n2)
       summary : PF :=
         ures case "failed" =>
           paren bold red("no" :: PF)
         ures case SUBST =>
-          spaces [paren bold green("yes" :: PF), convert(ures)]
+          spaces [paren bold green("yes" :: PF), (ures :: SUBST) :: PF]
       debug([brace bold(n1 :: PF), bold yellow("~" :: PF),
              brace bold(n2 :: PF), summary])
+      ures
+
+    unifyType(type : N, terms : List(N)) : URES ==
+      ures : URES :=
+        substList : List(SUBST) := []
+        for term in terms repeat
+          ures := unifyType'(term, type)
+          ures case "failed" => "iterate"
+          substList := [ures :: SUBST, :substList]
+        empty? substList => "failed"
+        mergeSubstitutions(substList)
+      summary : PF :=
+        ures case "failed" =>
+          paren bold red("no" :: PF)
+        ures case SUBST =>
+          spaces [paren bold green("yes" :: PF), (ures :: SUBST) :: PF]
+      debug([brace bold(type :: PF), bold yellow("~" :: PF),
+             bracket [bold(t :: PF) for t in terms], summary])
       ures
 
     unify?(n1, n2) ==
       unifyType(n1, n2) case SUBST
 
-    unifyTypePairwise(terms1, terms2) ==
+    findMatches(terms1, terms2) ==
       terms : List(N) := []
       substList : List(SUBST) := []
       for t1 in terms1 repeat
