@@ -231,6 +231,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
     addNode! : (%, N, ENV) -> TCN
     addTypeVar! : % -> N
     addTypeVar! : (%, List(N)) -> N
+    addType! : (MR, N, %) -> Void
 
     nodes : % -> List(TCN)
 
@@ -281,6 +282,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
       ni
 
     addTypeVar! (x, types) ==
+      empty? types => addTypeVar!(x)
       x.counter := x.counter + 1
       tvar := typeVar(x.counter)
       (x.typevars)(tvar :: MR) := types
@@ -303,6 +305,11 @@ TypeCheckerNodeArray() : Exports == Implementation where
 
     aliasType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeVar?(first terms)
+
+    addType! (var, type, x) ==
+      terms := (x.typevars)(var)
+      emptyType? terms => error ""
+      (x.typevars)(var) := [type, :(x.typevars)(var)]
 
     fetch (n : N, x : %) : List(N) ==
       not typeVar? n => [n] 
@@ -783,7 +790,7 @@ TypeCheckerRuleFactory() : Exports == Implementation where
     typeOriginRule (expr, origin) ==
       deps : List(N) :=
         [nodeRef(expr), nodeTypeExpr('_$, nodeRef(expr), origin)]
-      newRule(deps, nodeRef(expr))
+      newRule(deps, nodeTypeExpr('_$, nodeRef(expr), origin))
 
     subTypeRule (subtype, type) ==
       deps : List(N) :=
@@ -896,18 +903,6 @@ SpadTypeChecker() : Exports == Implementation where
           if #eltFun.args = #a.args + 1 then
             eltFunList := [n, :eltFunList]
 
-      ++ Third case: arbitrary function construction.
-      if unify?(a.function, ['construct]) then
-        var := addTypeVar!(ctx)
-        item := addNode!(ctx, var, env)
-        item.type := var
-        constructFun := addNode!(ctx, ['construct], env)
-        constructFun.type := 
-          nodeMappingType([var for i in 1..#a.args], nodeApp(['List], [var]))
-        rule := applyRule(constructFun, argExprList)
-        rule.deps := [nodeRef(item), :rule.deps]
-        this.rules := [rule, :this.rules]
-
       if not empty? eltFunList then
         argExprList' := [funExpr, :argExprList]
         eltFunExpr := addNode!(ctx, ['elt], env)
@@ -919,7 +914,19 @@ SpadTypeChecker() : Exports == Implementation where
       if not(funExpr.node = ['return] or funExpr.node = ['error]) then
         funExpr.node := nodeTypeExpr('_$, funExpr.node, typeRef(funExpr))
 
-      this.rules := [applyRule(funExpr, argExprList), :this.rules]
+      ++ First case with a twist: arbitrary list construction.
+      if unify?(a.function, ['construct]) then
+        var := addTypeVar!(ctx, [argExpr.type for argExpr in argExprList])
+        item := addNode!(ctx, var, env)
+        item.type := var
+        constructSig :=
+          nodeMappingType([var for i in 1..#a.args], nodeApp(['List], [var]))
+        addType!(funExpr.type :: MR, constructSig, ctx)
+        rule := applyRule(funExpr, argExprList)
+        rule.deps := [nodeRef(item), :rule.deps]
+        this.rules := [rule, :this.rules]
+      else
+        this.rules := [applyRule(funExpr, argExprList), :this.rules]
       this
 
     walkAssign (a : ASS, ctx : CTX, env : ENV) : TCN ==
