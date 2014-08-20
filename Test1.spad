@@ -6,33 +6,45 @@ Test1() : Exports == Implementation where
 
   Exports ==> with
     foo : I -> I
-    foo : S -> F
-    foo : (F, I) -> S
-    bar : (Integer, Integer) -> Integer
+    foo : F -> F
+    bar : (I, I) -> I
 
   Implementation ==> add
     import Float
+    import PositiveInteger
     import NonNegativeInteger
 
-    -- doesn't work yet
-    --foo : Integer -> Float
+    -- [BUG] Signature below is not taken into account if uncommented.
+    ++ foo : Integer -> Float
 
     foo a ==
-      a2 := (a * a) $ Integer
+      a2 := a * a
       ma := - a
       if a >= 0
         then ma * 2
         else a2 + 2
 
-    baz : (NonNegativeInteger, Integer) -> String
+    -- [BUG] Type checker should remember that {foo : I -> I} has been already
+    -- defined.
+    ++ foo a == a + 1
+
+    -- [BUG] Type error -- needs investigation!
+    ++ foo a == a + 1.0
+
+    baz : (Integer, Integer) -> Integer
 
     bar (x, y) ==
-      -- cannot remove next line, because branch merging doesn't work
+      -- [BUG] Cannot remove next line, because branch environment merging
+      -- doesn't work.
       nx : Integer
       if x > 0 then
         y := -10
-        nx := x * y
+        nx := baz(x, y)
       else
         nx := -x 
       nx + y
 
+    -- [BUG] Omitting argument types for local functions declared upfront
+    -- doesn't work.
+    baz (x : Integer, y : Integer) : Integer ==
+      x * y

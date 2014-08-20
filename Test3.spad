@@ -13,6 +13,7 @@ Test3() : Exports == Implementation where
     import OutputForm
     import PositiveInteger
 
+    ++ [OK] Type checker removes coercion to PositiveInteger.
     id x == x :: PositiveInteger
 
     hello1() ==
@@ -21,6 +22,7 @@ Test3() : Exports == Implementation where
     hello2() ==
       print(coerce(0@Integer)@OutputForm)
 
+    ++ [OK] Support for %any type.
     foobar x ==
       x < 0 => error "Cannot accept negative integer!"
       x

@@ -14,21 +14,24 @@ Test10 : Exports == Implementation where
     triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 
   Implementation ==> add
-    ++ various subtyping cases
+    -- [OK] Various subtyping cases.
     blah (x : String) == x
     blah (x : Integer) == x
     blah (x : NonNegativeInteger) == x
 
+    -- [OK] Subtyping at assign time.
     baz x ==
-      y : Integer := x ++ subtyping at assign time
+      y : Integer := x
       y - 1
 
+    -- [OK] Subtyping at function application time.
     foo x ==
-      bar x ++ subtyping at function application time
+      bar x
 
+    -- [OK] Arbitrary list construction.
     triplet (x, y, z) ==
-      [x, y, z] ++ arbitrary list construction, not a call to construct(...) !
+      [x, y, z] -- not a call to construct(...) !
 
-    ++ these are not supported by original compiler
-    --blah (x : Union(String, Integer)) == x
-    --blah (x : Record(a : NonNegativeInteger, b : String)) == x
+    -- These are not supported by original compiler.
+    ++ blah (x : Union(String, Integer)) == x
+    ++ blah (x : Record(a : NonNegativeInteger, b : String)) == x

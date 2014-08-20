@@ -2,19 +2,20 @@
 Test8 : Exports == Implementation where
 
   Exports ==> with
-   foo : (Integer, Integer) -> Integer
-   bar : (Integer, Integer) -> Intege
+    foo : (Integer, Integer) -> Integer
+    bar : (Integer, Integer) -> Integer
 
   Implementation ==> add
-   import Vector(Integer)
-   import Matrix(Integer)
+    import Vector(Integer)
+    import Matrix(Integer)
 
-   my_vec : Integer -> Vector(Integer)
-   foo(i : Integer, j : Integer) : Integer ==
-       v := my_vec(i + 1)
-       v(j + 1)
+    -- [OK] Aggregate access.
+    my_vec : Integer -> Vector(Integer)
+    foo(i : Integer, j : Integer) : Integer ==
+      v := my_vec(i + 1)
+      v(j + 1)
 
-   my_mat : Integer -> Matrix(Integer)
-   foo(i : Integer, j : Integer) : Integer ==
-       v := my_mat(i + 1)
-       v(i + 1, j + 1)
+    my_mat : Integer -> Matrix(Integer)
+    bar(i : Integer, j : Integer) : Integer ==
+      v := my_mat(i + 1)
+      v(i + 1, j + 1)

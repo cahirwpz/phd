@@ -2,20 +2,21 @@
 Test9 : Exports == Implementation where
   Exports ==> with
     check : (Integer, Integer, Integer) -> Union(Integer, "failed")
-
     addZero : Union(Integer, String) -> Union(Integer, String)
-
     mycoerce : Integer -> Union(NonNegativeInteger, "failed")
 
   Implementation ==> add
+    ++ [OK] Subtyping => return union variants.
     check (x, min, max) ==
       x < min => "failed"
       x > max => "failed"
       x
 
+    ++ [OK] Subtyping => checking union variants.
     addZero x ==
       x case Integer => x * 10
       x case String => concat(x, "0")
+      -- [BUG] Type checker crashes if following line is removed.
       x
 
     mycoerce x ==
