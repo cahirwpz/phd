@@ -105,6 +105,7 @@ SpadDatabase() : with
   == add
     import SExpression
     import SpadNode
+    import Logger('Daase)
 
     getOperationList t ==
       -- Integer
