@@ -10,19 +10,6 @@ SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
       r case "failed" => [s]
       r.entry
 
-)abbrev package STTVRPL SpadTreeTypeVarReplace
-SpadTreeTypeVarReplace(ctx : CTX) : WALKER == Implementation where
-  N ==> SpadNode
-  MR ==> SpadMarker(N)
-  CTX ==> AssociationList(MR, N)
-  WALKER ==> SpadTreeWalkerCategory 
-
-  Implementation ==> add
-    rewrite (mr : MR) : N ==
-      r := assoc(mr, ctx)
-      r case "failed" => [mr]
-      r.entry
-
 )abbrev package STFTEVAL SpadFunctorEvaluate
 SpadFunctorEvaluate(ctx : CTX) : WALKER == Implementation where
   N ==> SpadNode
@@ -100,6 +87,38 @@ TypeInfo() : Exports == Implementation where
             x.ftor.body :: PF,
             spaces [bold("has relation:" :: PF), bracket [h :: PF for h in x.hasList]]])
 
+)abbrev package FTTOOLS FunctorTools
+FunctorTools() : Exports == Implementation where
+  PF ==> PrintableForm
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  FN ==> SpadFunction(N)
+  MR ==> SpadMarker(N)
+  TE ==> SpadTypeExpr(N)
+
+  Exports ==> with
+    applyFunctor : (FN, List(N)) -> FN
+
+  Implementation ==> add
+    import Logger('FunctorTools)
+    import TypeUnifier
+
+    applyFunctor(ftor : FN, args : List(N)) : FN ==
+      #args ~= #ftor.args =>
+        fail(["Wrong number of arguments passed to" :: PF, ftor.name :: PF,
+              "functor : " :: PF, paren [arg :: PF for arg in args]])
+        error ""
+      empty? args => ftor
+
+      -- TODO: For now we completely ignore actual types passed as arguments.
+      debug([ftor.name :: PF, paren [arg :: PF for arg in ftor.args], "=>" :: PF,
+             ftor.name :: PF, paren [arg :: PF for arg in args]])
+      body := ftor.body
+      for arg in ftor.args for term in args | typeExpr? arg repeat
+        var := ((arg :: TE).expr) :: MR
+        body := substitute(body, var, term)
+      [ftor.name, args, ftor.type, body]$FN
+
 )abbrev domain TYPEVAL TypeInfoCache
 TypeInfoCache() : Exports == Implementation where
   PF ==> PrintableForm
@@ -114,16 +133,19 @@ TypeInfoCache() : Exports == Implementation where
   Exports ==> with
     new : () -> %
     elt : (%, APP) -> TypeInfo
+    setelt! : (%, APP, TypeInfo) -> TypeInfo
     keys : % -> List(APP)
 
   Implementation ==> add
     import SpadDatabase
     import SpadNode
     import SpadNodeFactory
-    import Logger('Type)
+    import Logger('TypeInfoCache)
     import Printer
     import String
     import TypeInfo
+    import TypeUnifier
+    import FunctorTools
 
     Rep := AssociationList(APP, TypeInfo)
 
@@ -143,7 +165,7 @@ TypeInfoCache() : Exports == Implementation where
     symbol(s1 : String, s2 : String) : Symbol ==
       concat(s1, s2)$String :: Symbol
 
-    getFunctor (t : Symbol) : FN ==
+    queryDaase (t : Symbol) : FN ==
       cmm := getCtorModeMap(t)
 
       ++ Some symbols will be rewritten to type variables.
@@ -169,48 +191,157 @@ TypeInfoCache() : Exports == Implementation where
         body := cmm.type
         ftorType := nodeApp(['Type], [])
 
+      if apply? body then
+        body := nodeSumType("Join", [body])
+
       ftor := [cmm.name, args, ftorType, body]$FN
       rewrite(ftor)$SpadTreeSymbolReplace(ctx) :: FN
 
-    getAppliedFunctor(app : APP) : FN ==
-      sym := app.function :: Symbol
-      ftor := getFunctor(sym)
-      -- Substitute functor arguments, types are ignored. 
-      ctx := [[]]$AssociationList(MR, N)
-      for arg in ftor.args for term in app.args repeat
-        var := ((arg :: TE).expr) :: MR
-        debug [sym :: PF, ":" :: PF, var :: PF, "=>" :: PF, term :: PF]
-        ctx(var) := term
-      ftor := [ftor.name, app.args, ftor.type, ftor.body]$FN
-      rewrite(ftor)$SpadTreeTypeVarReplace(ctx) :: FN
+    getTypeInfo(cache : %, app : APP) : TypeInfo ==
+      debug ["getTypeInfo" :: PF, app :: PF]
 
-    getTypeInfo(cache : %, ftorApp : APP) : TypeInfo ==
-      ftor := getAppliedFunctor(ftorApp)
-      type := ftor.body
+      -- even if a functor is has some arguments unbound
+      -- we still need to rewrite type variables recursively
+      ftor := queryDaase(app.function :: Symbol)
+      ftor := applyFunctor(ftor, app.args)
 
-      sumType? type =>
-        sum := type :: ST
-        hasLst : List(APP) := []
-        for t in sum.types | apply? t repeat
-          subFtorApp := t :: APP
-          sym := subFtorApp.function :: Symbol
-          member?(subFtorApp, hasLst) => "iterate"
-          if not member?(sym, builtinTypes) then
-            ti := cache(subFtorApp)
-            for app in ti.hasList | not member?(app, hasLst) repeat
-              hasLst := [app, :hasLst]
-          hasLst := [subFtorApp, :hasLst]
-        cache(ftorApp) := typeInfo(ftor, hasLst)
+      st := ftor.body
+      hasLst : List(APP) :=
+        sumType? st =>
+          sum := st :: ST
+          hasLst := []
+          for subtype in sum.types | apply? subtype repeat
+            subapp := subtype :: APP
+            sym := subapp.function :: Symbol
+            member?(subapp, hasLst) => "iterate"
+            if not member?(sym, builtinTypes) then
+              ti' := cache(subapp)
+              -- SCOPE BUG! change "t" to "app" and observe horrible things to happen
+              for t in ti'.hasList | not member?(t, hasLst) repeat
+                hasLst := [t, :hasLst]
+            hasLst := [subapp, :hasLst]
+          hasLst
+        []
+      
+      if ftor.type = nodeApp(['Type], []) then
+        self := typeVar(0) :: MR
+        body := substitute(ftor.body, self, [app])
+        ftor := [ftor.name, ftor.args, ftor.type, body]$FN
+        hasLst := [substitute([t], self, [app]) :: APP for t in hasLst]
 
-      cache(ftorApp) := typeInfo(ftor, [])
+      cache(app) := typeInfo(ftor, hasLst)
 
-    elt(cache : %, ftorApp : APP) : TypeInfo ==
-      res := assoc(ftorApp, cache)
-      res case "failed" => getTypeInfo(cache, ftorApp)
+    elt(cache : %, app : APP) : TypeInfo ==
+      res := assoc(app, cache)$Rep
+      res case "failed" => getTypeInfo(cache, app)
       res.entry
+
+    setelt!(cache : %, app : APP, ti : TypeInfo) : TypeInfo ==
+      unbound? [app] => ti
+      setelt!(cache, app, ti)$Rep
 
     keys(cache : %) : List(APP) ==
       keys(cache)$Rep
+
+)abbrev package STFTFLAT SpadFunctorFlatten
+SpadFunctorFlatten(cache : TypeInfoCache) : Exports == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  CE ==> SpadCondExpr(N)
+  TE ==> SpadTypeExpr(N)
+  ST ==> SpadSumType(N)
+  FN ==> SpadFunction(N)
+  MR ==> SpadMarker(N)
+  PF ==> PrintableForm
+
+  Exports ==> SpadTreeWalkerCategory with
+    run : TypeInfo -> TypeInfo
+
+  Implementation ==> add
+    import Logger('Flatten)
+    import TypeInfoCache
+    import FunctorTools
+    import SpadNode
+    import SpadNodeFactory
+    import TypeUnifier
+    import TypeInfo
+
+    done : Set(APP) := empty()
+    type : N := emptyNode()
+    typeHasList : List(APP) := []
+    self : MR := coerce(typeVar(0))@MR
+
+    run (ti : TypeInfo) : TypeInfo ==
+      done := empty()
+      type :=
+        ti.ftor.type = nodeApp(['Type], []) =>
+          nodeApp([ti.ftor.name], ti.ftor.args)
+        emptyNode()
+      typeHasList := ti.hasList
+      typeInfo(rewrite(ti.ftor) :: FN, ti.hasList)
+
+    rewrite (cn : CE) : N ==
+      ce := [rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr]$CE
+      ce.cond = ['true] => ce.truebr
+      ce.cond = ['false] => ce.falsebr
+      [ce]
+
+    rewrite (te : TE) : N ==
+      type' := rewrite te.type
+      expr' := rewrite te.expr
+
+      te.kind = 'has =>
+        hasLst : List(APP) :=
+          apply? expr' =>
+            ti := cache(expr' :: APP)
+            ti.hasList
+          expr' = typeVar(0) =>
+            typeHasList
+          symbol? expr' =>
+            ti := cache(nodeApp(expr', []) :: APP)
+            ti.hasList
+          fail pile ["Don't know how to rewrite:" :: PF, expr' :: PF]
+          error ""
+        if member?(type' :: APP, hasLst) or type' = expr' then
+          return ['true]
+        else
+          return ['false]
+
+      nodeTypeExpr(te.kind, expr', type')
+
+    rewrite (st : ST) : N ==
+      subtypes : List(N) := []
+
+      for subtype in st.types repeat
+        subtype := rewrite subtype
+        if apply? subtype then
+          subapp := coerce(subtype)@APP
+          if subapp.function = ['ATTRIBUTE] then
+            subtype := first subapp.args
+            subapp := coerce(subtype)@APP
+          member?(subapp, done) => 
+            subtype := emptyNode()
+          insert!(subapp, done)
+          if not emptyNode? type then
+            -- Only for types: substitute "%"
+            subtype := substitute(subtype, self, type)
+            subapp := coerce(subtype)@APP
+          ti := cache(subapp)
+          ftor :=
+            not emptyNode? type =>
+              substitute([ti.ftor], self, type) :: FN
+            ti.ftor
+          if any?(unbound?, ftor.args) then
+            ftor := applyFunctor(ftor, subapp.args)
+          subtype := rewrite ftor.body
+        emptyNode? subtype => "iterate"
+        sumType? subtype =>
+          st' := coerce(subtype)@ST
+          subtypes:= concat(st'.types, subtypes)
+        subtypes := [subtype, :subtypes]
+
+      -- Q: Are signature duplicates allowed?
+      nodeSumType("Body", reverse subtypes)
 
 )abbrev package TYPEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where
@@ -220,7 +351,6 @@ TypeEvaluatorTest() : Exports == Implementation where
   NT ==> SpadNamedType(N)
   MR ==> SpadMarker(N)
   FN ==> SpadFunction(N)
-  CTX ==> AssociationList(MR, List(N))
 
   Exports ==> with
     test1 : () -> Void
@@ -241,7 +371,15 @@ TypeEvaluatorTest() : Exports == Implementation where
       resetTime()
 
       cache : TypeInfoCache := new()
-      tBoolean := cache([['Boolean], []]$APP)
-      debug (tBoolean :: PF)
+      --type := nodeApp(['Integer], [])
+      --type := nodeApp(['IntegerNumberSystem], [])
+      type := nodeApp(['Set], [['Integer]])
+      --type := nodeApp(['Boolean], [])
+      --type := nodeApp(['OrderedRing], [])
+      ti := cache(type :: APP)
+      debug (ti :: PF)
+      debug pile ["Types in cache:" :: PF, :[k :: PF for k in keys cache]]
 
+      ti := run(ti)$SpadFunctorFlatten(cache)
+      debug (ti :: PF)
       debug pile ["Types in cache:" :: PF, :[k :: PF for k in keys cache]]

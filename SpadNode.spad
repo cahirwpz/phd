@@ -129,7 +129,9 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
       m.kind = 'typeany => "%any" :: Symbol
       m.kind = 'typeundef => "%undef" :: Symbol
       s : String :=
-        m.kind = 'typevar => "%"
+        m.kind = 'typevar =>
+          if m.id = 0 then return "%" :: Symbol
+          "%"
         m.kind = 'noderef => "#"
         "*"
       concat(s, string(m.id)) :: Symbol
@@ -245,6 +247,9 @@ SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
           pile [spaces [join, "with" :: PF], lastType :: PF]
         hconcat ["Join" :: PF, paren ts]
       vconcat ts
+
+    n = m ==
+      n.kind = m.kind and n.types = m.types
 
 )abbrev domain SPTNAMED SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
@@ -332,7 +337,7 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
       names : List(Symbol) := []
       for f in x.r_fields repeat ++ BUG? runtime crashes when using "x.fields"
         not (recordType? f.type or unionType? f.type or mappingType? f.type or
-             apply? f.type or string? f.type or symbol? f.type) =>
+             apply? f.type or string? f.type or symbol? f.type or typeVar? f.type) =>
           warn ["Record has a field with wrong type:" :: PF, bold(f :: PF)]
           return false
         member?(f.name, names) =>

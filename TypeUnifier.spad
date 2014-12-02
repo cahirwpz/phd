@@ -14,6 +14,7 @@ TypeUnifier() : Exports == Implementation where
   UT ==> SpadUnionType(N)
   ST ==> SpadSumType(N)
   FT ==> SpadFunctor(N)
+  FN ==> SpadFunction(N)
   SUBST ==> AssociationList(MR, List(N))
   P ==> Record(t1 : N, t2 : N)
   URES ==> Union(SUBST, "failed")
@@ -78,7 +79,7 @@ TypeUnifier() : Exports == Implementation where
       sumType? n =>
         st := n :: ST
         any?(m +-> occurs?(tvar, m), st.types)
-      typeOrigin? n =>
+      typeExpr? n =>
         te := n :: TE
         occurs?(tvar, te.expr) or occurs?(tvar, te.type)
       typeVar? n =>
@@ -99,7 +100,7 @@ TypeUnifier() : Exports == Implementation where
 
       apply? n =>
         app := n :: APP
-        any?(unbound?, [app.function, :app.args])
+        unbound? app.function or any?(unbound?, app.args)
       namedType? n =>
         nt := n :: NT
         unbound? nt.type
@@ -115,7 +116,7 @@ TypeUnifier() : Exports == Implementation where
       sumType? n =>
         st := n :: ST
         any?(unbound?, st.types)
-      typeOrigin? n =>
+      typeExpr? n =>
         te := n :: TE
         unbound? te.expr or unbound? te.type
 
@@ -165,17 +166,17 @@ TypeUnifier() : Exports == Implementation where
 
       apply? n =>
         app := n :: APP
-        "concat"/[freeVars i for i in [app.function, :app.args]]
+        removeDuplicates("concat"/[freeVars i for i in [app.function, :app.args]])
       mappingType? n =>
         mt := n :: MT
-        "concat"/[freeVars i for i in [mt.result, :mt.args]]
+        removeDuplicates("concat"/[freeVars i for i in [mt.result, :mt.args]])
       unionType? n =>
         ut := n :: UT
-        "concat"/[freeVars i for i in ut.variants]
+        removeDuplicates("concat"/[freeVars i for i in ut.variants])
       typeVar? n => [n :: MR]
       typeExpr? n =>
         te := n :: TE
-        concat(freeVars te.type, freeVars te.expr)
+        removeDuplicates(concat(freeVars te.type, freeVars te.expr))
 
       fail ["freeVars: case not handled for" :: PF, n :: PF]
       error ""
@@ -237,13 +238,25 @@ TypeUnifier() : Exports == Implementation where
       sumType? n =>
         st := n :: ST
         nodeSumType(st.kind, [substitute(t, var, term) for t in st.types])
-      typeOrigin? n =>
+      typeExpr? n =>
         te := n :: TE
         expr := substitute(te.expr, var, term)
         type := substitute(te.type, var, term)
         nodeTypeExpr(te.kind, expr, type)
       typeVar? n =>
         if (n :: MR) = var then term else n
+      condExpr? n =>
+        ce := n :: CE
+        cond := substitute(ce.cond, var, term)
+        truebr := substitute(ce.truebr, var, term)
+        falsebr := substitute(ce.falsebr, var, term)
+        nodeCondExpr(cond, truebr, falsebr)
+      function? n =>
+        fn := n :: FN
+        args := [substitute(arg, var, term) for arg in fn.args]
+        type := substitute(fn.type, var, term)
+        body := substitute(fn.body, var, term)
+        nodeFun(fn.name, args, type, body)
 
       fail ["substitute: case not handled for" :: PF, n :: PF]
       error ""
