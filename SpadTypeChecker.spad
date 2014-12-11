@@ -820,7 +820,6 @@ SpadTypeChecker() : Exports == Implementation where
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
-  ST ==> SpadSumType(N)
   TE ==> SpadTypeExpr(N)
   UT ==> SpadUnionType(N)
   W ==> SpadWhere(N)

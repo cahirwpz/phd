@@ -12,7 +12,7 @@ TypeUnifier() : Exports == Implementation where
   RT ==> SpadRecordType(N)
   TE ==> SpadTypeExpr(N)
   UT ==> SpadUnionType(N)
-  ST ==> SpadSumType(N)
+  SEQ ==> SpadSequence(N)
   FT ==> SpadFunctor(N)
   FN ==> SpadFunction(N)
   SUBST ==> AssociationList(MR, List(N))
@@ -76,9 +76,9 @@ TypeUnifier() : Exports == Implementation where
       unionType? n =>
         ut := n :: UT
         any?(m +-> occurs?(tvar, m), ut.variants)
-      sumType? n =>
-        st := n :: ST
-        any?(m +-> occurs?(tvar, m), st.types)
+      sequence? n =>
+        seq := n :: SEQ
+        any?(m +-> occurs?(tvar, m), seq.list)
       typeExpr? n =>
         te := n :: TE
         occurs?(tvar, te.expr) or occurs?(tvar, te.type)
@@ -113,9 +113,9 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         any?(unbound?, [mt.result, :mt.args])
-      sumType? n =>
-        st := n :: ST
-        any?(unbound?, st.types)
+      sequence? n =>
+        seq := n :: SEQ
+        any?(unbound?, seq.list)
       typeExpr? n =>
         te := n :: TE
         unbound? te.expr or unbound? te.type
@@ -147,9 +147,9 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         any?(containsWildcard?, [mt.result, :mt.args])
-      sumType? n =>
-        st := n :: ST
-        any?(containsWildcard?, st.types)
+      sequence? n =>
+        seq := n :: SEQ
+        any?(containsWildcard?, seq.list)
       typeOrigin? n =>
         te := n :: TE
         containsWildcard? te.expr or containsWildcard? te.type
@@ -235,9 +235,9 @@ TypeUnifier() : Exports == Implementation where
       unionType? n =>
         ut := n :: UT
         nodeUnionType [substitute(v, var, term) for v in ut.variants]
-      sumType? n =>
-        st := n :: ST
-        nodeSumType(st.kind, [substitute(t, var, term) for t in st.types])
+      sequence? n =>
+        seq := n :: SEQ
+        nodeSeq(seq.kind, [substitute(t, var, term) for t in seq.list])
       typeExpr? n =>
         te := n :: TE
         expr := substitute(te.expr, var, term)

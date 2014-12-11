@@ -10,163 +10,168 @@ SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
       r case "failed" => [s]
       r.entry
 
-)abbrev package STFTEVAL SpadFunctorEvaluate
-SpadFunctorEvaluate(ctx : CTX) : WALKER == Implementation where
+)abbrev package FLATDBT FlattenDatabaseType
+FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
+  PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)
   CE ==> SpadCondExpr(N)
   TE ==> SpadTypeExpr(N)
-  ST ==> SpadSumType(N)
-  MR ==> SpadMarker(N)
-  CTX ==> AssociationList(MR, List(N))
-  WALKER ==> SpadTreeWalkerCategory 
+  SEQ ==> SpadSequence(N)
 
   Implementation ==> add
+    import SpadNode
+    import SpadNodeFactory
+
     rewrite (app : APP) : N ==
-      app := [rewrite app.function, [rewrite arg for arg in app.args]]$APP
-      app.function = ['OR] and #app.args = 2 =>
-        "or"/[arg = ['true] for arg in app.args] => ['true]
-        "and"/[arg = ['false] for arg in app.args] => ['false]
-        app.args.1 = ['false] => app.args.2
-        app.args.2 = ['false] => app.args.1
-        [app]
-      app.function = ['AND] and #app.args = 2 =>
-        "and"/[arg = ['true] for arg in app.args] => ['true]
-        "or"/[arg = ['false] for arg in app.args] => ['false]
-        app.args.1 = ['true] => app.args.2
-        app.args.2 = ['true] => app.args.1
-        [app]
-      [app]
+      app.function = ['ATTRIBUTE] => rewrite(first app.args)
+      nodeApp(rewrite app.function, [rewrite arg for arg in app.args])
+
+    addTypeGuard(n : N, cond : N) : N ==
+      typeExpr? n =>
+        tg : TE := coerce(n)
+        nodeTypeExpr('_|, tg.expr, nodeApp(['and], [cond, tg.type]))
+      nodeTypeExpr('_|, n, cond)
+
+    listOf(n : N) : List(N) ==
+      emptyNode? n => []
+      sequence? n =>
+        s : SEQ := coerce(n)
+        s.list
+      [n]
 
     rewrite (cn : CE) : N ==
-      ce := [rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr]$CE
-      ce.cond = ['true] => ce.truebr
-      ce.cond = ['false] => ce.falsebr
-      [ce]
+      c := rewrite cn.cond
+      nc := nodeApp(['not], [c])
 
-    rewrite (te : TE) : N ==
-      if typeVar? te.expr and te.kind = 'has then
-        res := assoc(te.expr :: MR, ctx)
-        if not (res case "failed") then
-          if member?(te.type, res.entry) then
-            return ['true]
-          else
-            return ['false]
-      nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
+      tl := [addTypeGuard(n, c) for n in listOf(rewrite cn.truebr)]
+      fl := [addTypeGuard(n, nc) for n in listOf(rewrite cn.falsebr)]
 
-    rewrite (st : ST) : N ==
-      ts := [rewrite t for t in st.types]
-      nodeSumType(st.kind, [t for t in ts | not emptyNode? t])
+      nodeSeq("Body", concat(tl, fl))
+
+    rewrite (seq : SEQ) : N ==
+      l : List(N) := []
+      for n in seq.list repeat
+        n := rewrite n
+        emptyNode? n => "iterate"
+        sequence? n =>
+          s : SEQ := coerce(n)
+          l := concat(reverse s.list, l)
+        l := [n, :l]
+      #l = 1 and seq.kind = "Body" => first l
+      nodeSeq(seq.kind, l)
 
-)abbrev domain TYPEINFO TypeInfo
+)abbrev domain TYPINF TypeInfo
 TypeInfo() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)
-  FN ==> SpadFunction(N)
+  MR ==> SpadMarker(N)
+  TE ==> SpadTypeExpr(N)
+  MT ==> SpadMappingType(N)
+  SEQ ==> SpadSequence(N)
+  CACHE ==> AssociationList(APP, %)
+  DAASE ==> AssociationList(Symbol, %)
 
   Exports ==> CoercibleTo(PF) with
-    typeInfo : (FN, List(APP)) -> %
+    typeInfo : (Symbol, List TE, List APP, List TE, SEQ) -> %
 
-    elt : (%, "ftor") -> FN
-    elt : (%, "hasList") -> List(APP)
+    elt : (%, "name") -> Symbol
+    elt : (%, "args") -> List TE
+    elt : (%, "hasList") -> List APP
+    elt : (%, "constraints") -> List TE
+    elt : (%, "body") -> SEQ
 
-  Implementation ==> add
-    import SpadNode
+    typeInfoCacheInit : () -> Void
+    typeInfoCacheList : () -> List(APP)
 
-    Rep := Record(ti_ftor : FN, ti_hasList : List(APP))
-
-    typeInfo(f, hl) == [f, hl]$Rep
-
-    elt(x, "ftor") == x.ti_ftor
-    elt(x, "hasList") == x.ti_hasList
-
-    coerce x ==
-      app := nodeApp([x.ftor.name], x.ftor.args)
-      pile([spaces [app :: PF, bold("is" :: PF), x.ftor.result :: PF, bold("defined as:" :: PF)],
-            x.ftor.body :: PF,
-            spaces [bold("has relation:" :: PF), bracket [h :: PF for h in x.hasList]]])
-
-)abbrev package FTTOOLS FunctorTools
-FunctorTools() : Exports == Implementation where
-  PF ==> PrintableForm
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  FN ==> SpadFunction(N)
-  MR ==> SpadMarker(N)
-  TE ==> SpadTypeExpr(N)
-
-  Exports ==> with
-    applyFunctor : (FN, List(N)) -> FN
+    getTypeInfo : Symbol -> %
+    getTypeInfo : APP -> %
 
   Implementation ==> add
-    import Logger('FunctorTools)
-    import TypeUnifier
-
-    applyFunctor(ftor : FN, args : List(N)) : FN ==
-      #args ~= #ftor.args =>
-        fail(["Wrong number of arguments passed to" :: PF, ftor.name :: PF,
-              "functor : " :: PF, paren [arg :: PF for arg in args]])
-        error ""
-      empty? args => ftor
-
-      -- TODO: For now we completely ignore actual types passed as arguments.
-      debug([ftor.name :: PF, paren [arg :: PF for arg in ftor.args], "=>" :: PF,
-             ftor.name :: PF, paren [arg :: PF for arg in args]])
-      body := ftor.body
-      for arg in ftor.args for term in args | typeExpr? arg repeat
-        var := ((arg :: TE).expr) :: MR
-        body := substitute(body, var, term)
-      [ftor.name, args, ftor.type, body]$FN
-
-)abbrev domain TYPEVAL TypeInfoCache
-TypeInfoCache() : Exports == Implementation where
-  PF ==> PrintableForm
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  FN ==> SpadFunction(N)
-  NT ==> SpadNamedType(N)
-  ST ==> SpadSumType(N)
-  TE ==> SpadTypeExpr(N)
-  MR ==> SpadMarker(N)
-
-  Exports ==> with
-    new : () -> %
-    elt : (%, APP) -> TypeInfo
-    setelt! : (%, APP, TypeInfo) -> TypeInfo
-    keys : % -> List(APP)
-
-  Implementation ==> add
-    import SpadDatabase
     import SpadNode
     import SpadNodeFactory
-    import Logger('TypeInfoCache)
-    import Printer
-    import String
-    import TypeInfo
+    import SpadDatabase
+    import SpadCtorModeMap
+    import Logger('TypeInfo)
     import TypeUnifier
-    import FunctorTools
 
-    Rep := AssociationList(APP, TypeInfo)
+    Rep := Record(ti_name : Symbol,
+                  ti_args : List TE,
+                  ti_hasList : List APP,
+                  ti_constraints : List TE,
+                  ti_body : SEQ)
 
-    builtinTypes : List(Symbol) :=
+    fromDatabase : Symbol -> Union(%, "failed")
+    apply : (%, List(N)) -> %
+    flatten : % -> %
+
+    builtinCategories : List(Symbol) :=
       (['Canonical, 'CommutativeStar, 'Type, 'canonicalUnitNormal,
         'canonicalsClosed, 'finiteAggregate, 'multiplicativeValuation,
         'noZeroDivisors, 'shallowlyMutable, 'unitsKnown])
 
-    new () : % ==
-      cache := empty()$Rep
-      for t in builtinTypes repeat
-        app := [[t], []]$APP
-        fn := [t, [], nodeApp(['Category], []), emptyNode()]$FN
-        cache(app) := typeInfo(fn, [])
-      cache
+    cache : CACHE := [[]]
+    daase : DAASE := [[]]
 
-    symbol(s1 : String, s2 : String) : Symbol ==
+    typeInfoCacheInit () ==
+      cache := [[]]
+      daase := [[]]
+      for cat in builtinCategories repeat
+        app := [[cat], []]$APP
+        ti := typeInfo(cat, [], [], [], ["Join", []]$SEQ)
+        daase(cat) := ti
+        cache(app) := ti
+
+    typeInfoCacheList() == keys(cache)
+
+    getTypeInfo(sym : Symbol) : % ==
+      debug ["getTypeInfo :" :: PF, bold(sym :: PF)]
+      ti? := search(sym, daase)
+      ti? case % => ti? :: %
+      daase(sym) := fromDatabase(sym) :: %
+
+    getTypeInfo(app : APP) : % ==
+      debug ["getTypeInfo :" :: PF, bold(app :: PF)]
+      ti? := search(app, cache)
+      ti? case % => ti? :: %
+      ti! := 
+        if app.args = [emptyNode()] then
+          ti := getTypeInfo(app.function :: Symbol)
+          flatten(ti)
+        else
+          ti := getTypeInfo([app.function, [emptyNode()]])
+          apply(ti, app.args)
+      cache(app) := ti!
+
+    typeInfo(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
+
+    elt(x, "name") == x.ti_name
+    elt(x, "args") == x.ti_args
+    elt(x, "hasList") == x.ti_hasList
+    elt(x, "constraints") == x.ti_constraints
+    elt(x, "body") == x.ti_body
+
+    coerce x ==
+      args := [(typeVar? arg.expr => arg :: PF; arg.expr :: PF) for arg in x.ti_args]
+      app := hconcat [x.ti_name :: PF, paren args]
+      k : String :=
+        x.ti_body.kind case "Join" => "Category"
+        x.ti_body.kind case "Domain" => "Domain"
+        x.ti_body.kind case "Package" => "Package"
+        error "???"
+      pile([spaces [app, bold("is" :: PF), k :: PF, bold("defined as:" :: PF)],
+            x.ti_body :: PF,
+            spaces [bold("has relation:" :: PF), bracket [h :: PF for h in x.ti_hasList]],
+            spaces [bold("constraints:" :: PF), bracket [c :: PF for c in x.ti_constraints]]])
+
+    mkvar(s1 : String, s2 : String) : Symbol ==
       concat(s1, s2)$String :: Symbol
 
-    queryDaase (t : Symbol) : FN ==
-      cmm := getCtorModeMap(t)
+    fromDatabase (t : Symbol) : Union(%, "failed") ==
+      cmm! := safeGetCtorModeMap(t)
+      cmm! case "failed" => "failed"
+      cmm := cmm! :: SpadCtorModeMap
 
       ++ Some symbols will be rewritten to type variables.
       ctx := [[]]$AssociationList(Symbol, N)
@@ -174,174 +179,98 @@ TypeInfoCache() : Exports == Implementation where
       ctx("%" :: Symbol) := typeVar(0)
       ++ "#1" => "%1", "#2" => "%2", ...
       for i in 1..#cmm.args repeat
-        ctx(symbol("#", string i)) := typeVar(i)
+        ctx(mkvar("#", string i)) := typeVar(i)
 
       ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
       ++ change name.
-      args := ([nodeTypeExpr(':, typeVar(i), arg.type)
+      args := ([nodeTypeExpr(':, typeVar(i), arg.type) :: TE
                 for arg in cmm.args for i in 1..])
 
       if cmm.type = nodeApp(['Category], []) then
         ++ "t#1" => "%1", "t#2" => "%2", ...
         for arg in cmm.args for i in 1.. repeat
-          ctx(symbol("t", string arg.name)) := typeVar(i)
+          ctx(mkvar("t", string arg.name)) := typeVar(i)
         body := getCtorCategory(t)
-        ftorType := cmm.type
+        cat? := true
       else
         body := cmm.type
-        ftorType := nodeApp(['Type], [])
+        cat? := false
 
-      if apply? body then
-        body := nodeSumType("Join", [body])
+      body := nodeSeq((cat? => "Join"; "Domain"),
+                      (sequence? body => (body :: SEQ).list; [body]))
+      body := rewrite(body)$SpadTreeSymbolReplace(ctx)
+      body := rewrite(body)$FlattenDatabaseType
 
-      ftor := [cmm.name, args, ftorType, body]$FN
-      rewrite(ftor)$SpadTreeSymbolReplace(ctx) :: FN
+      debug(body :: PF)
 
-    getTypeInfo(cache : %, app : APP) : TypeInfo ==
-      debug ["getTypeInfo" :: PF, app :: PF]
+      typeInfo(cmm.name, args, [], [], body :: SEQ)
 
-      -- even if a functor is has some arguments unbound
-      -- we still need to rewrite type variables recursively
-      ftor := queryDaase(app.function :: Symbol)
-      ftor := applyFunctor(ftor, app.args)
+    apply(ti : %, values : List(N)) : % ==
+      before := bold hconcat [ti.name :: PF, paren [arg :: PF for arg in ti.args]]
+      after := bold hconcat [ti.name :: PF, paren [val :: PF for val in values]]
 
-      st := ftor.body
-      hasLst : List(APP) :=
-        sumType? st =>
-          sum := st :: ST
-          hasLst := []
-          for subtype in sum.types | apply? subtype repeat
-            subapp := subtype :: APP
-            sym := subapp.function :: Symbol
-            member?(subapp, hasLst) => "iterate"
-            if not member?(sym, builtinTypes) then
-              ti' := cache(subapp)
-              -- SCOPE BUG! change "t" to "app" and observe horrible things to happen
-              for t in ti'.hasList | not member?(t, hasLst) repeat
-                hasLst := [t, :hasLst]
-            hasLst := [subapp, :hasLst]
-          hasLst
-        []
-      
-      if ftor.type = nodeApp(['Type], []) then
-        self := typeVar(0) :: MR
-        body := substitute(ftor.body, self, [app])
-        ftor := [ftor.name, ftor.args, ftor.type, body]$FN
-        hasLst := [substitute([t], self, [app]) :: APP for t in hasLst]
+      #values ~= #ti.args =>
+        fail(["Wrong number of arguments" :: PF, before, "passed to" :: PF,
+              after, "functor!" :: PF])
+        error ""
+      empty? values => ti
 
-      cache(app) := typeInfo(ftor, hasLst)
+      -- TODO: For now we completely ignore actual types passed as arguments.
+      debug [before, "=>" :: PF, after]
 
-    elt(cache : %, app : APP) : TypeInfo ==
-      res := assoc(app, cache)$Rep
-      res case "failed" => getTypeInfo(cache, app)
-      res.entry
+      args' : List(TE) := []
+      body' := [ti.body]
+      hasList' := ti.hasList
+      constraints' : List(TE) := ti.constraints
 
-    setelt!(cache : %, app : APP, ti : TypeInfo) : TypeInfo ==
-      unbound? [app] => ti
-      setelt!(cache, app, ti)$Rep
+      for arg in ti.args for val in values repeat
+        not typeVar? arg.expr =>
+          error "Argument has been already applied!"
+        var := arg.expr :: MR
+        if arg.type ~= nodeApp(['Type], []) then
+          constraints' := [['has, val, arg.type]$TE, :constraints']
+        args' := [[':, val, arg.type]$TE, :args']
+        body' := substitute(body', var, val)
+        hasList' := [substitute([n], var, val) :: APP for n in hasList']
 
-    keys(cache : %) : List(APP) ==
-      keys(cache)$Rep
-
-)abbrev package STFTFLAT SpadFunctorFlatten
-SpadFunctorFlatten(cache : TypeInfoCache) : Exports == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  CE ==> SpadCondExpr(N)
-  TE ==> SpadTypeExpr(N)
-  ST ==> SpadSumType(N)
-  FN ==> SpadFunction(N)
-  MR ==> SpadMarker(N)
-  PF ==> PrintableForm
+      typeInfo(ti.name, args', hasList', removeDuplicates constraints', body' :: SEQ)
 
-  Exports ==> SpadTreeWalkerCategory with
-    run : TypeInfo -> TypeInfo
+    flatten(ti : %) : % ==
+      self := [[ti.name], [[arg] for arg in ti.args]]$APP
 
-  Implementation ==> add
-    import Logger('Flatten)
-    import TypeInfoCache
-    import FunctorTools
-    import SpadNode
-    import SpadNodeFactory
-    import TypeUnifier
-    import TypeInfo
+      debug ["Flatten" :: PF, self :: PF]
 
-    done : Set(APP) := empty()
-    type : N := emptyNode()
-    typeHasList : List(APP) := []
-    self : MR := coerce(typeVar(0))@MR
+      recurse? := true
+      lst := ti.body.list
+      constraints := ti.constraints
+      hasLst : List(APP) := []
 
-    run (ti : TypeInfo) : TypeInfo ==
-      done := empty()
-      type :=
-        ti.ftor.type = nodeApp(['Type], []) =>
-          nodeApp([ti.ftor.name], ti.ftor.args)
-        emptyNode()
-      typeHasList := ti.hasList
-      typeInfo(rewrite(ti.ftor) :: FN, ti.hasList)
+      while recurse? repeat
+        recurse? := false
+        lst' : List(N) := []
 
-    rewrite (cn : CE) : N ==
-      ce := [rewrite cn.cond, rewrite cn.truebr, rewrite cn.falsebr]$CE
-      ce.cond = ['true] => ce.truebr
-      ce.cond = ['false] => ce.falsebr
-      [ce]
+        for n in lst repeat
+          apply? n =>
+            app := n :: APP
+            member?(app, hasLst) => "iterate"
+            sym := app.function :: Symbol
+            debug ["Merge" :: PF, app :: PF, "with" :: PF, self :: PF]
+            ti' := getTypeInfo(sym) :: %
+            ti' := apply(ti', app.args)
+            for n' in ti'.body.list | not member?(n', lst') repeat
+              lst' := [n', :lst']
+            hasLst := [app, :hasLst]
+            for app' in ti'.hasList | not member?(app', hasLst) repeat
+              hasLst := [app', :hasLst]
+            constraints := removeDuplicates concat(ti'.constraints, constraints)
+            recurse? := true
+          lst' := [n, :lst']
+ 
+        lst := lst'
 
-    rewrite (te : TE) : N ==
-      type' := rewrite te.type
-      expr' := rewrite te.expr
+      body := [ti.body.kind, removeDuplicates lst]
 
-      te.kind = 'has =>
-        hasLst : List(APP) :=
-          apply? expr' =>
-            ti := cache(expr' :: APP)
-            ti.hasList
-          expr' = typeVar(0) =>
-            typeHasList
-          symbol? expr' =>
-            ti := cache(nodeApp(expr', []) :: APP)
-            ti.hasList
-          fail pile ["Don't know how to rewrite:" :: PF, expr' :: PF]
-          error ""
-        if member?(type' :: APP, hasLst) or type' = expr' then
-          return ['true]
-        else
-          return ['false]
-
-      nodeTypeExpr(te.kind, expr', type')
-
-    rewrite (st : ST) : N ==
-      subtypes : List(N) := []
-
-      for subtype in st.types repeat
-        subtype := rewrite subtype
-        if apply? subtype then
-          subapp := coerce(subtype)@APP
-          if subapp.function = ['ATTRIBUTE] then
-            subtype := first subapp.args
-            subapp := coerce(subtype)@APP
-          member?(subapp, done) => 
-            subtype := emptyNode()
-          insert!(subapp, done)
-          if not emptyNode? type then
-            -- Only for types: substitute "%"
-            subtype := substitute(subtype, self, type)
-            subapp := coerce(subtype)@APP
-          ti := cache(subapp)
-          ftor :=
-            not emptyNode? type =>
-              substitute([ti.ftor], self, type) :: FN
-            ti.ftor
-          if any?(unbound?, ftor.args) then
-            ftor := applyFunctor(ftor, subapp.args)
-          subtype := rewrite ftor.body
-        emptyNode? subtype => "iterate"
-        sumType? subtype =>
-          st' := coerce(subtype)@ST
-          subtypes:= concat(st'.types, subtypes)
-        subtypes := [subtype, :subtypes]
-
-      -- Q: Are signature duplicates allowed?
-      nodeSumType("Body", reverse subtypes)
+      typeInfo(ti.name, ti.args, removeDuplicates hasLst, constraints, body)
 
 )abbrev package TYPEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where
@@ -351,6 +280,7 @@ TypeEvaluatorTest() : Exports == Implementation where
   NT ==> SpadNamedType(N)
   MR ==> SpadMarker(N)
   FN ==> SpadFunction(N)
+  TI ==> TypeInfo
 
   Exports ==> with
     test1 : () -> Void
@@ -359,27 +289,20 @@ TypeEvaluatorTest() : Exports == Implementation where
     import Printer
     import SpadNode
     import SpadNodeFactory
-    import TypeInfoCache
-    import TypeUnifier
     import MainLogger
-    import Logger('Test)
-    import SpadTreeSymbolSubstitute
+    import TypeInfo
 
     test1 ==
       loggerDefaultLevel "debug"
       loggerLevel('Parser, "notice")
       resetTime()
 
-      cache : TypeInfoCache := new()
-      --type := nodeApp(['Integer], [])
-      --type := nodeApp(['IntegerNumberSystem], [])
-      type := nodeApp(['Set], [['Integer]])
-      --type := nodeApp(['Boolean], [])
-      --type := nodeApp(['OrderedRing], [])
-      ti := cache(type :: APP)
-      debug (ti :: PF)
-      debug pile ["Types in cache:" :: PF, :[k :: PF for k in keys cache]]
+      typeInfoCacheInit()
 
-      ti := run(ti)$SpadFunctorFlatten(cache)
-      debug (ti :: PF)
-      debug pile ["Types in cache:" :: PF, :[k :: PF for k in keys cache]]
+      println (getTypeInfo('DictionaryOperations) :: PF)
+      println (getTypeInfo('List) :: PF)
+      println (getTypeInfo([['List], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['List], [['Integer]]]) :: PF)
+
+      println ([bold("Types in cache:" :: PF),
+                bracket [app :: PF for app in typeInfoCacheList()]])

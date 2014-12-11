@@ -100,6 +100,7 @@ SpadDatabase() : with
     getCtorKind : Symbol -> Union("domain", "category", "package")
       ++ returns constructor kind
     getCtorModeMap : Symbol -> SpadCtorModeMap
+    safeGetCtorModeMap : Symbol -> Union(SpadCtorModeMap, "failed")
     getAbbrev : Symbol -> Symbol
     getSourceFile : Symbol -> String
   == add
@@ -125,10 +126,17 @@ SpadDatabase() : with
       null? sex => error "Unknown constructor!"
       parse(sex)
 
-    getCtorModeMap t ==
+    safeGetCtorModeMap t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
-      null? sex => error "Unknown constructor!"
+      null? sex => "failed"
       convert(sex)
+
+    getCtorModeMap t ==
+      cmm := safeGetCtorModeMap t
+      cmm case "failed" =>
+        fail ["Unknown constructor:" :: PrintableForm, bold(t :: PrintableForm)]
+        error ""
+      cmm
 
     getCtorArgs t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORARGS)$Lisp

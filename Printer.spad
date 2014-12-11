@@ -10,6 +10,7 @@ PrintableForm() : Exports == Implementation where
   LST ==> Record(code : LSTCODE, forms : List(%))
 
   Exports ==> with
+    coerce : Boolean -> %
     coerce : Integer -> %
     coerce : DoubleFloat -> %
     coerce : Float -> %
@@ -79,6 +80,7 @@ PrintableForm() : Exports == Implementation where
     import Character
     import String
 
+    coerce (b : Boolean) : % == (b => ["true"]$Rep; ["false"]$Rep)
     coerce (df : DoubleFloat) : % == [convert(df)]$Rep
     coerce (f : Float) : % == [f]$Rep
     coerce (i : Integer) : % == [i]$Rep

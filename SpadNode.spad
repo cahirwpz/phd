@@ -16,7 +16,6 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadRecordType(%) -> %
   construct : SpadSegment(%) -> %
   construct : SpadSequence(%) -> %
-  construct : SpadSumType(%) -> %
   construct : SpadTypeExpr(%) -> %
   construct : SpadUnionType(%) -> %
   construct : SpadWhere(%) -> %
@@ -50,10 +49,10 @@ SpadNodeCategory() : Category == ParsableCategory with
   sequence? : % -> Boolean
   signatureList? : % -> Boolean
   string? : % -> Boolean
-  sumType? : % -> Boolean
   symbol? : % -> Boolean
   typeExpr? : % -> Boolean
   typeOrigin? : % -> Boolean
+  typeGuard? : % -> Boolean
   unionType? : % -> Boolean
   where? : % -> Boolean
   typeAny? : % -> Boolean
@@ -83,7 +82,6 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadRecordType(%)
   coerce : % -> SpadSegment(%)
   coerce : % -> SpadSequence(%)
-  coerce : % -> SpadSumType(%)
   coerce : % -> SpadTypeExpr(%)
   coerce : % -> SpadUnionType(%)
   coerce : % -> SpadWhere(%)
@@ -182,74 +180,7 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       spaces [src, "->" :: PF, coerceType n.result]
 
     n = m ==
-      #n.args ~= #m.args => false
-      "and"/[a = b for a in [n.result, :n.args] for b in [m.result, :m.args]]
-
-)abbrev domain SPTSUM SpadSumType
-SpadSumType(N : SpadNodeCategory) : Exports == Implementation where
-  K ==> Union("Join", "Domain", "Package", "Body")
-  PF ==> PrintableForm
-
-  Exports ==> ParsableCategory with
-    elt : (%, "types") -> List(N)
-    elt : (%, "kind") -> K
-    construct : (K, List(N)) -> %
-
-  Implementation ==> add
-    Rep := Record(s_kind : K, s_types : List(N))
-
-    import ParserTools
-    import SExpression
-
-    elt(x, "kind") == x.s_kind
-    elt(x, "types") == x.s_types
-
-    construct(k, tl) == [k, tl]$Rep
-
-    parse ex ==
-      lst :=
-        domain? ex or package? ex =>
-          -- (CATEGORY domain ...)
-          -- (CATEGORY package ...)
-          destruct cdr(cdr(ex))
-        join? ex or progn? ex =>
-          -- (Join ...)
-          -- (PROGN ...)
-          destruct cdr(ex)
-
-      args : List(N) := [ parse e for e in lst ]
-
-      domain? ex => ["Domain", args]
-      package? ex => ["Package", args]
-      join? ex => ["Join", args]
-      progn? ex => ["Body", args]
-
-    convert x ==
-      ts := [convert t for t in x.types]
-      ls :=
-        x.kind case "Join" =>
-          [convert ("Join" :: Symbol), :ts]
-        x.kind case "Domain" =>
-          [convert ("CATEGORY" :: Symbol), convert ("domain" :: Symbol), :ts]
-        x.kind case "Package" =>
-          [convert ("CATEGORY" :: Symbol), convert ("package" :: Symbol), :ts]
-        x.kind case "Body" =>
-          [convert ("PROGN" :: Symbol), :ts]
-      convert ls
-
-    coerce n ==
-      ts := [t :: PF for t in n.types]
-      n.kind case "Join" =>
-        #n.types = 1 => ts.1
-        lastType := last n.types
-        signatureList? lastType =>
-          join := ["Join", reverse rest reverse n.types] :: PF
-          pile [spaces [join, "with" :: PF], lastType :: PF]
-        hconcat ["Join" :: PF, paren ts]
-      vconcat ts
-
-    n = m ==
-      n.kind = m.kind and n.types = m.types
+      n.result = m.result and n.args = m.args
 
 )abbrev domain SPTNAMED SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
@@ -307,7 +238,7 @@ SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
       spaces [n.name :: PF, ":" :: PF, typeName]
 
     n = m ==
-      n.name = m.name and n.type = m.type
+      n.name = m.name and n.type = m.type 
 
 )abbrev domain SPTREC SpadRecordType
 SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
@@ -666,7 +597,7 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
 
     construct(k, e, t) ==
       operators : List Symbol :=
-        ['case, 'has, 'is, 'pretend, ':, '::, '@, '_$, '_<_:]
+        ['case, 'has, 'is, 'pretend, ':, '::, '@, '_$, '_<_:, '_|]
       not member?(k, operators) =>
         error "Not a type expression operator!"
       [k, e, t]$Rep
@@ -846,7 +777,7 @@ SpadLambda(N : SpadNodeCategory) : Exports == Implementation where
 
 )abbrev package SPSEQ SpadSequence
 SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
-  K ==> Union("Capsule", "Sequence", "Tuple")
+  K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body")
   PF ==> PrintableForm
 
   Exports ==> ParsableCategory with
@@ -867,7 +798,18 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
     parse ex ==
       content : List N := []
 
-      for e in destruct cdr ex repeat
+      lst :=
+        domain? ex or package? ex =>
+          -- (CATEGORY domain ...)
+          -- (CATEGORY package ...)
+          destruct cdr(cdr(ex))
+        -- (@Tuple ...)
+        -- (SEQ ...)
+        -- (Join ...)
+        -- (PROGN ...)
+        destruct cdr(ex)
+
+      for e in lst repeat
         var? e =>
           if listof? e.2
             then
@@ -885,21 +827,45 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
         capsule? ex => "Capsule"
         seq? ex => "Sequence"
         tuple? ex => "Tuple"
+        domain? ex => "Domain"
+        package? ex => "Package"
+        join? ex => "Join"
+        progn? ex => "Body"
 
       [k, reverse content]
 
     convert x ==
-      s : String :=
-        x.kind case "Capsule" => "CAPSULE"
-        x.kind case "Sequence" => "SEQ"
-        x.kind case "Tuple" => "@Tuple"
-      
-      convert cons(convert (s :: Symbol), [convert i for i in x.list])
+      ls := [convert i for i in x.list]
+      ex :=
+        x.kind case "Domain" =>
+          [convert ("CATEGORY" :: Symbol), convert ("domain" :: Symbol), :ls]
+        x.kind case "Package" =>
+          [convert ("CATEGORY" :: Symbol), convert ("package" :: Symbol), :ls]
+        x.kind case "Body" =>
+          [convert ("PROGN" :: Symbol), :ls]
+        x.kind case "Join" =>
+          [convert ("Join" :: Symbol), :ls]
+        x.kind case "Capsule" =>
+          [convert ("CAPSULE" :: Symbol), :ls]
+        x.kind case "Sequence" =>
+          [convert ("SEQ" :: Symbol), :ls]
+        x.kind case "Tuple" => 
+          [convert ("@Tuple" :: Symbol), :ls]
+      convert ex
 
     coerce n ==
-      exps := [e :: PF for e in n.list | not emptyNode? e]
-      n.kind case "Sequence" or n.kind case "Capsule" => vconcat exps
-      n.kind case "Tuple" => paren exps
+      ls := [e :: PF for e in n.list | not emptyNode? e]
+      n.kind case "Join" =>
+        #n.list = 1 => ls.1
+        l1 := [m :: PF for m in n.list | apply? m]
+        l2 := [m :: PF for m in n.list | not apply? m]
+        empty? l1 => vconcat l2
+        pile [hconcat ["Join" :: PF, paren l1], :l2]
+      n.kind case "Tuple" => paren ls
+      vconcat ls
+
+    n = m ==
+      n.kind = m.kind and n.list = m.list
 
 )abbrev package SPCOND SpadCondExpr
 SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
@@ -1173,7 +1139,6 @@ SpadNode() : Exports == Implementation where
   RT ==> SpadRecordType(%)
   SEG ==> SpadSegment(%)
   SEQ ==> SpadSequence(%)
-  ST ==> SpadSumType(%)
   TE ==> SpadTypeExpr(%)
   UT ==> SpadUnionType(%)
   W ==> SpadWhere(%)
@@ -1194,9 +1159,8 @@ SpadNode() : Exports == Implementation where
     nodeRecordType : List(NT) -> %
     nodeRef : NNI -> %
     nodeSeg : (%, %, %) -> %
-    nodeSeq : (Union("Capsule", "Sequence", "Tuple"), List(%)) -> %
+    nodeSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), List(%)) -> %
     nodeSubType : (%, %) -> %
-    nodeSumType : (Union("Join", "Domain", "Package", "Body"), List(%)) -> %
     nodeTypeExpr : (Symbol, %, %) -> %
     nodeUnionType : List(%) -> %
     nodeWhere : (%, %) -> %
@@ -1206,7 +1170,7 @@ SpadNode() : Exports == Implementation where
                  apply : APP, assign : ASS, cond : CE, lambda : LAM, loop : LP,
                  mapping : MT, named : NT, record : RT, itor : IT, seq : SEQ,
                  segment : SEG, ftor : FT, func : FN, simport : IM, smacro : M,
-                 sum : ST, swhere : W, typeexpr : TE, union : UT, marker : MR,
+                 swhere : W, typeexpr : TE, union : UT, marker : MR,
                  dfloat : DF, int : Integer, str : String, sym : Symbol)
 
     import SExpression
@@ -1236,15 +1200,17 @@ SpadNode() : Exports == Implementation where
     segment? n == n case segment 
     sequence? n == n case seq
     signatureList? n ==
-      not n case sum => false
-      n.sum.kind ~= "Join"
+      not n case seq => false
+      n.seq.kind ~= "Join"
     string? n == n case str
-    sumType? n == n case sum
     symbol? n == n case sym
     typeExpr? n == n case typeexpr
     typeOrigin? n ==
       not n case typeexpr => false
       n.typeexpr.kind = '_$
+    typeGuard? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = '_|
     unionType? n == n case union
     where? n == n case swhere
     typeAny? n ==
@@ -1336,10 +1302,6 @@ SpadNode() : Exports == Implementation where
       sequence? n => n.seq
       CoerceError("SpadSequence")
 
-    coerce (n : %) : ST ==
-      sumType? n => n.sum
-      CoerceError("SpadSumType")
-
     coerce (n : %) : TE ==
       typeExpr? n => n.typeexpr
       CoerceError("SpadTypeExpr")
@@ -1391,7 +1353,6 @@ SpadNode() : Exports == Implementation where
     construct (n : RT) : % == [n]$Rep
     construct (n : SEG) : % == [n]$Rep
     construct (n : SEQ) : % == [n]$Rep
-    construct (n : ST) : % == [n]$Rep
     construct (n : TE) : % == [n]$Rep
     construct (n : UT) : % == [n]$Rep
     construct (n : W) : % == [n]$Rep
@@ -1408,7 +1369,8 @@ SpadNode() : Exports == Implementation where
     parse ex ==
       debug ["Parsing expression:" :: PF, convert(ex) :: PF]
 
-      capsule? ex or seq? ex or tuple? ex =>
+      (capsule? ex or seq? ex or tuple? ex or domain? ex or package? ex or
+       join? ex or progn? ex) =>
         -- (SEQ expr1 expr2 ...)
         -- (CAPSULE expr1 expr2 ...)
         -- (@Tuple expr1 expr2 ...)
@@ -1453,9 +1415,6 @@ SpadNode() : Exports == Implementation where
       mapping? ex => -- TODO: var? ex is missing after collapsing Node and Type
         [parse(ex)$MT]
 
-      domain? ex or package? ex or join? ex or progn? ex =>
-        [parse(ex)$ST]
-
       signature? ex => [parse(ex)$NT]
       record? ex => [parse(ex)$RT]
       union? ex => [parse(ex)$UT]
@@ -1495,7 +1454,6 @@ SpadNode() : Exports == Implementation where
       segment? n => (n :: SEG) :: PF
       sequence? n => (n :: SEQ) :: PF
       string? n => string((n :: String) :: PF)
-      sumType? n => (n :: ST) :: PF
       symbol? n => (n :: Symbol) :: PF
       typeExpr? n => (n :: TE) :: PF
       unionType? n => (n :: UT) :: PF
@@ -1524,7 +1482,6 @@ SpadNode() : Exports == Implementation where
       segment? n => convert(n :: SEG)
       sequence? n => convert(n :: SEQ)
       string? n => convert(n :: String)
-      sumType? n => convert(n :: ST)
       symbol? n => convert(n :: Symbol)
       typeExpr? n => convert(n :: TE)
       unionType? n => convert(n :: UT)
@@ -1545,7 +1502,6 @@ SpadNode() : Exports == Implementation where
       namedType? n and namedType? m => (n :: NT) = (m :: NT)
       recordType? n and recordType? m => (n :: RT) = (m :: RT)
       string? n and string? m => (n :: String) = (m :: String)
-      sumType? n and sumType? m => (n :: ST) = (m :: ST)
       symbol? n and symbol? m => (n :: Symbol) = (m :: Symbol)
       unionType? n and unionType? m => (n :: UT) = (m :: UT)
       typeExpr? n and typeExpr? m => (n :: TE) = (m :: TE)
@@ -1574,7 +1530,6 @@ SpadNode() : Exports == Implementation where
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeExpr (kind, expr, type) == [[kind, expr, type]$TE]
     nodeSubType (type1, type2) == [['_<_:, type1, type2]$TE]
-    nodeSumType (kind, types) == [[kind, types]$ST]
     nodeUnionType variants ==
       ut := [variants]$UT
       ut case "failed" => emptyNode()
