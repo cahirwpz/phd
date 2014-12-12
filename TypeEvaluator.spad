@@ -28,7 +28,7 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
       nodeApp(rewrite app.function, [rewrite arg for arg in app.args])
 
     addTypeGuard(n : N, cond : N) : N ==
-      typeExpr? n =>
+      typeGuard? n =>
         tg : TE := coerce(n)
         nodeTypeExpr('_|, tg.expr, nodeApp(['and], [cond, tg.type]))
       nodeTypeExpr('_|, n, cond)
@@ -74,13 +74,15 @@ TypeInfo() : Exports == Implementation where
   DAASE ==> AssociationList(Symbol, %)
 
   Exports ==> CoercibleTo(PF) with
-    typeInfo : (Symbol, List TE, List APP, List TE, SEQ) -> %
+    typeInfo : (Symbol, List TE, List N, List TE, SEQ) -> %
 
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List TE
-    elt : (%, "hasList") -> List APP
+    elt : (%, "hasList") -> List N 
     elt : (%, "constraints") -> List TE
     elt : (%, "body") -> SEQ
+    elt : (%, "self") -> APP
+    elt : (%, "type") -> N
 
     typeInfoCacheInit : () -> Void
     typeInfoCacheList : () -> List(APP)
@@ -98,13 +100,15 @@ TypeInfo() : Exports == Implementation where
 
     Rep := Record(ti_name : Symbol,
                   ti_args : List TE,
-                  ti_hasList : List APP,
+                  ti_hasList : List N,
                   ti_constraints : List TE,
                   ti_body : SEQ)
 
     fromDatabase : Symbol -> Union(%, "failed")
     apply : (%, List(N)) -> %
     flatten : % -> %
+    evalTypeGuards : % -> %
+    eraseConstraints : % -> %
 
     builtinCategories : List(Symbol) :=
       (['Canonical, 'CommutativeStar, 'Type, 'canonicalUnitNormal,
@@ -138,10 +142,10 @@ TypeInfo() : Exports == Implementation where
       ti! := 
         if app.args = [emptyNode()] then
           ti := getTypeInfo(app.function :: Symbol)
-          flatten(ti)
+          eraseConstraints(evalTypeGuards(flatten(ti)))
         else
           ti := getTypeInfo([app.function, [emptyNode()]])
-          apply(ti, app.args)
+          eraseConstraints(evalTypeGuards(apply(ti, app.args)))
       cache(app) := ti!
 
     typeInfo(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
@@ -151,6 +155,8 @@ TypeInfo() : Exports == Implementation where
     elt(x, "hasList") == x.ti_hasList
     elt(x, "constraints") == x.ti_constraints
     elt(x, "body") == x.ti_body
+    elt(x, "self") == [[x.ti_name], [[arg] for arg in x.ti_args]]$APP
+    elt(x, "type") == nodeApp([x.ti_name], [arg.expr for arg in x.ti_args])
 
     coerce x ==
       args := [(typeVar? arg.expr => arg :: PF; arg.expr :: PF) for arg in x.ti_args]
@@ -201,8 +207,6 @@ TypeInfo() : Exports == Implementation where
       body := rewrite(body)$SpadTreeSymbolReplace(ctx)
       body := rewrite(body)$FlattenDatabaseType
 
-      debug(body :: PF)
-
       typeInfo(cmm.name, args, [], [], body :: SEQ)
 
     apply(ti : %, values : List(N)) : % ==
@@ -227,50 +231,111 @@ TypeInfo() : Exports == Implementation where
         not typeVar? arg.expr =>
           error "Argument has been already applied!"
         var := arg.expr :: MR
-        if arg.type ~= nodeApp(['Type], []) then
-          constraints' := [['has, val, arg.type]$TE, :constraints']
+        ++ BUG: Fix improper functor application 
+        ++ i.e. when List(Integer) is passed instead of List(Integer())
+        if symbol? val then
+          val := nodeApp(val, [])
+        constraints' := 
+          arg.type ~= nodeApp(['Type], []) =>
+            [['has, val, arg.type]$TE, :constraints']
+          [substitute([n], var, val) :: TE for n in constraints']
         args' := [[':, val, arg.type]$TE, :args']
         body' := substitute(body', var, val)
-        hasList' := [substitute([n], var, val) :: APP for n in hasList']
+        hasList' := [substitute(n, var, val) for n in hasList']
 
       typeInfo(ti.name, args', hasList', removeDuplicates constraints', body' :: SEQ)
 
     flatten(ti : %) : % ==
-      self := [[ti.name], [[arg] for arg in ti.args]]$APP
-
-      debug ["Flatten" :: PF, self :: PF]
+      info ["Flatten" :: PF, bold(ti.self :: PF)]
 
       recurse? := true
       lst := ti.body.list
       constraints := ti.constraints
-      hasLst : List(APP) := []
+      hasLst : List(N) := []
 
       while recurse? repeat
         recurse? := false
         lst' : List(N) := []
 
         for n in lst repeat
+          cond := emptyNode()
+          if typeGuard? n then
+            tg := n :: TE
+            if apply? tg.expr then
+              n := tg.expr
+              cond := tg.type
+
           apply? n =>
+            member?(n, hasLst) => "iterate"
             app := n :: APP
-            member?(app, hasLst) => "iterate"
             sym := app.function :: Symbol
-            debug ["Merge" :: PF, app :: PF, "with" :: PF, self :: PF]
+            debug ["Merge" :: PF, app :: PF, "with" :: PF, ti.self :: PF]
             ti' := getTypeInfo(sym) :: %
             ti' := apply(ti', app.args)
             for n' in ti'.body.list | not member?(n', lst') repeat
+              if not emptyNode? cond then
+                n' := nodeTypeExpr('_|, n', cond)
               lst' := [n', :lst']
-            hasLst := [app, :hasLst]
-            for app' in ti'.hasList | not member?(app', hasLst) repeat
-              hasLst := [app', :hasLst]
-            constraints := removeDuplicates concat(ti'.constraints, constraints)
+            if not emptyNode? cond then
+              n := nodeTypeExpr('_|, n, cond)
+            hasLst := [n, :hasLst]
+            for n' in ti'.hasList | not member?(n', hasLst) repeat
+              hasLst := [n', :hasLst]
+            constraints := concat(ti'.constraints, constraints)
             recurse? := true
           lst' := [n, :lst']
  
         lst := lst'
 
-      body := [ti.body.kind, removeDuplicates lst]
+      typeInfo(ti.name, ti.args,
+               removeDuplicates hasLst,
+               removeDuplicates constraints,
+               [ti.body.kind, removeDuplicates lst])
 
-      typeInfo(ti.name, ti.args, removeDuplicates hasLst, constraints, body)
+    has?(te : TE, ti : %) : Boolean ==
+      te.expr = typeVar(0) or te.expr = ti.type =>
+        member?(te.type, ti.hasList)
+      apply? te.expr =>
+        ti := getTypeInfo(te.expr :: APP)
+        member?(te.type, ti.hasList)
+      false
+
+    evalGuard(n : N, ti : %) : N ==
+      debug ["evalGuard" :: PF, bold(n :: PF)]
+      typeExpr? n =>
+        te := n :: TE
+        te.kind = 'has and has?(te, ti) => emptyNode()
+        n
+      apply? n =>
+        app := n :: APP
+        app.function = ['and] =>
+          lst := remove(emptyNode?, [evalGuard(arg, ti) for arg in app.args])$List(N)
+          #lst = 1 => first lst
+          #lst = 0 => emptyNode()
+          nodeApp(['and], lst)
+        n
+      n
+
+    eraseConstraints(ti : %) : % ==
+      info ["Check type constraints" :: PF, bold(ti.self :: PF)]
+      constraints' : List(TE) := 
+        [te for te in ti.constraints | not(te.kind = 'has and has?(te, ti))]
+      typeInfo(ti.name, ti.args, ti.hasList, constraints', ti.body)
+
+    evalTypeGuards(ti : %) : % ==
+      info ["Evaluate type guards" :: PF, bold(ti.self :: PF)]
+
+      eval(n : N) : N ==
+        not typeGuard? n => n
+        tg := n :: TE
+        type' := evalGuard(tg.type, ti)
+        emptyNode? type' => tg.expr
+        nodeTypeExpr('_|, tg.expr, type')
+
+      hasLst := removeDuplicates map(eval, ti.hasList)
+      body := map(eval, ti.body.list)
+
+      typeInfo(ti.name, ti.args, hasLst, ti.constraints, [ti.body.kind, body])
 
 )abbrev package TYPEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where
