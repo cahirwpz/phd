@@ -74,12 +74,12 @@ TypeInfo() : Exports == Implementation where
   DAASE ==> AssociationList(Symbol, %)
 
   Exports ==> CoercibleTo(PF) with
-    typeInfo : (Symbol, List TE, List N, List TE, SEQ) -> %
+    typeInfo : (Symbol, List TE, List N, List N, SEQ) -> %
 
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List TE
     elt : (%, "hasList") -> List N 
-    elt : (%, "constraints") -> List TE
+    elt : (%, "constraints") -> List N
     elt : (%, "body") -> SEQ
     elt : (%, "self") -> APP
     elt : (%, "type") -> N
@@ -101,14 +101,14 @@ TypeInfo() : Exports == Implementation where
     Rep := Record(ti_name : Symbol,
                   ti_args : List TE,
                   ti_hasList : List N,
-                  ti_constraints : List TE,
+                  ti_constraints : List N,
                   ti_body : SEQ)
 
     fromDatabase : Symbol -> Union(%, "failed")
     apply : (%, List(N)) -> %
     flatten : % -> %
     evalTypeGuards : % -> %
-    eraseConstraints : % -> %
+    eraseConstraints : (%, Boolean) -> %
 
     builtinCategories : List(Symbol) :=
       (['Canonical, 'CommutativeStar, 'Type, 'canonicalUnitNormal,
@@ -142,10 +142,10 @@ TypeInfo() : Exports == Implementation where
       ti! := 
         if app.args = [emptyNode()] then
           ti := getTypeInfo(app.function :: Symbol)
-          eraseConstraints(evalTypeGuards(flatten(ti)))
+          eraseConstraints(evalTypeGuards(flatten(ti)), false)
         else
           ti := getTypeInfo([app.function, [emptyNode()]])
-          eraseConstraints(evalTypeGuards(apply(ti, app.args)))
+          eraseConstraints(evalTypeGuards(apply(ti, app.args)), true)
       cache(app) := ti!
 
     typeInfo(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
@@ -219,13 +219,13 @@ TypeInfo() : Exports == Implementation where
         error ""
       empty? values => ti
 
-      -- TODO: For now we completely ignore actual types passed as arguments.
       debug [before, "=>" :: PF, after]
 
       args' : List(TE) := []
       body' := [ti.body]
       hasList' := ti.hasList
-      constraints' : List(TE) := ti.constraints
+      constraints' :=
+        [nodeApp([ti.name], [[arg] for arg in ti.args]), :ti.constraints]
 
       for arg in ti.args for val in values repeat
         not typeVar? arg.expr =>
@@ -235,15 +235,12 @@ TypeInfo() : Exports == Implementation where
         ++ i.e. when List(Integer) is passed instead of List(Integer())
         if symbol? val then
           val := nodeApp(val, [])
-        constraints' := 
-          arg.type ~= nodeApp(['Type], []) =>
-            [['has, val, arg.type]$TE, :constraints']
-          [substitute([n], var, val) :: TE for n in constraints']
+        constraints' := [substitute(n, var, val) for n in constraints']
         args' := [[':, val, arg.type]$TE, :args']
         body' := substitute(body', var, val)
         hasList' := [substitute(n, var, val) for n in hasList']
 
-      typeInfo(ti.name, args', hasList', removeDuplicates constraints', body' :: SEQ)
+      typeInfo(ti.name, args', hasList', constraints', body' :: SEQ)
 
     flatten(ti : %) : % ==
       info ["Flatten" :: PF, bold(ti.self :: PF)]
@@ -293,6 +290,7 @@ TypeInfo() : Exports == Implementation where
                [ti.body.kind, removeDuplicates lst])
 
     has?(te : TE, ti : %) : Boolean ==
+      te.type = nodeApp(['Type], []) => true
       te.expr = typeVar(0) or te.expr = ti.type =>
         member?(te.type, ti.hasList)
       apply? te.expr =>
@@ -316,10 +314,34 @@ TypeInfo() : Exports == Implementation where
         n
       n
 
-    eraseConstraints(ti : %) : % ==
+    eraseConstraints(ti : %, validate : Boolean) : % ==
       info ["Check type constraints" :: PF, bold(ti.self :: PF)]
-      constraints' : List(TE) := 
-        [te for te in ti.constraints | not(te.kind = 'has and has?(te, ti))]
+
+      appliesCleanly(n : N) : Boolean ==
+        app := n :: APP
+        "and"/[has?(m :: TE, ti) for m in app.args]
+
+      constraints' := remove(appliesCleanly, ti.constraints)
+
+      validate and not empty? constraints' =>
+        fmtarg(n : N) : PF ==
+          te := n :: TE
+          has?(te, ti) => te.expr :: PF
+          bold(red(te.expr :: PF))
+
+        fmterr(n : N) : PF ==
+          te := n :: TE
+          spaces [bold(te.expr :: PF), "has no" :: PF, bold(te.type :: PF)]
+
+        fail ["Could not construct type" :: PF, bold(ti.type :: PF), ":" :: PF]
+
+        for c in constraints' for i in 1.. repeat
+          app := c :: APP
+          typ := hconcat [app.function :: PF, paren [fmtarg arg for arg in app.args]]
+          err := [fmterr arg for arg in app.args | not has?(arg :: TE, ti)]
+          fail [paren(i :: PF), typ, ":" :: PF, sepBy(", " :: PF, err)]
+        error ""
+
       typeInfo(ti.name, ti.args, ti.hasList, constraints', ti.body)
 
     evalTypeGuards(ti : %) : % ==
@@ -364,10 +386,15 @@ TypeEvaluatorTest() : Exports == Implementation where
 
       typeInfoCacheInit()
 
-      println (getTypeInfo('DictionaryOperations) :: PF)
-      println (getTypeInfo('List) :: PF)
-      println (getTypeInfo([['List], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['List], [['Integer]]]) :: PF)
+      --println (getTypeInfo('DictionaryOperations) :: PF)
+      --println (getTypeInfo([['Integer], [emptyNode()]]) :: PF)
+      --println (getTypeInfo([['Integer], []]) :: PF)
+      --println (getTypeInfo('List) :: PF)
+      --println (getTypeInfo([['List], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['List], [nodeApp(['Integer], [])]]) :: PF)
+
+      ++ test below should fail!
+      --println (getTypeInfo([['List], [nodeApp(['BasicType], [])]]) :: PF)
 
       println ([bold("Types in cache:" :: PF),
                 bracket [app :: PF for app in typeInfoCacheList()]])
