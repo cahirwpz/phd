@@ -724,7 +724,7 @@ TypeCheckerRuleFactory() : Exports == Implementation where
       (Union("loop", "collect", "repeat"), List(TCN), List(TCN), TCN) -> TCR
     segRule : (TCN, OTCN, OTCN) -> TCR
     seqRule :
-      (Union("Capsule", "Sequence", "Tuple"), TCN, List(TCN)) -> TCR
+      (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), TCN, List(TCN)) -> TCR
     typeOriginRule : (TCN, N) -> TCR
     subTypeRule : (TCN, TCN) -> TCR
     superTypeRule : (TCN, TCN) -> TCR
