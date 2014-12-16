@@ -172,7 +172,7 @@ TypeInfo() : Exports == Implementation where
       concat(s1, s2)$String :: Symbol
 
     fromDatabase (t : Symbol) : Union(%, "failed") ==
-      info ["fromDatabase :" :: PF, bold(t :: PF)]
+      debug ["fromDatabase :" :: PF, bold(t :: PF)]
 
       cmm! := safeGetCtorModeMap(t)
       cmm! case "failed" => "failed"
@@ -244,49 +244,44 @@ TypeInfo() : Exports == Implementation where
     flatten(ti : %) : % ==
       info ["Flatten" :: PF, bold(ti.self :: PF)]
 
-      recurse? := true
       lst := ti.body.list
+      lst' : List(N) := []
       constraints := ti.constraints
       hasLst : List(N) := []
 
-      while recurse? repeat
-        recurse? := false
-        lst' : List(N) := []
+      while not empty? lst repeat
+        n := first lst
+        lst := rest lst
 
-        for n in lst repeat
-          cond := emptyNode()
-          if typeGuard? n then
-            tg := n :: TE
-            if apply? tg.expr then
-              n := tg.expr
-              cond := tg.type
+        cond := emptyNode()
+        if typeGuard? n then
+          tg := n :: TE
+          if apply? tg.expr then
+            n := tg.expr
+            cond := tg.type
 
-          apply? n =>
-            member?(n, hasLst) => "iterate"
-            app := n :: APP
-            sym := app.function :: Symbol
-            debug ["Merge" :: PF, app :: PF, "with" :: PF, ti.self :: PF]
-            ti' := getTypeInfo(sym) :: %
-            ti' := apply(ti', app.args)
-            for n' in ti'.body.list | not member?(n', lst') repeat
-              if not emptyNode? cond then
-                n' := nodeTypeExpr('_|, n', cond)
-              lst' := [n', :lst']
-            if not emptyNode? cond then
-              n := nodeTypeExpr('_|, n, cond)
-            hasLst := [n, :hasLst]
-            for n' in ti'.hasList | not member?(n', hasLst) repeat
-              hasLst := [n', :hasLst]
-            constraints := concat(ti'.constraints, constraints)
-            recurse? := true
-          lst' := [n, :lst']
- 
-        lst := lst'
+        apply? n =>
+          n' := 
+            emptyNode? cond => n
+            nodeTypeExpr('_|, n, cond)
+          member?(n, hasLst) => "iterate"
+          app := n :: APP
+          sym := app.function :: Symbol
+          info ["Merge" :: PF, bold(n' :: PF), "with" :: PF, ti.self :: PF]
+          ti' := getTypeInfo(sym) :: %
+          ti' := apply(ti', app.args)
+          lst := 
+            emptyNode? cond => concat(ti'.body.list, lst)
+            concat([nodeTypeExpr('_|, e, cond) for e in ti'.body.list], lst)
+          hasLst := concat(ti'.hasList, [n', :hasLst])
+          constraints := concat(ti'.constraints, constraints)
+
+        lst' := [n, :lst']
 
       typeInfo(ti.name, ti.args,
                removeDuplicates hasLst,
                removeDuplicates constraints,
-               [ti.body.kind, removeDuplicates lst])
+               [ti.body.kind, reverse lst'])
 
     has?(te : TE, ti : %) : Boolean ==
       te.type = nodeApp(['Type], []) => true
