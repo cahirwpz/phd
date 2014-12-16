@@ -69,6 +69,7 @@ TypeInfo() : Exports == Implementation where
   MR ==> SpadMarker(N)
   TE ==> SpadTypeExpr(N)
   MT ==> SpadMappingType(N)
+  NT ==> SpadNamedType(N)
   SEQ ==> SpadSequence(N)
   CACHE ==> AssociationList(APP, %)
   DAASE ==> AssociationList(Symbol, %)
@@ -164,10 +165,10 @@ TypeInfo() : Exports == Implementation where
         x.ti_body.kind case "Domain" => "Domain"
         x.ti_body.kind case "Package" => "Package"
         error "???"
-      pile([spaces [app, bold("is" :: PF), k :: PF, bold("defined as:" :: PF)],
-            x.ti_body :: PF,
-            spaces [bold("has relation:" :: PF), bracket [h :: PF for h in x.ti_hasList]],
-            spaces [bold("constraints:" :: PF), bracket [c :: PF for c in x.ti_constraints]]])
+      pile([spaces [app, bold("is" :: PF), k :: PF],
+            pile [bold("defined as:" :: PF), x.ti_body :: PF],
+            pile [bold("has relation:" :: PF), :[h :: PF for h in x.ti_hasList]],
+            pile [bold("constraints:" :: PF), :[c :: PF for c in x.ti_constraints]]])
 
     mkvar(s1 : String, s2 : String) : Symbol ==
       concat(s1, s2)$String :: Symbol
@@ -246,7 +247,7 @@ TypeInfo() : Exports == Implementation where
         body' := substitute(body', var, val)
         hasList' := [substitute(n, var, val) for n in hasList']
 
-      typeInfo(ti.name, args', hasList', constraints', body' :: SEQ)
+      typeInfo(ti.name, reverse args', hasList', constraints', body' :: SEQ)
 
     flatten(ti : %) : % ==
       info ["Flatten" :: PF, bold(ti.self :: PF)]
@@ -288,9 +289,14 @@ TypeInfo() : Exports == Implementation where
           else
             for e in ti'.body.list repeat
               e' :=
-                if apply? e 
-                  then nodeTypeExpr('_|, e, cond)
-                  else nodeTypeExpr('_$, e, n)
+                apply? e =>
+                  nodeTypeExpr('_|, e, cond)
+                namedType? e =>
+                  nodeTypeExpr('_$, e, n)
+                typeGuard? e =>
+                  te := e :: TE
+                  nodeTypeExpr('_|, te.expr, nodeApp(['and], [cond, te.type]))
+                error "Not handled!"
               lst := [e', :lst]
 
         namedType? n or typeGuard? n or typeOrigin? n =>
@@ -299,40 +305,62 @@ TypeInfo() : Exports == Implementation where
         info ["Flatten" :: PF, n :: PF]
         error "Not handled!"
 
-      hasLst' : List(N) := []
+      conv(h : Record(key : APP, entry : N)) : N ==
+        true? h.entry => [h.key]
+        nodeTypeExpr('_|, [h.key], h.entry)
 
-      for hasInfo in entries hasLst repeat
-        n' :=
-          if true? hasInfo.entry
-            then [hasInfo.key]
-            else nodeTypeExpr('_|, [hasInfo.key], hasInfo.entry)
-        hasLst' := [n', :hasLst']
+      hasLst' := [conv(h) for h in entries hasLst]
 
-      for n' in lst' repeat
-        if typeOrigin? n' then
-          te := n' :: TE
+      attachTypeGuard(m : N) : N ==
+        typeOrigin? m =>
+          te := m :: TE
           guard := hasLst(te.type :: APP)
-          n' :=
-            true? guard => te.expr
-            nodeTypeExpr('_|, te.expr, guard)
-        lst := [n', :lst]
+          true? guard => te.expr
+          nodeTypeExpr('_|, te.expr, guard)
+        m
+
+      lst' := map(attachTypeGuard, lst')
+
+      duplicateWithoutGuard?(m : N) : Boolean ==
+        typeGuard? m =>
+          te := m :: TE
+          member?(te.expr, lst')
+        false
+
+      lst' := remove(duplicateWithoutGuard?, lst')
 
       typeInfo(ti.name, ti.args, hasLst',
                removeDuplicates constraints,
-               [ti.body.kind, lst])
+               [ti.body.kind, removeDuplicates lst'])
 
     has?(te : TE, ti : %) : Boolean ==
       te.type = nodeApp(['Type], []) => true
       te.expr = typeVar(0) or te.expr = ti.type =>
-        member?(te.type, ti.hasList)
+        apply? te.type =>
+          member?(te.type, ti.hasList)
+        fail [te :: PF]
+        error "Not handled!"
       apply? te.expr =>
         app := te.expr :: APP
         sequence? te.type =>
           seq := te.type :: SEQ
           "and"/[has?(['has, te.expr, typ]$TE, ti) for typ in seq.list]
-        if app.function ~= [ti.name] then
+        apply? te.type =>
+          te.type = te.expr => true
+          if app.function ~= [ti.name] then
+            ti := getTypeInfo(app)
+          member?(te.type, ti.hasList)
+        namedType? te.type =>
           ti := getTypeInfo(app)
-        member?(te.type, ti.hasList)
+          seq := ti.body :: SEQ
+          -- BUG! This will not work without proper(!) % substitution!
+          for n in seq.list | namedType? n repeat
+            n := substitute(n, typeVar(0) :: MR, te.expr)
+            if n = te.type then
+              return true
+          false
+        fail [te :: PF]
+        error "Not handled!"
       false
 
     evalGuard(n : N, ti : %) : N ==
