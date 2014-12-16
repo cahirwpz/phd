@@ -128,20 +128,21 @@ TypeInfo() : Exports == Implementation where
     getTypeInfo(app : APP) : % ==
       ti? := search(app, cache)
       ti? case % => ti? :: %
-      -- info ["getTypeInfo :" :: PF, bold(app :: PF)]
 
-      app.args = [emptyNode()] =>
-        ti := getTypeInfo(app.function :: Symbol)
-        ti! := evalTypeGuards(flatten(ti))
-        cache(app) := ti!
-        ti! := eraseConstraints(ti!, false)
-        info ["addTypeInfo :" :: PF, bold(app :: PF)]
-        cache(app) := ti!
+      debug ["getTypeInfo :" :: PF, bold(app :: PF)]
+      validate? := true
+      ti! := 
+        if app.args = [emptyNode()] then
+          validate? := false
+          ti := getTypeInfo(app.function :: Symbol)
+          flatten(ti)
+        else
+          ti := getTypeInfo([app.function, [emptyNode()]])
+          apply(ti, app.args)
 
-      ti := getTypeInfo([app.function, [emptyNode()]])
-      ti! := evalTypeGuards(apply(ti, app.args))
+      ti! := evalTypeGuards(ti!)
       cache(app) := ti!
-      ti! := eraseConstraints(ti!, true)
+      ti! := eraseConstraints(ti!, validate?)
       info ["addTypeInfo :" :: PF, bold(app :: PF)]
       cache(app) := ti!
 
@@ -171,6 +172,12 @@ TypeInfo() : Exports == Implementation where
     mkvar(s1 : String, s2 : String) : Symbol ==
       concat(s1, s2)$String :: Symbol
 
+    true?(e : N) : Boolean ==
+      e = ['true]
+
+    false?(e : N) : Boolean ==
+      e = ['false]
+
     fromDatabase (t : Symbol) : Union(%, "failed") ==
       debug ["fromDatabase :" :: PF, bold(t :: PF)]
 
@@ -188,8 +195,8 @@ TypeInfo() : Exports == Implementation where
 
       ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
       ++ change name.
-      args := ([nodeTypeExpr(':, typeVar(i), arg.type) :: TE
-                for arg in cmm.args for i in 1..])
+      types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
+      args := [[':, typeVar(i), typ]$TE for typ in types for i in 1..]
 
       if cmm.type = nodeApp(['Category], []) then
         ++ "t#1" => "%1", "t#2" => "%2", ...
@@ -246,42 +253,73 @@ TypeInfo() : Exports == Implementation where
 
       lst := ti.body.list
       lst' : List(N) := []
+      hasLst : AssociationList(APP, N) := [[]]
       constraints := ti.constraints
-      hasLst : List(N) := []
 
       while not empty? lst repeat
-        n := first lst
-        lst := rest lst
+        (n, lst) := (first lst, rest lst)
 
-        cond := emptyNode()
+        cond := ['true]
         if typeGuard? n then
           tg := n :: TE
           if apply? tg.expr then
-            n := tg.expr
-            cond := tg.type
+            (n, cond) := (tg.expr, tg.type)
 
         apply? n =>
-          n' := 
-            emptyNode? cond => n
-            nodeTypeExpr('_|, n, cond)
-          member?(n, hasLst) => "iterate"
+          n' := if true? cond then n else nodeTypeExpr('_|, n, cond)
           app := n :: APP
+
+          key?(app, hasLst) => 
+            true? cond =>
+              hasLst(app) := cond
+            true? hasLst(app) => "iterate"
+            hasLst(app) := nodeApp(['or], [cond, hasLst(app)])
+
+          hasLst(app) := cond
           sym := app.function :: Symbol
           info ["Merge" :: PF, bold(n' :: PF), "with" :: PF, ti.self :: PF]
           ti' := getTypeInfo(sym) :: %
           ti' := apply(ti', app.args)
-          lst := 
-            emptyNode? cond => concat(ti'.body.list, lst)
-            concat([nodeTypeExpr('_|, e, cond) for e in ti'.body.list], lst)
-          hasLst := concat(ti'.hasList, [n', :hasLst])
           constraints := concat(ti'.constraints, constraints)
 
-        lst' := [n, :lst']
+          -- extend original functor's body with included constructor type
+          if true? cond then
+            lst := concat(ti'.body.list, lst)
+          else
+            for e in ti'.body.list repeat
+              e' :=
+                if apply? e 
+                  then nodeTypeExpr('_|, e, cond)
+                  else nodeTypeExpr('_$, e, n)
+              lst := [e', :lst]
 
-      typeInfo(ti.name, ti.args,
-               removeDuplicates hasLst,
+        namedType? n or typeGuard? n or typeOrigin? n =>
+          lst' := [n, :lst']
+
+        info ["Flatten" :: PF, n :: PF]
+        error "Not handled!"
+
+      hasLst' : List(N) := []
+
+      for hasInfo in entries hasLst repeat
+        n' :=
+          if true? hasInfo.entry
+            then [hasInfo.key]
+            else nodeTypeExpr('_|, [hasInfo.key], hasInfo.entry)
+        hasLst' := [n', :hasLst']
+
+      for n' in lst' repeat
+        if typeOrigin? n' then
+          te := n' :: TE
+          guard := hasLst(te.type :: APP)
+          n' :=
+            true? guard => te.expr
+            nodeTypeExpr('_|, te.expr, guard)
+        lst := [n', :lst]
+
+      typeInfo(ti.name, ti.args, hasLst',
                removeDuplicates constraints,
-               [ti.body.kind, reverse lst'])
+               [ti.body.kind, lst])
 
     has?(te : TE, ti : %) : Boolean ==
       te.type = nodeApp(['Type], []) => true
@@ -301,16 +339,29 @@ TypeInfo() : Exports == Implementation where
       debug ["evalGuard" :: PF, bold(n :: PF)]
       typeExpr? n =>
         te := n :: TE
-        te.kind = 'has and has?(te, ti) => emptyNode()
+        te.kind = 'has and has?(te, ti) => ['true]
         n
       apply? n =>
         app := n :: APP
+        lst := [evalGuard(arg, ti) for arg in app.args]
         app.function = ['and] =>
-          lst := remove(emptyNode?, [evalGuard(arg, ti) for arg in app.args])$List(N)
+          any?(false?, lst) => ['false]
+          lst := remove(true?, lst)
+          #lst = 0 => ['true]
           #lst = 1 => first lst
-          #lst = 0 => emptyNode()
           nodeApp(['and], lst)
-        n
+        app.function = ['or] =>
+          any?(true?, lst) => ['true]
+          lst := remove(false?, lst)
+          #lst = 0 => ['false]
+          #lst = 1 => first lst
+          nodeApp(['or], lst)
+        app.function = ['not] and #app.args = 1 =>
+          n' := evalGuard(first app.args, ti)
+          true? n' => ['false]
+          n
+        fail ["evalGuard" :: PF, bold(n :: PF)]
+        error "Not handled!"
       n
 
     eraseConstraints(ti : %, validate : Boolean) : % ==
@@ -350,7 +401,7 @@ TypeInfo() : Exports == Implementation where
         not typeGuard? n => n
         tg := n :: TE
         type' := evalGuard(tg.type, ti)
-        emptyNode? type' => tg.expr
+        type' = ['true] => tg.expr
         nodeTypeExpr('_|, tg.expr, type')
 
       hasLst := removeDuplicates map(eval, ti.hasList)
