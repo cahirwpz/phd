@@ -855,6 +855,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce n ==
       ls := [e :: PF for e in n.list | not emptyNode? e]
+      empty? ls => "()" :: PF
       n.kind case "Join" =>
         #n.list = 1 => ls.1
         l1 := [m :: PF for m in n.list | apply? m]

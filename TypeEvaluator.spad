@@ -97,6 +97,7 @@ TypeInfo() : Exports == Implementation where
     import SpadCtorModeMap
     import Logger('TypeInfo)
     import TypeUnifier
+    import Printer
 
     Rep := Record(ti_name : Symbol,
                   ti_args : List TE,
@@ -110,42 +111,38 @@ TypeInfo() : Exports == Implementation where
     evalTypeGuards : % -> %
     eraseConstraints : (%, Boolean) -> %
 
-    builtinCategories : List(Symbol) :=
-      (['Canonical, 'CommutativeStar, 'Type, 'canonicalUnitNormal,
-        'canonicalsClosed, 'finiteAggregate, 'multiplicativeValuation,
-        'noZeroDivisors, 'shallowlyMutable, 'unitsKnown])
-
     cache : CACHE := [[]]
     daase : DAASE := [[]]
 
     typeInfoCacheInit () ==
       cache := [[]]
       daase := [[]]
-      for cat in builtinCategories repeat
-        app := [[cat], []]$APP
-        ti := typeInfo(cat, [], [], [], ["Join", []]$SEQ)
-        daase(cat) := ti
-        cache(app) := ti
 
     typeInfoCacheList() == keys(cache)
 
     getTypeInfo(sym : Symbol) : % ==
-      debug ["getTypeInfo :" :: PF, bold(sym :: PF)]
       ti? := search(sym, daase)
       ti? case % => ti? :: %
       daase(sym) := fromDatabase(sym) :: %
 
     getTypeInfo(app : APP) : % ==
-      debug ["getTypeInfo :" :: PF, bold(app :: PF)]
       ti? := search(app, cache)
       ti? case % => ti? :: %
-      ti! := 
-        if app.args = [emptyNode()] then
-          ti := getTypeInfo(app.function :: Symbol)
-          eraseConstraints(evalTypeGuards(flatten(ti)), false)
-        else
-          ti := getTypeInfo([app.function, [emptyNode()]])
-          eraseConstraints(evalTypeGuards(apply(ti, app.args)), true)
+      -- info ["getTypeInfo :" :: PF, bold(app :: PF)]
+
+      app.args = [emptyNode()] =>
+        ti := getTypeInfo(app.function :: Symbol)
+        ti! := evalTypeGuards(flatten(ti))
+        cache(app) := ti!
+        ti! := eraseConstraints(ti!, false)
+        info ["addTypeInfo :" :: PF, bold(app :: PF)]
+        cache(app) := ti!
+
+      ti := getTypeInfo([app.function, [emptyNode()]])
+      ti! := evalTypeGuards(apply(ti, app.args))
+      cache(app) := ti!
+      ti! := eraseConstraints(ti!, true)
+      info ["addTypeInfo :" :: PF, bold(app :: PF)]
       cache(app) := ti!
 
     typeInfo(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
@@ -175,6 +172,8 @@ TypeInfo() : Exports == Implementation where
       concat(s1, s2)$String :: Symbol
 
     fromDatabase (t : Symbol) : Union(%, "failed") ==
+      info ["fromDatabase :" :: PF, bold(t :: PF)]
+
       cmm! := safeGetCtorModeMap(t)
       cmm! case "failed" => "failed"
       cmm := cmm! :: SpadCtorModeMap
@@ -294,7 +293,12 @@ TypeInfo() : Exports == Implementation where
       te.expr = typeVar(0) or te.expr = ti.type =>
         member?(te.type, ti.hasList)
       apply? te.expr =>
-        ti := getTypeInfo(te.expr :: APP)
+        app := te.expr :: APP
+        sequence? te.type =>
+          seq := te.type :: SEQ
+          "and"/[has?(['has, te.expr, typ]$TE, ti) for typ in seq.list]
+        if app.function ~= [ti.name] then
+          ti := getTypeInfo(app)
         member?(te.type, ti.hasList)
       false
 

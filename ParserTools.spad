@@ -85,7 +85,7 @@ ParserTools() : with
     case? ex == list_of_eq?(ex, 'case, 3)
     coerce? ex == list_of_eq?(ex, '::, 3)
     collect? ex == list_of_ge?(ex, 'COLLECT, 3)
-    domain? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'domain
+    domain? ex == list_of_ge?(ex, 'CATEGORY, 2) and symbol ex.2 = 'domain
     domsel? ex == list_of_eq?(ex, 'Sel, 3)
     exit? ex == list_of_eq?(ex, 'exit, 3)
     function? ex == list_of_eq?(ex, 'DEF, 5)
@@ -103,7 +103,7 @@ ParserTools() : with
     macro? ex == list_of_eq?(ex, 'MDEF, 5)
     mapping? ex == list_of_ge?(ex, 'Mapping, 2)
     marker? ex == list_of_eq?(ex, '_@Marker, 3)
-    package? ex == list_of_ge?(ex, 'CATEGORY, 3) and symbol ex.2 = 'package
+    package? ex == list_of_ge?(ex, 'CATEGORY, 2) and symbol ex.2 = 'package
     pretend? ex == list_of_eq?(ex, 'pretend, 3)
     progn? ex == list_of_ge?(ex, 'PROGN, 2)
     quote? ex == list_of_eq?(ex, 'QUOTE, 2)
