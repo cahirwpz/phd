@@ -136,6 +136,8 @@ TypeInfo() : Exports == Implementation where
     typeInfoCacheList() == keys(cache)
 
     getTypeInfo(sym : Symbol) : % ==
+      notice ["getTypeInfoFromDatabase:" :: PF, bold(sym :: PF)]
+
       ti? := search(sym, daase)
       ti? case % => ti? :: %
       daase(sym) := fromDatabase(sym) :: %
@@ -144,7 +146,7 @@ TypeInfo() : Exports == Implementation where
       ti? := search(app, cache)
       ti? case % => ti? :: %
 
-      notice ["(1) getTypeInfo :" :: PF, bold(app :: PF)]
+      notice ["getTypeInfo :" :: PF, bold(app :: PF)]
 
       validate? := true
       ti! := 
@@ -156,10 +158,9 @@ TypeInfo() : Exports == Implementation where
           ti := getTypeInfo([app.function, [emptyNode()]])
           apply(ti, app.args)
 
-      notice ["(2) getTypeInfo :" :: PF, bold(app :: PF)]
+      ti! := evalTypeGuards(ti!)
 
       empty? freeVars [app] =>
-        ti! := evalTypeGuards(ti!)
         cache(app) := ti!
         ti! := eraseConstraints(ti!, validate?)
         info ["addTypeInfo :" :: PF, bold(app :: PF)]
@@ -250,7 +251,7 @@ TypeInfo() : Exports == Implementation where
         error ""
       empty? values => ti
 
-      info [before, "~" :: PF, after, "?" :: PF]
+      -- debug ["Unifies:" :: PF, before, "~" :: PF, after, "?" :: PF]
 
       n1 := nodeApp([ti.name], [arg.expr for arg in ti.args])
       n2 := nodeApp([ti.name], values)
@@ -286,27 +287,28 @@ TypeInfo() : Exports == Implementation where
     flatten(ti : %) : % ==
       info ["Flatten" :: PF, bold(ti.self :: PF)]
 
-      lst := ti.body.list
-      lst' : List(N) := []
+      origBody := ti.body.list
+      flatBody : List(N) := []
       hasLst : AssociationList(APP, N) := [[]]
       constraints := ti.constraints
 
-      while not empty? lst repeat
-        (n, lst) := (first lst, rest lst)
+      while not empty? origBody repeat
+        (n, origBody) := (first origBody, rest origBody)
 
         cond := ['true]
         if typeGuard? n then 
           tg := n :: TE
           if apply? tg.expr then
+            -- encountered a functor with constraints
             (n, cond) := (tg.expr, tg.type)
 
-        --info pile ["hasLst:" :: PF, :[spaces [e.key :: PF, "=>" :: PF, e.entry :: PF] for e in entries hasLst | not true? e.entry]]
-
+        -- merge functor
         apply? n =>
-          n' := if true? cond then n else nodeTypeExpr('_|, n, cond)
           app := n :: APP
 
+          -- check if we have already merged a functor
           key?(app, hasLst) => 
+            warn ["Skipping:" :: PF, bold(app :: PF), "with" :: PF, bold(hasLst(app) :: PF)]
             true? cond =>
               hasLst(app) := cond
             true? hasLst(app) => "iterate"
@@ -317,65 +319,71 @@ TypeInfo() : Exports == Implementation where
               [hasLstVal]
             member?(cond, condLst) => "iterate"
             hasLst(app) := nodeApp(['or], concat(cond, condLst))
-            warn (hasLst(app) :: PF)
+
+          info(["Merge" :: PF, bold(true? cond => n :: PF; nodeTypeExpr('_|, n, cond) :: PF),
+                "with" :: PF, ti.self :: PF])
 
           hasLst(app) := cond
-          sym := app.function :: Symbol
-          info ["Merge" :: PF, bold(n' :: PF), "with" :: PF, ti.self :: PF]
-          ti' := getTypeInfo(sym) :: %
+          ti' := getTypeInfo(app.function :: Symbol) :: %
           ti' := apply(ti', app.args)
           constraints := concat(ti'.constraints, constraints)
 
           -- extend original functor's body with included constructor type
+          snippet : List(N) := []
+
           if true? cond then
-            lst := concat(ti'.body.list, lst)
-          else
+            -- case 1: merged functor has no constraints
             for e in ti'.body.list repeat
               e' :=
-                apply? e =>
+                apply? e or typeGuard? e => e 
+                namedType? e => nodeTypeExpr('_$, e, n)
+                error "Not handled!"
+              snippet := [e', :snippet]
+          else
+            -- case 2: merged functor has some constraints
+
+            -- INFO: When we merge functor A with %, we know that all what is
+            -- within A belongs to % only when "% has A". Hence for each
+            -- component of A we remember simple constraint "% has A".
+            -- More complex constraints are remembered in hasList.
+            --
+            -- This allows to add extra options to condition "% has A" in case
+            -- we encounter some other (less restrictive) constraints later.
+            cond := nodeTypeExpr('has, typeVar(0), [app])
+
+            for e in ti'.body.list repeat
+              e' :=
+                apply? e => -- add constraint to merged functor
                   nodeTypeExpr('_|, e, cond)
-                namedType? e =>
-                  nodeTypeExpr('_$, e, n)
-                typeGuard? e =>
+                namedType? e => -- add origin to function signature
+                  e := nodeTypeExpr('_$, e, n)
+                  nodeTypeExpr('_|, e, cond)
+                typeGuard? e => -- add extra constraint to merged functor
                   te := e :: TE
                   nodeTypeExpr('_|, te.expr, nodeApp(['and], [cond, te.type]))
                 error "Not handled!"
-              --notice ["Add:" :: PF, e' :: PF]
-              lst := [e', :lst]
+              snippet := [e', :snippet]
 
+          origBody := concat(reverse snippet, origBody)
+
+        -- merge everything else
         namedType? n or typeGuard? n or typeOrigin? n =>
-          lst' := [n, :lst']
+          info ["Copy" :: PF, bold(n :: PF), "to" :: PF, ti.self :: PF]
+          flatBody := [n, :flatBody]
 
         info ["Flatten" :: PF, n :: PF]
         error "Not handled!"
 
-      conv(h : Record(key : APP, entry : N)) : N ==
-        true? h.entry => [h.key]
-        nodeTypeExpr('_|, [h.key], h.entry)
-
-      hasLst' := [conv(h) for h in entries hasLst]
-
-      attachTypeGuard(m : N) : N ==
-        typeOrigin? m =>
-          te := m :: TE
-          guard := hasLst(te.type :: APP)
-          true? guard => te.expr
-          nodeTypeExpr('_|, te.expr, guard)
-        m
-
-      lst' := map(attachTypeGuard, lst')
-
-      duplicateWithoutGuard?(m : N) : Boolean ==
-        typeGuard? m =>
-          te := m :: TE
-          member?(te.expr, lst')
-        false
-
-      lst' := remove(duplicateWithoutGuard?, lst')
+      hasLst' : List(N) := []
+      for he in entries hasLst repeat
+        h := 
+          true? he.entry => [he.key]
+          nodeTypeExpr('_|, [he.key], he.entry)
+        hasLst' := [h, :hasLst']
 
       typeInfo(ti.name, ti.args, hasLst',
                removeDuplicates constraints,
-               [ti.body.kind, removeDuplicates lst'])
+               [ti.body.kind, reverse flatBody])
 
     has?(te : TE, ti : %) : Boolean ==
       te.type = nodeApp(['Type], []) => true
@@ -400,6 +408,7 @@ TypeInfo() : Exports == Implementation where
           ti := getTypeInfo(app)
           seq := ti.body :: SEQ
           -- BUG! This will not work without proper(!) % substitution!
+          -- Some more explanation needed if still valid suspition.
           for n in seq.list | namedType? n repeat
             n := substitute(n, typeVar(0) :: MR, te.expr)
             if n = te.type then
@@ -410,7 +419,7 @@ TypeInfo() : Exports == Implementation where
       false
 
     evalGuard(n : N, ti : %) : N ==
-      debug ["evalGuard" :: PF, bold(n :: PF)]
+      -- debug ["evalGuard" :: PF, bold(n :: PF)]
       typeExpr? n =>
         te := n :: TE
         te.kind = 'has and has?(te, ti) => ['true]
@@ -457,8 +466,6 @@ TypeInfo() : Exports == Implementation where
           te := n :: TE
           spaces [bold(te.expr :: PF), "has no" :: PF, bold(te.type :: PF)]
 
-        info (ti :: PF)
-
         fail ["Could not construct type" :: PF, bold(ti.type :: PF), ":" :: PF]
 
         for c in constraints' for i in 1.. repeat
@@ -471,20 +478,35 @@ TypeInfo() : Exports == Implementation where
       typeInfo(ti.name, ti.args, ti.hasList, constraints', ti.body)
 
     evalTypeGuards(ti : %) : % ==
-      info ["Evaluate type guards" :: PF, bold(ti.self :: PF)]
+      info ["Evaluate type guards for:" :: PF, bold(ti.self :: PF)]
+
+      continue? := true
+
+      while continue? repeat
+        newHasList : List(N) := []
+        continue? := false
+
+        for n in ti.hasList repeat
+          n' := 
+            not typeGuard? n => n
+            tg := n :: TE
+            type' := evalGuard(tg.type, ti)
+            type' = ['true] => (continue? := true; tg.expr)
+            nodeTypeExpr('_|, tg.expr, type')
+          newHasList := [n', :newHasList]
+
+        ti := typeInfo(ti.name, ti.args, reverse newHasList, ti.constraints, ti.body)
 
       eval(n : N) : N ==
         not typeGuard? n => n
         tg := n :: TE
-        info (tg :: PF)
         type' := evalGuard(tg.type, ti)
         type' = ['true] => tg.expr
         nodeTypeExpr('_|, tg.expr, type')
 
-      hasLst := removeDuplicates map(eval, ti.hasList)
       body := map(eval, ti.body.list)
 
-      typeInfo(ti.name, ti.args, hasLst, ti.constraints, [ti.body.kind, body])
+      typeInfo(ti.name, ti.args, ti.hasList, ti.constraints, [ti.body.kind, body])
 
 )abbrev package TYPEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where
@@ -573,6 +595,8 @@ TypeEvaluatorTest() : Exports == Implementation where
     test4 ==
       initTest()
 
+      -- TODO
+      println (getTypeInfo([['UnivariateTaylorSeries], [emptyNode()]]) :: PF)
       println (getTypeInfo([['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]) :: PF)
 
       printTypeInfoCache()
