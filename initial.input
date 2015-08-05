@@ -3,10 +3,10 @@
 )compile ParserTools.spad
 )compile SpadNode.spad
 )compile SpadDatabase.spad
-)compile SpadEnvironment.spad
 )compile SpadTreeWalker.spad
 )compile TypeUnifier.spad
 )compile TypeEvaluator.spad
+)compile SpadEnvironment.spad
 )compile SpadTypeChecker.spad
 )compile SpadCompilerPasses.spad
 )compile SpadCompilerTest.spad

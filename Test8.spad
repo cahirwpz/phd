@@ -4,6 +4,7 @@ Test8 : Exports == Implementation where
   Exports ==> with
     foo : (Integer, Integer) -> Integer
     bar : (Integer, Integer) -> Integer
+    baz : (Integer, Integer, List(List(Integer))) -> Integer
 
   Implementation ==> add
     import Vector(Integer)
@@ -19,3 +20,6 @@ Test8 : Exports == Implementation where
     bar(i : Integer, j : Integer) : Integer ==
       v := my_mat(i + 1)
       v(i + 1, j + 1)
+
+    baz(i : Integer, j : Integer, ll : List(List(Integer))) : Integer ==
+      ll(i)(j)

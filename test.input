@@ -1,7 +1,14 @@
 )boot $PostParseHookEnable := false
 )compile SpadEnvironment.spad
+--)compile SpadNode.spad
+--)compile SpadCompilerPasses.spad
+--)compile TypeUnifier.spad
 )compile SpadTypeChecker.spad
-)compile SpadCompilerTest.spad
+--)compile SpadCompilerTest.spad
 )boot $PostParseHookEnable := true
-)compile Test1.spad
+--)compile Test1.spad
+--)compile Test2.spad
+--)compile Test3.spad
+--)compile Test9.spad
+)compile Test10.spad
 )boot $PostParseHookEnable := false

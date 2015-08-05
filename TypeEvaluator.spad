@@ -10,6 +10,19 @@ SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
       r case "failed" => [s]
       r.entry
 
+)abbrev package STMSETV SpadTreeMarkerSetVersion
+SpadTreeMarkerSetVersion(newver : NNI) : WALKER == Implementation where
+  N ==> SpadNode
+  MR ==> SpadMarker(N)
+  NNI ==> NonNegativeInteger
+  WALKER ==> SpadTreeWalkerCategory 
+
+  Implementation ==> add
+    rewrite (mr : MR) : N ==
+      if mr.kind = 'typevar then
+        mr := [mr.id, newver, 'typevar]
+      [mr]
+
 )abbrev package FLATDBT FlattenDatabaseType
 FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
   PF ==> PrintableForm
@@ -73,6 +86,7 @@ TypeInfo() : Exports == Implementation where
   SEQ ==> SpadSequence(N)
   CACHE ==> AssociationList(APP, %)
   DAASE ==> AssociationList(Symbol, %)
+  SUBST ==> AssociationList(MR, List(N))
 
   Exports ==> CoercibleTo(PF) with
     typeInfo : (Symbol, List TE, List N, List N, SEQ) -> %
@@ -130,7 +144,8 @@ TypeInfo() : Exports == Implementation where
       ti? := search(app, cache)
       ti? case % => ti? :: %
 
-      debug ["getTypeInfo :" :: PF, bold(app :: PF)]
+      notice ["(1) getTypeInfo :" :: PF, bold(app :: PF)]
+
       validate? := true
       ti! := 
         if app.args = [emptyNode()] then
@@ -141,11 +156,16 @@ TypeInfo() : Exports == Implementation where
           ti := getTypeInfo([app.function, [emptyNode()]])
           apply(ti, app.args)
 
-      ti! := evalTypeGuards(ti!)
-      cache(app) := ti!
-      ti! := eraseConstraints(ti!, validate?)
-      info ["addTypeInfo :" :: PF, bold(app :: PF)]
-      cache(app) := ti!
+      notice ["(2) getTypeInfo :" :: PF, bold(app :: PF)]
+
+      empty? freeVars [app] =>
+        ti! := evalTypeGuards(ti!)
+        cache(app) := ti!
+        ti! := eraseConstraints(ti!, validate?)
+        info ["addTypeInfo :" :: PF, bold(app :: PF)]
+        cache(app) := ti!
+
+      ti!
 
     typeInfo(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
 
@@ -158,7 +178,7 @@ TypeInfo() : Exports == Implementation where
     elt(x, "type") == nodeApp([x.ti_name], [arg.expr for arg in x.ti_args])
 
     coerce x ==
-      args := [(typeVar? arg.expr => arg :: PF; arg.expr :: PF) for arg in x.ti_args]
+      args := [arg :: PF for arg in x.ti_args]
       app := hconcat [x.ti_name :: PF, paren args]
       k : String :=
         x.ti_body.kind case "Join" => "Category"
@@ -216,38 +236,52 @@ TypeInfo() : Exports == Implementation where
 
       typeInfo(cmm.name, args, [], [], body :: SEQ)
 
+    DelVer := SpadTreeMarkerSetVersion(0)
+    AddVer := SpadTreeMarkerSetVersion(1)
+
     apply(ti : %, values : List(N)) : % ==
       before := bold hconcat [ti.name :: PF, paren [arg :: PF for arg in ti.args]]
       after := bold hconcat [ti.name :: PF, paren [val :: PF for val in values]]
 
       #values ~= #ti.args =>
-        fail(["Wrong number of arguments" :: PF, before, "passed to" :: PF,
-              after, "functor!" :: PF])
+        info(ti :: PF)
+        fail(["Wrong number of arguments:" :: PF, bold paren [val :: PF for val in values],
+              "passed to:" :: PF, before, "functor!" :: PF])
         error ""
       empty? values => ti
 
-      debug [before, "=>" :: PF, after]
+      info [before, "~" :: PF, after, "?" :: PF]
 
-      args' : List(TE) := []
-      body' := [ti.body]
-      hasList' := ti.hasList
+      n1 := nodeApp([ti.name], [arg.expr for arg in ti.args])
+      n2 := nodeApp([ti.name], values)
+
+      res := unifyType(n1, rewrite(n2)$AddVer)
+      failed? res =>
+        fail ("unification failed" :: PF)
+        error ""
+
+      -- solution for functor argument application problem
+      subst := res :: SUBST
+
+      args' := [substitute([arg], subst) :: TE for arg in ti.args]
+      body' := substitute([ti.body], subst)
+      hasList' := [substitute(hasItem, subst) for hasItem in ti.hasList]
       constraints' :=
-        [nodeApp([ti.name], [[arg] for arg in ti.args]), :ti.constraints]
+        concat(nodeApp([ti.name], [[arg] for arg in args']),
+               [substitute(c, subst) for c in ti.constraints])
 
-      for arg in ti.args for val in values repeat
-        not typeVar? arg.expr =>
-          error "Argument has been already applied!"
-        var := arg.expr :: MR
-        ++ BUG: Fix improper functor application 
-        ++ i.e. when List(Integer) is passed instead of List(Integer())
-        if symbol? val then
-          val := nodeApp(val, [])
-        constraints' := [substitute(n, var, val) for n in constraints']
-        args' := [[':, val, arg.type]$TE, :args']
-        body' := substitute(body', var, val)
-        hasList' := [substitute(n, var, val) for n in hasList']
+      args' := [rewrite(arg)$DelVer :: TE for arg in args']
+      body' := rewrite(body')$DelVer
+      hasList' := [rewrite(hasItem)$DelVer for hasItem in hasList']
+      constraints' := [rewrite(con)$DelVer for con in constraints']
 
-      typeInfo(ti.name, reverse args', hasList', constraints', body' :: SEQ)
+      -- BUG: Fix improper functor application. 
+      -- i.e. when List(Integer) is passed instead of List(Integer())
+      -- however... we don't want to fix "'sym : Symbol" parameter
+      --if symbol? val and typ ~= symbolType() then
+      --  val := nodeApp(val, [])
+
+      typeInfo(ti.name, args', hasList', constraints', body' :: SEQ)
 
     flatten(ti : %) : % ==
       info ["Flatten" :: PF, bold(ti.self :: PF)]
@@ -261,10 +295,12 @@ TypeInfo() : Exports == Implementation where
         (n, lst) := (first lst, rest lst)
 
         cond := ['true]
-        if typeGuard? n then
+        if typeGuard? n then 
           tg := n :: TE
           if apply? tg.expr then
             (n, cond) := (tg.expr, tg.type)
+
+        --info pile ["hasLst:" :: PF, :[spaces [e.key :: PF, "=>" :: PF, e.entry :: PF] for e in entries hasLst | not true? e.entry]]
 
         apply? n =>
           n' := if true? cond then n else nodeTypeExpr('_|, n, cond)
@@ -274,7 +310,14 @@ TypeInfo() : Exports == Implementation where
             true? cond =>
               hasLst(app) := cond
             true? hasLst(app) => "iterate"
-            hasLst(app) := nodeApp(['or], [cond, hasLst(app)])
+            hasLstVal := hasLst(app)
+            condLst : List(N) :=
+              apply? hasLstVal =>
+                (hasLstVal :: APP).args
+              [hasLstVal]
+            member?(cond, condLst) => "iterate"
+            hasLst(app) := nodeApp(['or], concat(cond, condLst))
+            warn (hasLst(app) :: PF)
 
           hasLst(app) := cond
           sym := app.function :: Symbol
@@ -297,6 +340,7 @@ TypeInfo() : Exports == Implementation where
                   te := e :: TE
                   nodeTypeExpr('_|, te.expr, nodeApp(['and], [cond, te.type]))
                 error "Not handled!"
+              --notice ["Add:" :: PF, e' :: PF]
               lst := [e', :lst]
 
         namedType? n or typeGuard? n or typeOrigin? n =>
@@ -335,6 +379,8 @@ TypeInfo() : Exports == Implementation where
 
     has?(te : TE, ti : %) : Boolean ==
       te.type = nodeApp(['Type], []) => true
+      symbol? te.expr and te.type = symbolType() => true
+      integer? te.expr and te.type = integerType() => true
       te.expr = typeVar(0) or te.expr = ti.type =>
         apply? te.type =>
           member?(te.type, ti.hasList)
@@ -411,6 +457,8 @@ TypeInfo() : Exports == Implementation where
           te := n :: TE
           spaces [bold(te.expr :: PF), "has no" :: PF, bold(te.type :: PF)]
 
+        info (ti :: PF)
+
         fail ["Could not construct type" :: PF, bold(ti.type :: PF), ":" :: PF]
 
         for c in constraints' for i in 1.. repeat
@@ -428,6 +476,7 @@ TypeInfo() : Exports == Implementation where
       eval(n : N) : N ==
         not typeGuard? n => n
         tg := n :: TE
+        info (tg :: PF)
         type' := evalGuard(tg.type, ti)
         type' = ['true] => tg.expr
         nodeTypeExpr('_|, tg.expr, type')
@@ -449,6 +498,12 @@ TypeEvaluatorTest() : Exports == Implementation where
 
   Exports ==> with
     test1 : () -> Void
+    test2 : () -> Void
+    test3 : () -> Void
+    test4 : () -> Void
+
+    fail1 : () -> Void
+    fail2 : () -> Void
 
   Implementation ==> add
     import Printer
@@ -457,22 +512,83 @@ TypeEvaluatorTest() : Exports == Implementation where
     import MainLogger
     import TypeInfo
 
-    test1 ==
-      loggerDefaultLevel "debug"
+    initTest : () -> Void
+    initTest ==
+      loggerDefaultLevel "info"
       loggerLevel('Parser, "notice")
       resetTime()
-
       typeInfoCacheInit()
 
-      --println (getTypeInfo('DictionaryOperations) :: PF)
-      --println (getTypeInfo([['Integer], [emptyNode()]]) :: PF)
-      --println (getTypeInfo([['Integer], []]) :: PF)
-      --println (getTypeInfo('List) :: PF)
-      --println (getTypeInfo([['List], [emptyNode()]]) :: PF)
+    printTypeInfoCache : () -> Void
+    printTypeInfoCache ==
+      println([bold("Types in cache:" :: PF),
+               bracket [app :: PF for app in typeInfoCacheList()]])
+
+    test1 ==
+      initTest()
+
+      -- simple DAASE lookup
+      println (getTypeInfo('unitsKnown) :: PF)
+      println (getTypeInfo('SetCategory) :: PF)
+      println (getTypeInfo('DictionaryOperations) :: PF)
+      println (getTypeInfo('UnivariatePuiseuxSeries) :: PF)
+
+      println (getTypeInfo('Integer) :: PF)
+      println (getTypeInfo('List) :: PF)
+      println (getTypeInfo('Fraction) :: PF)
+      println (getTypeInfo('Expression) :: PF)
+
+      printTypeInfoCache()
+
+    test2 ==
+      initTest()
+
+      -- emptyNode() passed as a list of parameters to a functor prevents
+      -- constrains evaluation
+
+      -- type flattening, type constrains are left unevaluated
+      println (getTypeInfo([['Integer], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['List], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['Fraction], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['Expression], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['UnivariateTaylorSeries], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['ExponentialExpansion], [emptyNode()]]) :: PF)
+
+      printTypeInfoCache()
+
+    test3 ==
+      initTest()
+
+      -- type flattening, type contrains evaluation
+      println (getTypeInfo([['Integer], []]) :: PF)
+      println (getTypeInfo([['Float], []]) :: PF)
+      println (getTypeInfo([['Symbol], []]) :: PF)
       println (getTypeInfo([['List], [nodeApp(['Integer], [])]]) :: PF)
+      println (getTypeInfo([['Fraction], [nodeApp(['Integer], [])]]) :: PF)
+      println (getTypeInfo([['Expression], [nodeApp(['Integer], [])]]) :: PF)
+      println (getTypeInfo([['NonNegativeInteger], []]) :: PF)
 
-      ++ test below should fail!
-      --println (getTypeInfo([['List], [nodeApp(['BasicType], [])]]) :: PF)
+      printTypeInfoCache()
 
-      println ([bold("Types in cache:" :: PF),
-                bracket [app :: PF for app in typeInfoCacheList()]])
+    test4 ==
+      initTest()
+
+      println (getTypeInfo([['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]) :: PF)
+
+      printTypeInfoCache()
+
+    -- Should I consider following case:
+    -- typeAny() "%any" passed as a parameter to a functor prevents contraint
+    -- evaluation that involves the parameter
+
+    fail1 ==
+      initTest()
+
+      -- wrong number of arguments => should fail!
+      println (getTypeInfo([['List], []]) :: PF)
+
+    fail2 ==
+      initTest()
+
+      -- wrong type parameter => should fail!
+      println (getTypeInfo([['List], [nodeApp(['BasicType], [])]]) :: PF)

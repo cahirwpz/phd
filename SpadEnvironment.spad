@@ -6,51 +6,37 @@ SpadModemap() : Exports == Implementation where
   SEX ==> SExpression
 
   Exports ==> CoercibleTo(PrintableForm) with
+    modemap : N -> %
+    modemap : (N, N) -> %
+    modemap : (N, N, N) -> %
+
     elt : (%, "origin") -> N
-    elt : (%, "type") -> MT
-    elt : (%, "constraint") -> N
-    elt : (%, "template") -> Union(Record(type : MT, arg : N), "failed")
+    elt : (%, "type") -> N
+    elt : (%, "guard") -> N
 
     qualifiedType : % -> N
 
   Implementation ==> add
-    Rep := List(List(SEX))
-
     import SpadNode
     import SExpression
 
-    elt(x, "origin") ==
-      parse x.1.1
+    Rep := Record(mm_type : N, mm_origin : N, mm_guard : N)
 
-    elt(x, "type") ==
-      tl := [parse t for t in rest x.1]
-      [rest tl, first tl]
+    modemap(type) == [type, emptyNode(), emptyNode()]$Rep
+    modemap(type, origin) == [type, origin, emptyNode()]$Rep
+    modemap(type, origin, guard) == [type, origin, guard]$Rep
 
-    elt(x, "constraint") ==
-      ex := x.2.1
-      (symbol? ex) and (symbol ex = 'T) => emptyNode()
-      parse ex
+    elt(x, "type") == x.mm_type
+    elt(x, "origin") == x.mm_origin
+    elt(x, "guard") == x.mm_guard
       
-    elt(x, "template") ==
-      tmplpart := destruct x.2.2
-      not list? tmplpart.3 => "failed"
-      tl := [parse t for t in destruct tmplpart.3]
-      tmpl := [rest tl, first tl]
-      targ := parse tmplpart.2
-      [tmpl, targ]
-
     coerce x ==
-      tmpl := x.template
-      type :=
-        if tmpl case "failed"
-          then x.type :: PF 
-          else tmpl.type :: PF
-      type := pile [type, spaces [bold magenta("from" :: PF), x.origin :: PF]]
-      emptyNode? x.constraint => type
-      pile [type, spaces [bold magenta("when" :: PF), x.constraint :: PF]]
+      type := pile [x.type :: PF, spaces [bold magenta("from" :: PF), x.origin :: PF]]
+      emptyNode? x.guard => type
+      pile [type, spaces [bold magenta("when" :: PF), x.guard :: PF]]
 
     qualifiedType x ==
-      mt := x.type
+      mt := x.type :: MT
       if #mt.args = 1 and mt.args.1 = ['constant] then
         nodeTypeExpr('_$, mt.result, x.origin)
       else
@@ -61,130 +47,122 @@ SpadEnvironment() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   PF ==> PrintableForm
-  SEX ==> SExpression
-  PROP ==> Record(kind : Symbol, value : SEX)
+  SMM ==> SpadModemap
+  TE ==> SpadTypeExpr(N)
+  NT ==> SpadNamedType(N)
 
   Exports ==> CoercibleTo(PrintableForm) with
     new : () -> %
 
-    addDomain : (APP, %) -> %
-    addModemapsFromCategory : (N, N, %) -> %
+    addDomain : (%, APP) -> %
+    addModemapsFromCategory : (%, N, APP) -> %
 
-    addModemap : (Symbol, N, List(N), %) -> %
-    getModemap : (Symbol, %) -> List(SpadModemap)
+    addMode : (%, Symbol, N) -> %
+    getMode : (%, Symbol) -> N
 
-    addMode : (Symbol, N, %) -> %
-    getMode : (Symbol, %) -> N
+    getModemap : (%, Symbol) -> List(SMM)
+    addModemap : (%, Symbol, SMM) -> %
 
-    putValue : (Symbol, N, %) -> %
-    getValue : (Symbol, %) -> N
+    createScope : % -> %
+    discardScope : % -> %
 
+    flatten : % -> %
     definedSymbols : % -> List(Symbol)
 
   Implementation ==> add
-    Rep := Stack List Record(name : Symbol, properties : List PROP)
+    Rep := List AssociationList(Symbol, List(SMM))
 
     import SExpression
     import SpadNode
     import Logger('Env)
-
-    saveMode : () -> Boolean
-    saveMode() ==
-      m : Boolean := _$InteractiveMode $ Lisp
-      SETF(_$InteractiveMode $ Lisp, false) $ Lisp
-      m
-
-    restoreMode : Boolean -> Void
-    restoreMode m ==
-      SETF(_$InteractiveMode $ Lisp, m) $ Lisp
+    import TypeInfo
+    import Printer
+    import SpadModemap
 
     -- create empty environment
     new() ==
-      _$compiler_InteractiveFrame $ Lisp
+      [[[]]$AssociationList(Symbol, List(SMM))]
 
-    addModemapsFromCategory(dom, cat, env) ==
-      debug ["EnvAddModemapsFromCategory" :: PF, paren [dom :: PF, cat :: PF]]
-      sdom := convert dom
-      scat := convert cat
-      m := saveMode()
-      -- augModemapsFromCategory(domainName, domainView, functorForm, categoryForm, e)
-      res : % := augModemapsFromCategory(sdom, sdom, sdom, scat, env)$Lisp
-      restoreMode(m)
-      res
-
-    addDomain(dom, env) ==
+    addDomain(env, dom) ==
       debug ["EnvAddDomain" :: PF, paren [dom :: PF]]
-      sdom := convert dom
-      m := saveMode()
-      res : % := addDomain(sdom, env)$Lisp
-      restoreMode(m)
-      res
+      ti := getTypeInfo(dom)
+      for n in ti.body.list repeat
+        guard := emptyNode()
+        if typeGuard? n then
+          te := n :: TE
+          n := te.expr
+          guard := te.type
+        nt := n :: NT
+        addModemap(env, nt.name, modemap(nt.type, [dom], guard))
+      env
 
-    addModemap(op, dom, args, env) ==
-      debug ["EnvAddModeMap" :: PF, paren [op :: PF, dom :: PF, bracket [arg :: PF for arg in args]]]
-      sdom := convert dom
-      sargs := [convert arg for arg in args]
-      m := saveMode()
-      res : % := addModemap(op, sdom, sargs, 'T, op, env)$Lisp
-      restoreMode(m)
-      res
+    addModemapsFromCategory(env, name, cat) ==
+      debug ["EnvAddCategory" :: PF, paren [name :: PF, cat :: PF]]
+      ti := getTypeInfo(cat)
+      for n in ti.body.list repeat
+        guard := emptyNode()
+        if typeGuard? n then
+          te := n :: TE
+          n := te.expr
+          guard := te.type
+        nt := n :: NT
+        addModemap(env, nt.name, modemap(nt.type, name, guard))
+      env
 
-    getModemap(op, env) ==
-      m := saveMode()
-      res : List(SpadModemap) := get(op, 'modemap, env)$Lisp
-      restoreMode(m)
-      res
+    createScope env ==
+      cons([[]], env)
 
-    addMode(name, type, env) ==
-      debug ["EnvAddMode" :: PF, paren [name :: PF, type :: PF]]
-      m := saveMode()
-      res : % := put(name, 'mode, convert type, env)$Lisp
-      restoreMode(m)
-      res
+    discardScope env ==
+      rest env
 
-    getMode(name, env) ==
-      m := saveMode()
-      res : SExpression := get(name, 'mode, env)$Lisp
-      restoreMode(m)
-      parse res
+    addMode(env, name, type) ==
+      addModemap(env, name, modemap type)
 
-    putValue(name, value, env) ==
-      debug ["EnvPutValue" :: PF, paren [name :: PF, value :: PF]]
-      m := saveMode()
-      res : % := put(name, 'value, convert value, env)$Lisp
-      restoreMode(m)
-      res
+    getMode(env, name) ==
+      for mm in getModemap(env, name) repeat
+        if emptyNode? mm.origin then
+          return mm.type
+      emptyNode()
 
-    getValue(name, env) ==
-      m := saveMode()
-      res : SExpression := get(name, 'value, env)$Lisp
-      restoreMode(m)
-      parse res
+    getModemap(env, name) ==
+      top := first env
+      -- 1) if the symbol is found at first level the return it
+      maybeEntries := assoc(name, top)
+      not maybeEntries case "failed" =>
+        maybeEntries.entry
+      -- 2) if it is found deeper then (deep-)copy it to top level and return it
+      res : List(SMM) := []
+      for level in rest env repeat
+        maybeEntries := assoc(name, level)
+        if not maybeEntries case "failed" then
+          res := copy(maybeEntries.entry)
+          break
+      top(name) := res
+
+    addModemap(env, name, value) ==
+      lst := getModemap(env, name)
+      top := first env
+      top(name) := [value, :lst]
+      env
+
+    flatten env ==
+      empty? env => new()
+      newenv := [[]]$AssociationList(Symbol, List(SMM))
+      for level in env repeat
+        for e in entries level repeat
+          if not key?(e.key, newenv) then
+            newenv(e.key) := e.entry
+      [newenv]
 
     definedSymbols(env) ==
-      empty? env => []
-      removeDuplicates [entry.name for entry in top env]
+      keys first flatten env
 
     coerce env ==
       entries : List(PF) := []
       empty? env => "()" :: PF
-      for entry in top env repeat
-        props : List(PF) := []
-        for prop in entry.properties repeat
-          val :=
-            prop.kind = 'modemap =>
-              mml := prop.value pretend List(SpadModemap)
-              vconcat [mm :: PF for mm in mml]
-            prop.kind = 'value =>
-              v := parse prop.value
-              v :: PF
-            prop.kind = 'mode =>
-              t := parse prop.value
-              t :: PF
-            convert(prop.value)
-          of := pile [spaces [bold blue(prop.kind :: PF), "=>" :: PF], val]
-          props := [of, :props]
-        of := pile [hconcat [bold cyan(entry.name :: PF), ":" :: PF], :(reverse props)]
+      for e in entries first flatten env repeat
+        mms := [mm :: PF for mm in e.entry]
+        of := pile [hconcat [bold cyan(e.key :: PF), ":" :: PF], :mms]
         entries := [of, :entries]
       vconcat reverse entries
 
@@ -197,31 +175,37 @@ SpadEnvironmentTest() : Exports == Implementation where
   Exports ==> with
     test1 : () -> Void
     test2 : () -> Void
+    test3 : () -> Void
 
   Implementation ==> add
     import SpadEnvironment
     import SExpression
     import SpadNode
+    import SpadNodeFactory
     import Printer
 
     test1 () ==
-      _$forceAdd := true
-      _$compErrorMessageStack := convert []
-
       env := new()
-      dom1 := [['Polynomial], [['Integer]]] $ APP
+      dom1 := [['List], [['Integer]]] $ APP
       dom2 := [['Integer], []] $ APP
-      env := addDomain(dom1, env)
-      env := addDomain(dom2, env)
-      modemaps := getModemap('*, env)
-      for modemap in modemaps repeat
-        println (modemap :: PF)
+      env := addDomain(env, dom1)
+      env := addDomain(env, dom2)
+      println (env :: PF)
 
     test2 () ==
-      _$forceAdd := true
-      _$compErrorMessageStack := convert []
-
       env := new()
-      cat := nodeApp(['SetCategory], [])
-      env := addModemapsFromCategory(['A], cat, env)
+      dom0 := [['Polynomial], [emptyNode()]] $ APP
+      dom1 := [['Polynomial], [['Integer]]] $ APP
+      dom2 := [['Integer], []] $ APP
+      env := addDomain(env, dom0)
+      env := addDomain(env, dom1)
+      env := addDomain(env, dom2)
+      modemaps := getModemap(env, '*)
+      println pile([hconcat [bold cyan ("*" :: PF), ":" :: PF],
+                    :[(modemap :: PF) for modemap in modemaps]])
+
+    test3 () ==
+      env := new()
+      cat := [['SetCategory], []] $ APP
+      env := addModemapsFromCategory(env, ['A], cat)
       println (env :: PF)

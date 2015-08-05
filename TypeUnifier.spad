@@ -56,6 +56,7 @@ TypeUnifier() : Exports == Implementation where
       import List(N)
 
       emptyNode? n => false
+      integer? n => false
       string? n => false
       symbol? n => false
       typeAny? n => false
@@ -127,6 +128,7 @@ TypeUnifier() : Exports == Implementation where
       import List(N)
 
       emptyNode? n => false
+      integer? n => false
       string? n => false
       symbol? n => false
       typeAny? n => true
@@ -160,6 +162,7 @@ TypeUnifier() : Exports == Implementation where
     freeVars n ==
       import List(N)
 
+      emptyNode? n => []
       integer? n => []
       symbol? n => []
       string? n => []
@@ -212,6 +215,7 @@ TypeUnifier() : Exports == Implementation where
 
     substitute(n : N, var : MR, term : N) : N ==
       emptyNode? n => n
+      integer? n => n
       string? n => n
       symbol? n => n
       typeAny? n => n

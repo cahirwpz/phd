@@ -101,44 +101,48 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> Join(ParsableCategory, CoercibleTo(Symbol)) with
     elt : (%, "id") -> NNI
+    elt : (%, "ver") -> NNI
     elt : (%, "kind") -> Symbol
     construct : (NNI, Symbol) -> %
+    construct : (NNI, NNI, Symbol) -> %
 
   Implementation ==> add
-    Rep := Record(m_id : NNI, m_kind : Symbol)
+    Rep := Record(m_id : NNI, m_ver : NNI, m_kind : Symbol)
 
     import ParserTools
 
     elt(x, "id") == x.m_id
+    elt(x, "ver") == x.m_ver
     elt(x, "kind") == x.m_kind
 
-    construct(i, k) == [i, k]$Rep
+    construct(i, k) == [i, 0, k]$Rep
+    construct(i, v, k) == [i, v, k]$Rep
 
     parse ex ==
-      [(integer ex.2) :: NNI, symbol ex.3]
+      [(integer ex.2) :: NNI, (integer ex.3) :: NNI, symbol ex.4]
 
     convert x ==
-      convert [convert("@Marker" :: Symbol), convert x.id, convert x.kind]
+      convert [convert("@Marker" :: Symbol), convert x.id, convert x.ver, convert x.kind]
 
-    n = m ==
-      (n.id = m.id) and (n.kind = m.kind)
 
     coerce (m : %) : Symbol ==
       m.kind = 'typeany => "%any" :: Symbol
       m.kind = 'typeundef => "%undef" :: Symbol
       s : String :=
-        m.kind = 'typevar =>
-          if m.id = 0 then return "%" :: Symbol
-          "%"
+        m.kind = 'typevar => "%"
         m.kind = 'noderef => "#"
         "*"
-      concat(s, string(m.id)) :: Symbol
+      if m.id > 0 then
+        s := concat(s, string(m.id))
+      if m.ver > 0 then
+        s := concat [s, ".", string(m.ver)]
+      s :: Symbol
 
     coerce (n : %) : PF ==
       (n :: Symbol) :: PF
 
     n = m ==
-      n.id = m.id and n.kind = m.kind
+      (n.id = m.id) and (n.ver = m.ver) and (n.kind = m.kind)
 
 )abbrev domain SPTMAP SpadMappingType
 SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
@@ -1560,6 +1564,7 @@ SpadNodeFactory() : Exports == Implementation where
 
     typeAny : () -> N
     typeVar : NNI -> N
+    typeVar : (NNI, NNI) -> N
     typeUndef : () -> N
 
     makeRecordFunList : N -> List(NT)
@@ -1578,6 +1583,7 @@ SpadNodeFactory() : Exports == Implementation where
     typeAny() == [[0, 'typeany]$MR]
     typeUndef() == [[0, 'typeundef]$MR]
     typeVar(i) == [[i, 'typevar]$MR]
+    typeVar(i, v) == [[i, v, 'typevar]$MR]
 
     makeRecordFunList n ==
       r := n :: RT

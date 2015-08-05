@@ -15,7 +15,7 @@ Test1() : Exports == Implementation where
     import NonNegativeInteger
 
     -- [BUG] Signature below is not taken into account if uncommented.
-    ++ foo : Integer -> Float
+    -- foo : Integer -> Float
 
     foo a ==
       a2 := a * a

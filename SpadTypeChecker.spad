@@ -510,6 +510,8 @@ TypeCheckerNodeArray() : Exports == Implementation where
 
       debug (["Run type inference for" :: PF, number(n.index) :: PF,
               "of" :: PF, n.type :: PF, "type." :: PF])
+      --debug(x :: PF)
+      --debug(x.typevars :: PF)
 
       apply? rule =>
         r := rule :: APP
@@ -837,6 +839,7 @@ SpadTypeChecker() : Exports == Implementation where
 
   Implementation ==> add
     import SpadEnvironment
+    import SpadModemap
     import SExpression
     import String
     import Symbol
@@ -854,7 +857,7 @@ SpadTypeChecker() : Exports == Implementation where
       notice ["Adding type" :: PF, bold(t :: PF), "to the environment." :: PF]
       if apply? t then
         app := t :: APP
-        env := addDomain(app, env)
+        env := addDomain(env, app)
         for k in app.args repeat
           env := envAddType(k, env)
       if mappingType? t then
@@ -866,15 +869,13 @@ SpadTypeChecker() : Exports == Implementation where
         for f in r.fields repeat
           env := envAddType(f.type, env)
         for f in makeRecordFunList t repeat
-          mt := (f :: NT).type :: MT
-          env := addModemap(f.name, t, [mt.result, :mt.args], env)
+          env := addModemap(env, f.name, modemap(f.type, t))
       if unionType? t then
         ut := t :: UT
         for v in ut.variants repeat
           env := envAddType(v, env)
         for f in makeUnionFunList t repeat
-          mt := (f :: NT).type :: MT
-          env := addModemap(f.name, t, [mt.result, :mt.args], env)
+          env := addModemap(env, f.name, modemap(f.type, t))
       env
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TCN ==
@@ -896,7 +897,7 @@ SpadTypeChecker() : Exports == Implementation where
       ++ Second case: element indexing or record field access.
       eltFunList : List(N) := []
       if not unify?(a.function, ['elt]) then
-        for mm in getModemap('elt, env) repeat
+        for mm in getModemap(env, 'elt) repeat
           n := qualifiedType(mm)
           eltFun := (n :: TE).expr :: MT
           if #eltFun.args = #a.args + 1 then
@@ -941,9 +942,9 @@ SpadTypeChecker() : Exports == Implementation where
       varIntro? : Boolean := false
       if symbol? a.lval then
         s := a.lval :: Symbol
-        if emptyNode? getMode(s, env) then
+        if emptyNode? getMode(env, s) then
           debug ["Processing fresh assignment" :: PF, string(s :: PF)]
-          env := addMode(s, addTypeVar!(ctx), env)
+          env := addMode(env, s, addTypeVar!(ctx))
           varIntro? := true
 
       left := walk(a.lval, ctx, env)
@@ -1002,9 +1003,10 @@ SpadTypeChecker() : Exports == Implementation where
       ++ the domain / package / function. Filter out those that don't match
       ++ the type calculated above.
       candidateList : List(MT) := []
-      for mm in getModemap(fn.name, env) repeat
+      for mm in getModemap(env, fn.name) repeat
         te := qualifiedType(mm) :: TE
-        if te.type = ["%" :: Symbol] then
+        info(te :: PF)
+        if te.type = ["$" :: Symbol] or emptyNode? te.type then
           candidate := te.expr
           ures := unifyType(fnType', candidate)
           failed? ures => "iterate"
@@ -1066,7 +1068,7 @@ SpadTypeChecker() : Exports == Implementation where
           ++ Make the argument visible inside function body.
           debug(["Function argument" :: PF, string bold(argName :: PF),
                  "has type" :: PF, bold(t :: PF)])
-          env' := addMode(argName, t, env')
+          env' := addMode(env', argName, t)
 
         ++ Add a node that represents the type of function body, always.
         fnRes := addNode!(ctx', fn.result, env)
@@ -1100,19 +1102,26 @@ SpadTypeChecker() : Exports == Implementation where
 
     walkFtor (ft : FT, ctx : CTX, env : ENV) : TCN ==
       sig := signature ft
+      -- sig is unchecked and may contain invalid types
 
-      debug ["Processing functor :" :: PF, sig :: PF]
-      env := addMode(sig.name, sig.type, env)
-      env := addMode("$" :: Symbol, ft.type, env)
-      env := addModemapsFromCategory(["$" :: Symbol], ft.type, env)
+      debug pile([spaces ["Processing functor :" :: PF, ft.name :: PF, paren [arg :: PF for arg in ft.args]],
+                  ft.type :: PF])
+      env := addMode(env, sig.name, sig.type)
+      env := addMode(env, "$" :: Symbol, ft.type)
+
+      for n in (ft.type :: SEQ).list repeat
+        nt := n :: NT
+        env := addModemap(env, nt.name :: Symbol, modemap(nt.type, ["$" :: Symbol]))
 
       ++ process functor's arguments
       for arg in ft.args repeat
-        env := addModemap(arg.name :: Symbol, arg.type, [categoryType], env)
-        env := addMode(arg.name, arg.type, env)
-        env := addModemapsFromCategory([arg.name], arg.type, env)
+        env := addModemap(env, arg.name :: Symbol, modemap(arg.type, categoryType))
+        env := addMode(env, arg.name, arg.type)
+        env := addModemapsFromCategory(env, [arg.name], arg.type :: APP)
 
       this := addNode!(ctx, [ft], env)
+
+      debug pile ["Current environment :" :: PF, env :: PF]
 
       ftorBody := walk(ft.capsule, ctx, env)
       extendType := if emptyNode? ft.extends then ['Type] else ft.extends
@@ -1153,7 +1162,7 @@ SpadTypeChecker() : Exports == Implementation where
           argType := arg.type
         argList := [arg, :argList]
         argTypeList := [argType, :argTypeList]
-        env := addMode(arg.name, argType, env)
+        env := addMode(env, arg.name, argType)
 
       argList := reverse argList
       argTypeList := reverse argTypeList
@@ -1199,7 +1208,7 @@ SpadTypeChecker() : Exports == Implementation where
 
         ++ Iterator variable is added to loop's body environment,
         ++ but is also known to guards.
-        env' := addMode(itor.var, varType, env')
+        env' := addMode(env', itor.var, varType)
 
         itorExpr := addNode!(ctx, n, env)
         itorExpr.type :=
@@ -1281,11 +1290,11 @@ SpadTypeChecker() : Exports == Implementation where
 
     walkSym (s : Symbol, ctx : CTX, env : ENV) : TCN ==
       debug ["Symbol lookup for" :: PF, string(s :: PF)]
-      types := [qualifiedType(mm) for mm in getModemap(s, env)]
-      mode := getMode(s, env)
+      types := [qualifiedType(mm) for mm in getModemap(env, s) | not emptyNode? mm.origin]
+      mode := getMode(env, s)
       if not emptyNode? mode then
         types := [mode, :types]
-      ++ BUG: parseTran use true and false as "Boolean" and not as "() -> Boolean"
+      ++ BUG: parseTran uses true and false as "Boolean" and not as "() -> Boolean"
       ++ workaround for Boolean constants
       if s = 'true or s = 'false then
         types := [booleanType, :types]
@@ -1322,14 +1331,14 @@ SpadTypeChecker() : Exports == Implementation where
         -- Type definition for a symbol:
         -- add it to the environment or crash if already defined
         s := te.expr :: Symbol
-        t := getMode(s, env)
+        t := getMode(env, s)
 
         (not emptyNode? t) and (t ~= te.type) =>
           fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
-                "already defined as" :: PF, getMode(s, env) :: PF, "!" :: PF])
+                "already defined as" :: PF, getMode(env, s) :: PF, "!" :: PF])
           error ""
 
-        env := addMode(s, te.type, env)
+        env := addMode(env, s, te.type)
 
         this := addNode!(ctx, [te], env)
         this.type := te.type
@@ -1388,7 +1397,7 @@ SpadTypeChecker() : Exports == Implementation where
         this.type := addTypeVar!(ctx, [booleanType])
 
         if symbol? te.expr then
-          this.env := addMode(te.expr :: Symbol, te.type, env)
+          this.env := addMode(env, te.expr :: Symbol, te.type)
 
         exprType := addNode!(ctx, te.type, env)
         exprType.type := te.type
