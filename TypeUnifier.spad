@@ -93,6 +93,7 @@ TypeUnifier() : Exports == Implementation where
       import List(N)
 
       emptyNode? n => true
+      integer? n => false
       string? n => false
       symbol? n => false
       typeAny? n => false

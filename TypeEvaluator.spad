@@ -308,7 +308,7 @@ TypeInfo() : Exports == Implementation where
 
           -- check if we have already merged a functor
           key?(app, hasLst) => 
-            warn ["Skipping:" :: PF, bold(app :: PF), "with" :: PF, bold(hasLst(app) :: PF)]
+            info ["Skipping:" :: PF, bold(app :: PF), "with" :: PF, bold(hasLst(app) :: PF)]
             true? cond =>
               hasLst(app) := cond
             true? hasLst(app) => "iterate"
@@ -386,37 +386,49 @@ TypeInfo() : Exports == Implementation where
                [ti.body.kind, reverse flatBody])
 
     has?(te : TE, ti : %) : Boolean ==
-      te.type = nodeApp(['Type], []) => true
-      symbol? te.expr and te.type = symbolType() => true
-      integer? te.expr and te.type = integerType() => true
-      te.expr = typeVar(0) or te.expr = ti.type =>
-        apply? te.type =>
-          member?(te.type, ti.hasList)
+      (t0, t1) := (te.expr, te.type)
+
+      t1 = nodeApp(['Type], []) => true
+
+      if symbol? t0 then t0 := symbolType()
+      if integer? t0 then t0 := integerType()
+      if t0 = ti.type then t0 := typeVar(0)
+
+      t0 = t1 => true
+
+      ti := 
+        apply? t0 =>
+          app := t0 :: APP
+          app.function = [ti.name] => ti -- will have to investigate that
+          getTypeInfo(app)
+        t0 = typeVar(0) => ti
+        typeVar?(t0) => return false
         fail [te :: PF]
         error "Not handled!"
-      apply? te.expr =>
-        app := te.expr :: APP
-        sequence? te.type =>
-          seq := te.type :: SEQ
-          "and"/[has?(['has, te.expr, typ]$TE, ti) for typ in seq.list]
-        apply? te.type =>
-          te.type = te.expr => true
-          if app.function ~= [ti.name] then
-            ti := getTypeInfo(app)
-          member?(te.type, ti.hasList)
-        namedType? te.type =>
-          ti := getTypeInfo(app)
-          seq := ti.body :: SEQ
-          -- BUG! This will not work without proper(!) % substitution!
-          -- Some more explanation needed if still valid suspition.
-          for n in seq.list | namedType? n repeat
-            n := substitute(n, typeVar(0) :: MR, te.expr)
-            if n = te.type then
-              return true
-          false
-        fail [te :: PF]
-        error "Not handled!"
-      false
+
+      -- case "A has B"
+      apply? t1 =>
+        member?(t1, ti.hasList)
+
+      -- case "A has Join(..)"
+      sequence? t1 =>
+        seq := t1 :: SEQ
+        "and"/[has?(['has, t0, typ]$TE, ti) for typ in seq.list]
+
+      -- case "A has { fn : (..) -> .. }"
+      namedType? t1 and not unbound? [te] =>
+        seq := ti.body :: SEQ
+        for n in seq.list repeat
+          if typeOrigin? n then
+            n := (n :: TE).expr
+          not namedType? n => "iterate"
+          n := substitute(n, typeVar(0) :: MR, t0)
+          if n = t1 then
+            return true
+        false
+
+      fail [te :: PF]
+      error "Not handled!"
 
     evalGuard(n : N, ti : %) : N ==
       -- debug ["evalGuard" :: PF, bold(n :: PF)]
@@ -582,13 +594,13 @@ TypeEvaluatorTest() : Exports == Implementation where
       initTest()
 
       -- type flattening, type contrains evaluation
+      println (getTypeInfo([['NonNegativeInteger], []]) :: PF)
       println (getTypeInfo([['Integer], []]) :: PF)
-      println (getTypeInfo([['Float], []]) :: PF)
       println (getTypeInfo([['Symbol], []]) :: PF)
+      println (getTypeInfo([['Float], []]) :: PF)
       println (getTypeInfo([['List], [nodeApp(['Integer], [])]]) :: PF)
       println (getTypeInfo([['Fraction], [nodeApp(['Integer], [])]]) :: PF)
       println (getTypeInfo([['Expression], [nodeApp(['Integer], [])]]) :: PF)
-      println (getTypeInfo([['NonNegativeInteger], []]) :: PF)
 
       printTypeInfoCache()
 
