@@ -136,8 +136,6 @@ TypeInfo() : Exports == Implementation where
     typeInfoCacheList() == keys(cache)
 
     getTypeInfo(sym : Symbol) : % ==
-      notice ["getTypeInfoFromDatabase:" :: PF, bold(sym :: PF)]
-
       ti? := search(sym, daase)
       ti? case % => ti? :: %
       daase(sym) := fromDatabase(sym) :: %
@@ -146,7 +144,7 @@ TypeInfo() : Exports == Implementation where
       ti? := search(app, cache)
       ti? case % => ti? :: %
 
-      notice ["getTypeInfo :" :: PF, bold(app :: PF)]
+      info ["getTypeInfo :" :: PF, bold(app :: PF)]
 
       validate? := true
       ti! := 
@@ -163,7 +161,7 @@ TypeInfo() : Exports == Implementation where
       empty? freeVars [app] =>
         cache(app) := ti!
         ti! := eraseConstraints(ti!, validate?)
-        info ["addTypeInfo :" :: PF, bold(app :: PF)]
+        debug ["addTypeInfo :" :: PF, bold(app :: PF)]
         cache(app) := ti!
 
       ti!
@@ -308,7 +306,7 @@ TypeInfo() : Exports == Implementation where
 
           -- check if we have already merged a functor
           key?(app, hasLst) => 
-            info ["Skipping:" :: PF, bold(app :: PF), "with" :: PF, bold(hasLst(app) :: PF)]
+            debug ["Skipping:" :: PF, bold(app :: PF), "with" :: PF, bold(hasLst(app) :: PF)]
             true? cond =>
               hasLst(app) := cond
             true? hasLst(app) => "iterate"
@@ -320,8 +318,8 @@ TypeInfo() : Exports == Implementation where
             member?(cond, condLst) => "iterate"
             hasLst(app) := nodeApp(['or], concat(cond, condLst))
 
-          info(["Merge" :: PF, bold(true? cond => n :: PF; nodeTypeExpr('_|, n, cond) :: PF),
-                "with" :: PF, ti.self :: PF])
+          debug(["Merge" :: PF, bold(true? cond => n :: PF; nodeTypeExpr('_|, n, cond) :: PF),
+                 "with" :: PF, ti.self :: PF])
 
           hasLst(app) := cond
           ti' := getTypeInfo(app.function :: Symbol) :: %
@@ -368,10 +366,10 @@ TypeInfo() : Exports == Implementation where
 
         -- merge everything else
         namedType? n or typeGuard? n or typeOrigin? n =>
-          info ["Copy" :: PF, bold(n :: PF), "to" :: PF, ti.self :: PF]
+          debug ["Copy" :: PF, bold(n :: PF), "to" :: PF, ti.self :: PF]
           flatBody := [n, :flatBody]
 
-        info ["Flatten" :: PF, n :: PF]
+        fail ["Flatten" :: PF, n :: PF]
         error "Not handled!"
 
       hasLst' : List(N) := []

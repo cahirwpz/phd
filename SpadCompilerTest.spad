@@ -58,7 +58,6 @@ SpadCompilerTest() : Exports == Implementation where
       ctx : TypeCheckerNodeArray := nodeArray ()
       env : SpadEnvironment := new ()
       r := walk(n, ctx, env) $ SpadTypeChecker
-      check ctx
 
       notice pile ["Final tree with type annotations:" :: PF, r.node :: PF]
       e := convert(r.node)

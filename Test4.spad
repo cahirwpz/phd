@@ -1,10 +1,10 @@
 )abbrev package TEST4 Test4
 Test4 : Exports == Implementation where
-  F ==> Fraction(Integer)
+  I ==> Integer
+  F ==> Fraction(I)
 
   Exports ==> with
     iWeierstrassPGrad2 : List F -> F
-    iWeierstrassPGrad2 : List F -> I
 
   Implementation ==> add
     weierstrassP : (F, F, F) -> F

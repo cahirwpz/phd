@@ -99,6 +99,7 @@ SpadDatabase() : with
     getCtorCategory : Symbol -> SpadNode
     getCtorKind : Symbol -> Union("domain", "category", "package")
       ++ returns constructor kind
+    inDatabase? : Symbol -> Boolean
     getCtorModeMap : Symbol -> SpadCtorModeMap
     safeGetCtorModeMap : Symbol -> Union(SpadCtorModeMap, "failed")
     getAbbrev : Symbol -> Symbol
@@ -125,6 +126,10 @@ SpadDatabase() : with
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORCATEGORY)$Lisp
       null? sex => error "Unknown constructor!"
       parse(sex)
+
+    inDatabase? t ==
+      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
+      not null? sex
 
     safeGetCtorModeMap t ==
       sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp

@@ -5,6 +5,10 @@ Test5(S : OrderedSet) : Exports == Implementation where
     merge : (List(S), List(S), List(S)) -> List(S)
 
   Implementation ==> add
+    B := List(Integer)
+
+    import List(S)
+
     merge(l1, l2, res) ==
       empty?(l1) =>
         empty?(l2) => res
@@ -14,3 +18,5 @@ Test5(S : OrderedSet) : Exports == Implementation where
       e2 := first(l2)
       e1 < e2 => merge(rest(l1), l2, cons(e1, res))
       merge(l1, rest(l2), cons(first(l2), res))
+
+    concat3 : (List(B), List(B), List(B)) -> List(B)

@@ -29,6 +29,7 @@ SpadNodeCategory() : Category == ParsableCategory with
 
   apply? : % -> Boolean
   assign? : % -> Boolean
+  capsule? : % -> Boolean
   condExpr? : % -> Boolean
   emptyNode? : % -> Boolean
   float? : % -> Boolean
@@ -1185,6 +1186,9 @@ SpadNode() : Exports == Implementation where
 
     apply? n == n case apply
     assign? n == n case assign
+    capsule? n ==
+      not n case seq => false
+      n.seq.kind = "Capsule"
     condExpr? n == n case cond
     float? n == n case dfloat
     function? n == n case func

@@ -4,12 +4,12 @@ Test10 : Exports == Implementation where
     blah : String -> Union(String, Integer)
     blah : Integer -> Union(String, Integer)
     blah : NonNegativeInteger -> Integer
-    blah : Union(String, Integer) -> Union(String, Integer, Float)
-    blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
+    --blah : Union(String, Integer) -> Union(String, Integer, Float)
+    --blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
 
     baz : NonNegativeInteger -> Integer
     foo : PositiveInteger -> Float
-    bar : Integer -> Float
+    --bar : Integer -> Float
 
     triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 
@@ -33,5 +33,5 @@ Test10 : Exports == Implementation where
       [x, y, z] -- not a call to construct(...) !
 
     -- These are not supported by original compiler.
-    ++ blah (x : Union(String, Integer)) == x
-    ++ blah (x : Record(a : NonNegativeInteger, b : String)) == x
+    -- blah (x : Union(String, Integer)) == x
+    -- blah (x : Record(a : NonNegativeInteger, b : String)) == x

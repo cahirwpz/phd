@@ -17,7 +17,7 @@ Test1() : Exports == Implementation where
     -- [BUG] Signature below is not taken into account if uncommented.
     -- foo : Integer -> Float
 
-    foo a ==
+    foo (a : Integer) ==
       a2 := a * a
       ma := - a
       if a >= 0
@@ -29,7 +29,7 @@ Test1() : Exports == Implementation where
     ++ foo a == a + 1
 
     -- [BUG] Type error -- needs investigation!
-    ++ foo a == a + 1.0
+    foo (a : Float) == a + 1.0
 
     baz : (Integer, Integer) -> Integer
 
@@ -44,7 +44,5 @@ Test1() : Exports == Implementation where
         nx := -x 
       nx + y
 
-    -- [BUG] Omitting argument types for local functions declared upfront
-    -- doesn't work.
-    baz (x : Integer, y : Integer) : Integer ==
+    baz (x, y) ==
       x * y

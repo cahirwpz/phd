@@ -446,6 +446,7 @@ TypeUnifier() : Exports == Implementation where
     ++ otherwise F is invariant
     isSubType'(n1 : N, n2 : N) : Boolean ==
       n1 = n2 => true
+      n2 = nodeApp(['Type], []) => true
 
       mappingType? n1 and mappingType? n2 =>
         ++ {(T1, T2, ..., Tn) -> T0} <: (S1, S2, ..., Sn) -> S0
@@ -506,6 +507,21 @@ TypeUnifier() : Exports == Implementation where
         isSubType'(n1, te2.expr)
       ++ Everything is subtype of wildcard type!
       typeAny? n2 => true
+
+      sequence? n1 and sequence? n2 =>
+        s1 := n1 :: SEQ
+        s2 := n2 :: SEQ
+        l1 := s1.list
+        l2 := s2.list
+        #l1 < #l2 => false
+        for i2 in l2 repeat
+          present := false
+          for i1 in l1 repeat
+            isSubType'(i1, i2) =>
+              present := true
+          not present =>
+            return false
+        true
 
       false
 

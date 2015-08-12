@@ -1,137 +1,89 @@
-)abbrev domain SPMM SpadModemap
-SpadModemap() : Exports == Implementation where
-  N ==> SpadNode
-  PF ==> PrintableForm
-  MT ==> SpadMappingType(N)
-  SEX ==> SExpression
-
-  Exports ==> CoercibleTo(PrintableForm) with
-    modemap : N -> %
-    modemap : (N, N) -> %
-    modemap : (N, N, N) -> %
-
-    elt : (%, "origin") -> N
-    elt : (%, "type") -> N
-    elt : (%, "guard") -> N
-
-    qualifiedType : % -> N
-
-  Implementation ==> add
-    import SpadNode
-    import SExpression
-
-    Rep := Record(mm_type : N, mm_origin : N, mm_guard : N)
-
-    modemap(type) == [type, emptyNode(), emptyNode()]$Rep
-    modemap(type, origin) == [type, origin, emptyNode()]$Rep
-    modemap(type, origin, guard) == [type, origin, guard]$Rep
-
-    elt(x, "type") == x.mm_type
-    elt(x, "origin") == x.mm_origin
-    elt(x, "guard") == x.mm_guard
-      
-    coerce x ==
-      type := pile [x.type :: PF, spaces [bold magenta("from" :: PF), x.origin :: PF]]
-      emptyNode? x.guard => type
-      pile [type, spaces [bold magenta("when" :: PF), x.guard :: PF]]
-
-    qualifiedType x ==
-      mt := x.type :: MT
-      if #mt.args = 1 and mt.args.1 = ['constant] then
-        nodeTypeExpr('_$, mt.result, x.origin)
-      else
-        nodeTypeExpr('_$, [mt], x.origin)
-
 )abbrev domain SPENV SpadEnvironment
 SpadEnvironment() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   PF ==> PrintableForm
-  SMM ==> SpadModemap
+  MR ==> SpadMarker(N)
   TE ==> SpadTypeExpr(N)
   NT ==> SpadNamedType(N)
+  SCOPE ==> AssociationList(Symbol, List(N))
 
   Exports ==> CoercibleTo(PrintableForm) with
     new : () -> %
 
     addDomain : (%, APP) -> %
-    addModemapsFromCategory : (%, N, APP) -> %
 
-    addMode : (%, Symbol, N) -> %
-    getMode : (%, Symbol) -> N
-
-    getModemap : (%, Symbol) -> List(SMM)
-    addModemap : (%, Symbol, SMM) -> %
+    elt : (%, Symbol) -> List(N)
+    setelt! : (%, Symbol, N) -> %
 
     createScope : % -> %
     discardScope : % -> %
 
     flatten : % -> %
     definedSymbols : % -> List(Symbol)
+    domainInScope? : (%, APP) -> Boolean
 
   Implementation ==> add
-    Rep := List AssociationList(Symbol, List(SMM))
+    Rep := List SCOPE
 
     import SExpression
     import SpadNode
+    import SpadNodeFactory
     import Logger('Env)
     import TypeInfo
+    import TypeUnifier
     import Printer
-    import SpadModemap
 
     -- create empty environment
     new() ==
-      [[[]]$AssociationList(Symbol, List(SMM))]
+      top : SCOPE := empty()
+      top("$DomainsInScope" :: Symbol) := []
+      [top]
+
+    domainInScope?(env, dom) ==
+      for level in env repeat
+        for d in level("$DomainsInScope" :: Symbol) repeat
+          if (d :: APP) = dom then
+            return true
+      return false
 
     addDomain(env, dom) ==
+      domainInScope?(env, dom) => env
+
       debug ["EnvAddDomain" :: PF, paren [dom :: PF]]
       ti := getTypeInfo(dom)
       for n in ti.body.list repeat
+        n' := substitute(n, typeVar(0) :: MR, [dom])
         guard := emptyNode()
-        if typeGuard? n then
-          te := n :: TE
-          n := te.expr
+        if typeGuard? n' then
+          te := n' :: TE
+          n' := te.expr
           guard := te.type
-        nt := n :: NT
-        addModemap(env, nt.name, modemap(nt.type, [dom], guard))
+        if typeOrigin? n' then
+          te := n' :: TE
+          n' := te.expr
+        nt := n' :: NT
+        n' := nodeTypeExpr('_$, nt.type, [dom])
+        if not emptyNode? guard then
+          n' := nodeTypeExpr('_|, n', guard)
+        env(nt.name) := n'
+      env("$DomainsInScope" :: Symbol) := [dom]
+
+    setelt!(env, name, value) ==
+      lst := env(name)
+      top := first env
+      member?(value, lst) => env
+      top(name) := [value, :lst]
       env
 
-    addModemapsFromCategory(env, name, cat) ==
-      debug ["EnvAddCategory" :: PF, paren [name :: PF, cat :: PF]]
-      ti := getTypeInfo(cat)
-      for n in ti.body.list repeat
-        guard := emptyNode()
-        if typeGuard? n then
-          te := n :: TE
-          n := te.expr
-          guard := te.type
-        nt := n :: NT
-        addModemap(env, nt.name, modemap(nt.type, name, guard))
-      env
-
-    createScope env ==
-      cons([[]], env)
-
-    discardScope env ==
-      rest env
-
-    addMode(env, name, type) ==
-      addModemap(env, name, modemap type)
-
-    getMode(env, name) ==
-      for mm in getModemap(env, name) repeat
-        if emptyNode? mm.origin then
-          return mm.type
-      emptyNode()
-
-    getModemap(env, name) ==
+    elt(env, name) ==
       top := first env
       -- 1) if the symbol is found at first level the return it
       maybeEntries := assoc(name, top)
       not maybeEntries case "failed" =>
         maybeEntries.entry
       -- 2) if it is found deeper then (deep-)copy it to top level and return it
-      res : List(SMM) := []
+      res : List(N) := []
       for level in rest env repeat
         maybeEntries := assoc(name, level)
         if not maybeEntries case "failed" then
@@ -139,20 +91,20 @@ SpadEnvironment() : Exports == Implementation where
           break
       top(name) := res
 
-    addModemap(env, name, value) ==
-      lst := getModemap(env, name)
-      top := first env
-      top(name) := [value, :lst]
-      env
-
     flatten env ==
       empty? env => new()
-      newenv := [[]]$AssociationList(Symbol, List(SMM))
+      newenv := [[]]$AssociationList(Symbol, List(N))
       for level in env repeat
         for e in entries level repeat
           if not key?(e.key, newenv) then
             newenv(e.key) := e.entry
       [newenv]
+
+    createScope env ==
+      cons([[]], env)
+
+    discardScope env ==
+      rest env
 
     definedSymbols(env) ==
       keys first flatten env
@@ -161,8 +113,12 @@ SpadEnvironment() : Exports == Implementation where
       entries : List(PF) := []
       empty? env => "()" :: PF
       for e in entries first flatten env repeat
+        sym := hconcat [bold cyan(e.key :: PF), ":" :: PF]
         mms := [mm :: PF for mm in e.entry]
-        of := pile [hconcat [bold cyan(e.key :: PF), ":" :: PF], :mms]
+        of :=
+          empty? mms =>
+            of := spaces [sym, "[]" :: PF]
+          pile [sym, :mms]
         entries := [of, :entries]
       vconcat reverse entries
 
@@ -183,29 +139,28 @@ SpadEnvironmentTest() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
     import Printer
+    import MainLogger
 
     test1 () ==
+      loggerDefaultLevel "info"
+
       env := new()
-      dom1 := [['List], [['Integer]]] $ APP
-      dom2 := [['Integer], []] $ APP
+      dom1 := [['Integer], []] $ APP
+      dom2 := [['List], [['Integer]]] $ APP
       env := addDomain(env, dom1)
       env := addDomain(env, dom2)
       println (env :: PF)
 
     test2 () ==
+      loggerDefaultLevel "info"
+
       env := new()
       dom0 := [['Polynomial], [emptyNode()]] $ APP
-      dom1 := [['Polynomial], [['Integer]]] $ APP
+      dom1 := [['Polynomial], [nodeApp(['Integer], [])]] $ APP
       dom2 := [['Integer], []] $ APP
       env := addDomain(env, dom0)
       env := addDomain(env, dom1)
       env := addDomain(env, dom2)
-      modemaps := getModemap(env, '*)
+      modemaps := env('*)
       println pile([hconcat [bold cyan ("*" :: PF), ":" :: PF],
                     :[(modemap :: PF) for modemap in modemaps]])
-
-    test3 () ==
-      env := new()
-      cat := [['SetCategory], []] $ APP
-      env := addModemapsFromCategory(env, ['A], cat)
-      println (env :: PF)
