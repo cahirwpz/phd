@@ -205,28 +205,28 @@ TypeInfo() : Exports == Implementation where
       cmm! case "failed" => "failed"
       cmm := cmm! :: SpadCtorModeMap
 
+      cat? := (cmm.type = nodeApp(['Category], []))
+
       ++ Some symbols will be rewritten to type variables.
       ctx := [[]]$AssociationList(Symbol, N)
       ++ "%" => "%0"
       ctx("%" :: Symbol) := typeVar(0)
       ++ "#1" => "%1", "#2" => "%2", ...
       for i in 1..#cmm.args repeat
-        ctx(mkvar("#", string i)) := typeVar(i)
+        s := mkvar("#", string i)
+        v := typeVar(i)
+        ctx(s) := v
+      ++ "t#1" => "%1", "t#2" => "%2", ...
+      for arg in cmm.args for i in 1.. repeat
+        s := mkvar("t", string arg.name)
+        v := typeVar(i) 
+        ctx(s) := v
 
       ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
       ++ change name.
       types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
       args := [[':, typeVar(i), typ]$TE for typ in types for i in 1..]
-
-      if cmm.type = nodeApp(['Category], []) then
-        ++ "t#1" => "%1", "t#2" => "%2", ...
-        for arg in cmm.args for i in 1.. repeat
-          ctx(mkvar("t", string arg.name)) := typeVar(i)
-        body := getCtorCategory(t)
-        cat? := true
-      else
-        body := cmm.type
-        cat? := false
+      body := (cat? => getCtorCategory(t); cmm.type)
 
       body := nodeSeq((cat? => "Join"; "Domain"),
                       (sequence? body => (body :: SEQ).list; [body]))
@@ -533,6 +533,7 @@ TypeEvaluatorTest() : Exports == Implementation where
     test2 : () -> Void
     test3 : () -> Void
     test4 : () -> Void
+    test5 : () -> Void
 
     fail1 : () -> Void
     fail2 : () -> Void
@@ -569,6 +570,7 @@ TypeEvaluatorTest() : Exports == Implementation where
       println (getTypeInfo('List) :: PF)
       println (getTypeInfo('Fraction) :: PF)
       println (getTypeInfo('Expression) :: PF)
+      println (getTypeInfo('TwoDimensionalArrayCategory) :: PF)
 
       printTypeInfoCache()
 
@@ -584,7 +586,7 @@ TypeEvaluatorTest() : Exports == Implementation where
       println (getTypeInfo([['Fraction], [emptyNode()]]) :: PF)
       println (getTypeInfo([['Expression], [emptyNode()]]) :: PF)
       println (getTypeInfo([['UnivariateTaylorSeries], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['ExponentialExpansion], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['Matrix], [emptyNode()]]) :: PF)
 
       printTypeInfoCache()
 
@@ -598,6 +600,7 @@ TypeEvaluatorTest() : Exports == Implementation where
       println (getTypeInfo([['Float], []]) :: PF)
       println (getTypeInfo([['List], [nodeApp(['Integer], [])]]) :: PF)
       println (getTypeInfo([['Fraction], [nodeApp(['Integer], [])]]) :: PF)
+      println (getTypeInfo([['Matrix], [integerType()]]) :: PF)
       println (getTypeInfo([['Expression], [nodeApp(['Integer], [])]]) :: PF)
 
       printTypeInfoCache()
@@ -605,9 +608,19 @@ TypeEvaluatorTest() : Exports == Implementation where
     test4 ==
       initTest()
 
-      -- TODO
+      -- check if values as accepted as functor arguments (instead of types)
       println (getTypeInfo([['UnivariateTaylorSeries], [emptyNode()]]) :: PF)
       println (getTypeInfo([['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]) :: PF)
+
+      printTypeInfoCache()
+
+    test5 ==
+      initTest()
+
+      -- some extremely slow cases to be improved
+      println (getTypeInfo([['UnivariateLaurentSeries], [emptyNode()]]) :: PF)
+      --println (getTypeInfo([['UnivariatePuiseuxSeries], [emptyNode()]]) :: PF)
+      --println (getTypeInfo([['ExponentialExpansion], [emptyNode()]]) :: PF)
 
       printTypeInfoCache()
 

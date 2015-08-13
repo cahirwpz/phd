@@ -223,6 +223,7 @@ TypeCheckerNodeArray() : Exports == Implementation where
   ASS ==> SpadAssign(N)
   CE ==> SpadCondExpr(N)
   ENV ==> SpadEnvironment
+  FN ==> SpadFunction(N)
   MT ==> SpadMappingType(N)
   MR ==> SpadMarker(N)
   TE ==> SpadTypeExpr(N)

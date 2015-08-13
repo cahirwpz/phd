@@ -173,6 +173,7 @@ SpadDatabaseTest() : Exports == Implementation where
   Exports ==> with
     test1 : () -> Void
     test2 : () -> Void
+    test3 : () -> Void
 
   Implementation ==> add
     import Printer
@@ -194,3 +195,9 @@ SpadDatabaseTest() : Exports == Implementation where
       println (getCtorModeMap('BasicType_&) :: PF)
       println (getCtorModeMap('List) :: PF)
       println (getCtorModeMap('PositiveInteger) :: PF)
+
+    test3() ==
+      -- TwoDimensionalArrayCategory(#1 : Type(),
+      --                             #2 : FiniteLinearAggregate(t#1),
+      --                             #3 : FiniteLinearAggregate(t#1))
+      println (getCtorModeMap('TwoDimensionalArrayCategory) :: PF)
