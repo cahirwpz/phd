@@ -47,20 +47,24 @@ SpadCompilerTest() : Exports == Implementation where
       loggerLevel('Main, "notice")
       resetTime()
 
-      n : SpadNode := parse e
-      info pile ["Parser tree in internal format:" :: PF, n :: PF]
+      root : SpadNode := parse e
+      info pile ["Parser tree in internal format:" :: PF, root :: PF]
 
       info ["Running cleanup & macro expander." :: PF]
-      n := rewrite(n) $ SpadTreeCleanUp
+      root := rewrite(root) $ SpadTreeCleanUp
       init() $ SpadMacroExpander
-      n := rewrite(n) $ SpadMacroExpander
+      root := rewrite(root) $ SpadMacroExpander
 
-      notice pile ["Tree ready for type checking:" :: PF, n :: PF]
+      notice pile ["Tree ready for type checking:" :: PF, root :: PF]
       ctx : SpadTypeNodeArray := [[]]
       env : SpadEnvironment := new ()
-      r := walk(n, ctx, env) $ SpadTypeChecker
+      tree := walk(root, ctx, env) $ SpadTypeTreeCreator
 
-      notice pile ["Final tree with type annotations:" :: PF, r.node :: PF]
-      e := convert(r.node)
+      not check ctx =>
+        error "Type error detected!"
+
+      root := tree.node
+      notice pile ["Final tree with type annotations:" :: PF, root :: PF]
+      e := convert(root)
       notice spaces ["Converted the tree to original format." :: PF]
       e
