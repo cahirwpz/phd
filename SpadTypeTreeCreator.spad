@@ -136,6 +136,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadEnvironment
     import SpadTypeInfo
     import SpadTypeRuleFactory
+    import SpadTypeNodeArray
     import TypeUnifier
     import Printer
     import Logger('AST)

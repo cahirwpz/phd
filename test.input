@@ -1,14 +1,27 @@
 )boot $PostParseHookEnable := false
-)compile SpadEnvironment.spad
+--)compile Printer.spad
+--)compile Logger.spad
+--)compile ParserTools.spad
 --)compile SpadNode.spad
---)compile SpadCompilerPasses.spad
+--)compile SpadNodeFactory.spad
+--)compile SpadDatabase.spad
+--)compile SpadTreeWalker.spad
 --)compile TypeUnifier.spad
+--)compile TypeEvaluator.spad
+--)compile SpadEnvironment.spad
 )compile SpadTypeChecker.spad
---)compile SpadCompilerTest.spad
+)compile SpadTypeTreeCreator.spad
+--)compile SpadCompilerPasses.spad
+)compile SpadCompilerTest.spad
 )boot $PostParseHookEnable := true
 --)compile Test1.spad
 --)compile Test2.spad
---)compile Test3.spad
+)compile Test3.spad
+--)compile Test4.spad
+--)compile Test5.spad
+--)compile Test6.spad
+--)compile Test7.spad
+--)compile Test8.spad
 --)compile Test9.spad
-)compile Test10.spad
+--)compile Test10.spad
 )boot $PostParseHookEnable := false

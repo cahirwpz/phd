@@ -60,7 +60,7 @@ SpadCompilerTest() : Exports == Implementation where
       env : SpadEnvironment := new ()
       tree := walk(root, ctx, env) $ SpadTypeTreeCreator
 
-      not check ctx =>
+      not walk(ctx)$SpadTypeTreeChecker =>
         error "Type error detected!"
 
       root := tree.node
