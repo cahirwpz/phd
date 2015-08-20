@@ -20,7 +20,7 @@ SpadTreeMarkerSetVersion(newver : NNI) : WALKER == Implementation where
   Implementation ==> add
     rewrite (mr : MR) : N ==
       if mr.kind = 'typevar then
-        mr := [mr.id, newver, 'typevar]
+        mr := ['typevar, mr.path]
       [mr]
 
 )abbrev package FLATDBT FlattenDatabaseType
@@ -74,9 +74,10 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
       #l = 1 and seq.kind = "Body" => first l
       nodeSeq(seq.kind, l)
 
-)abbrev domain TYPINF TypeInfo
-TypeInfo() : Exports == Implementation where
+)abbrev domain STINFO SpadTypeInfo
+SpadTypeInfo() : Exports == Implementation where
   PF ==> PrintableForm
+  PI ==> PositiveInteger
   N ==> SpadNode
   APP ==> SpadApply(N)
   MR ==> SpadMarker(N)
@@ -210,22 +211,22 @@ TypeInfo() : Exports == Implementation where
       ++ Some symbols will be rewritten to type variables.
       ctx := [[]]$AssociationList(Symbol, N)
       ++ "%" => "%0"
-      ctx("%" :: Symbol) := typeVar(0)
+      ctx("%" :: Symbol) := typeVar()
       ++ "#1" => "%1", "#2" => "%2", ...
       for i in 1..#cmm.args repeat
         s := mkvar("#", string i)
-        v := typeVar(i)
+        v := typeVar [i :: PI]
         ctx(s) := v
       ++ "t#1" => "%1", "t#2" => "%2", ...
       for arg in cmm.args for i in 1.. repeat
         s := mkvar("t", string arg.name)
-        v := typeVar(i) 
+        v := typeVar [i :: PI]
         ctx(s) := v
 
       ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
       ++ change name.
       types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
-      args := [[':, typeVar(i), typ]$TE for typ in types for i in 1..]
+      args := [[':, typeVar [i :: PI], typ]$TE for typ in types for i in 1..]
       body := (cat? => getCtorCategory(t); cmm.type)
 
       body := nodeSeq((cat? => "Join"; "Domain"),
@@ -347,7 +348,7 @@ TypeInfo() : Exports == Implementation where
             --
             -- This allows to add extra options to condition "% has A" in case
             -- we encounter some other (less restrictive) constraints later.
-            cond := nodeTypeExpr('has, typeVar(0), [app])
+            cond := nodeTypeExpr('has, typeVar(), [app])
 
             for e in ti'.body.list repeat
               e' :=
@@ -390,7 +391,7 @@ TypeInfo() : Exports == Implementation where
 
       if symbol? t0 then t0 := symbolType()
       if integer? t0 then t0 := integerType()
-      if t0 = ti.type then t0 := typeVar(0)
+      if t0 = ti.type then t0 := typeVar()
 
       t0 = t1 => true
 
@@ -399,7 +400,7 @@ TypeInfo() : Exports == Implementation where
           app := t0 :: APP
           app.function = [ti.name] => ti -- will have to investigate that
           getTypeInfo(app)
-        t0 = typeVar(0) => ti
+        t0 = typeVar() => ti
         typeVar?(t0) => return false
         fail [te :: PF]
         error "Not handled!"
@@ -420,7 +421,7 @@ TypeInfo() : Exports == Implementation where
           if typeOrigin? n then
             n := (n :: TE).expr
           not namedType? n => "iterate"
-          n := substitute(n, typeVar(0) :: MR, t0)
+          n := substitute(n, typeVar() :: MR, t0)
           if n = t1 then
             return true
         false
@@ -518,7 +519,7 @@ TypeInfo() : Exports == Implementation where
 
       typeInfo(ti.name, ti.args, ti.hasList, ti.constraints, [ti.body.kind, body])
 
-)abbrev package TYPEVALT TypeEvaluatorTest
+)abbrev package TEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
@@ -526,7 +527,7 @@ TypeEvaluatorTest() : Exports == Implementation where
   NT ==> SpadNamedType(N)
   MR ==> SpadMarker(N)
   FN ==> SpadFunction(N)
-  TI ==> TypeInfo
+  TI ==> SpadTypeInfo
 
   Exports ==> with
     test1 : () -> Void
@@ -542,8 +543,8 @@ TypeEvaluatorTest() : Exports == Implementation where
     import Printer
     import SpadNode
     import SpadNodeFactory
+    import SpadTypeInfo
     import MainLogger
-    import TypeInfo
 
     initTest : () -> Void
     initTest ==
@@ -617,7 +618,7 @@ TypeEvaluatorTest() : Exports == Implementation where
     test5 ==
       initTest()
 
-      -- some extremely slow cases to be improved
+      -- TODO: some extremely slow cases to be improved
       println (getTypeInfo([['UnivariateLaurentSeries], [emptyNode()]]) :: PF)
       --println (getTypeInfo([['UnivariatePuiseuxSeries], [emptyNode()]]) :: PF)
       --println (getTypeInfo([['ExponentialExpansion], [emptyNode()]]) :: PF)

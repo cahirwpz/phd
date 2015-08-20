@@ -1,4 +1,4 @@
-)abbrev category SPNODEC SpadNodeCategory
+)abbrev category SNCAT SpadNodeCategory
 SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadApply(%) -> %
   construct : SpadAssign(%) -> %
@@ -95,36 +95,97 @@ SpadNodeCategory() : Category == ParsableCategory with
 
   parseNonNull : SExpression -> %
 
-)abbrev domain SPMARK SpadMarker
+)abbrev domain SMPATH SpadMarkerPath
+SpadMarkerPath() : Exports == Implementation where
+  PF ==> PrintableForm
+  PI ==> PositiveInteger
+
+  Exports ==> Join(OrderedSet, ParsableCategory, CoercibleTo(String)) with
+    construct : () -> %
+    construct : List(PI) -> %
+
+    copy : % -> %
+
+    indexOf : (%, %) -> Union(PI, "failed")
+    commonPrefix : (%, %) -> %
+    addLevel : % -> %
+    makeSucc : % -> %
+
+  Implementation ==> add
+    Rep := List(PI)
+
+    import ParserTools
+    import List(PI)
+
+    construct () == empty()$Rep
+    construct (li : List(PI)) == copy(li)$Rep
+
+    copy p == copy(p)$Rep
+
+    indexOf (root, path) ==
+      empty? root and not empty? path => first path
+      empty? root or empty? path => "failed"
+      indexOf(rest root, rest path)
+
+    commonPrefix (p0, p1) ==
+      empty? p0 or empty? p1 => []
+      first p0 ~= first p1 => []
+      [first p0, :commonPrefix(rest p0, rest p1)]
+
+    addLevel path ==
+      concat(copy(path), 1)
+
+    makeSucc path ==
+      empty? path => path
+      #path = 1 => [first path + 1]
+      [first path, :makeSucc(path)]
+
+    parse ex ==
+      [(integer n) :: PI for n in destruct ex]
+
+    convert p ==
+      convert [convert(n :: Integer) for n in p]$List(SExpression)
+
+    coerce (p : %) : String ==
+      empty? p => ""
+      ls : List(String) := [string(first p)]
+      for n in rest p repeat
+        ls := [string n, ".", :ls]
+      concat reverse ls
+
+    coerce (p : %) : PF ==
+      (p :: String) :: PF
+
+    n <= m == (n <= m)$Rep
+    n = m == (n = m)$Rep
+
+)abbrev domain SMARKER SpadMarker
 SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
-  NNI ==> NonNegativeInteger
+  MP ==> SpadMarkerPath
   PF ==> PrintableForm
 
   Exports ==> Join(ParsableCategory, CoercibleTo(Symbol)) with
-    elt : (%, "id") -> NNI
-    elt : (%, "ver") -> NNI
     elt : (%, "kind") -> Symbol
-    construct : (NNI, Symbol) -> %
-    construct : (NNI, NNI, Symbol) -> %
+    elt : (%, "path") -> MP
+    construct : Symbol -> %
+    construct : (Symbol, MP) -> %
 
   Implementation ==> add
-    Rep := Record(m_id : NNI, m_ver : NNI, m_kind : Symbol)
+    Rep := Record(m_kind : Symbol, m_path : MP)
 
     import ParserTools
 
-    elt(x, "id") == x.m_id
-    elt(x, "ver") == x.m_ver
     elt(x, "kind") == x.m_kind
+    elt(x, "path") == x.m_path
 
-    construct(i, k) == [i, 0, k]$Rep
-    construct(i, v, k) == [i, v, k]$Rep
+    construct(k) == [k, []]$Rep
+    construct(k : Symbol, p : MP) == [k, p]$Rep
 
     parse ex ==
-      [(integer ex.2) :: NNI, (integer ex.3) :: NNI, symbol ex.4]
+      [symbol ex.2, parse ex.3]
 
     convert x ==
-      convert [convert("@Marker" :: Symbol), convert x.id, convert x.ver, convert x.kind]
-
+      convert [convert("@Marker" :: Symbol), convert x.kind, convert x.path]
 
     coerce (m : %) : Symbol ==
       m.kind = 'typeany => "%any" :: Symbol
@@ -133,19 +194,15 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
         m.kind = 'typevar => "%"
         m.kind = 'noderef => "#"
         "*"
-      if m.id > 0 then
-        s := concat(s, string(m.id))
-      if m.ver > 0 then
-        s := concat [s, ".", string(m.ver)]
-      s :: Symbol
+      concat [s, m.path :: String] :: Symbol
 
     coerce (n : %) : PF ==
       (n :: Symbol) :: PF
 
     n = m ==
-      (n.id = m.id) and (n.ver = m.ver) and (n.kind = m.kind)
+      (n.path = m.path) and (n.kind = m.kind)
 
-)abbrev domain SPTMAP SpadMappingType
+)abbrev domain SMTYPE SpadMappingType
 SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -170,8 +227,8 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       if firstSymbol? (s, ':) then parse s.3 else parse s
         
     parse ex ==
-      sig : List(N) := [ parseFunType e for e in destruct cdr ex ]
-      [ rest sig, first sig ]
+      sig : List(N) := [parseFunType e for e in destruct cdr ex]
+      [rest sig, first sig]
 
     convert x ==
       ts := [convert t for t in [x.result, :x.args]]
@@ -187,7 +244,7 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
     n = m ==
       n.result = m.result and n.args = m.args
 
-)abbrev domain SPTNAMED SpadNamedType
+)abbrev domain SNTYPE SpadNamedType
 SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
   MT ==> SpadMappingType(N)
@@ -245,7 +302,7 @@ SpadNamedType(N : SpadNodeCategory) : Exports == Implementation where
     n = m ==
       n.name = m.name and n.type = m.type 
 
-)abbrev domain SPTREC SpadRecordType
+)abbrev domain SRTYPE SpadRecordType
 SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
   NT ==> SpadNamedType(N)
@@ -308,7 +365,7 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
       #n.fields ~= #m.fields => false
       "and"/[nf = mf for nf in n.fields for mf in m.fields]
 
-)abbrev domain SPTUNION SpadUnionType
+)abbrev domain SUTYPE SpadUnionType
 SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
   NT ==> SpadNamedType(N)
   PF ==> PrintableForm
@@ -391,7 +448,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
       #n.variants ~= #m.variants => false
       "and"/[nv = mv for nv in n.variants for mv in m.variants]
 
-)abbrev domain SPIMP SpadImport
+)abbrev domain SIMPORT SpadImport
 ++ SPAD domain / category / package import declaration
 SpadImport(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
@@ -417,7 +474,7 @@ SpadImport(N : SpadNodeCategory) : Exports == Implementation where
     coerce n ==
       spaces ["import" :: PF, n.type :: PF]
 
-)abbrev domain SPASS SpadAssign
+)abbrev domain SASSIGN SpadAssign
 SpadAssign(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -446,7 +503,7 @@ SpadAssign(N : SpadNodeCategory) : Exports == Implementation where
     coerce n ==
       spaces [n.lval :: PF, ":=" :: PF, n.rval :: PF]
 
-)abbrev domain SPAPP SpadApply
+)abbrev domain SAPPLY SpadApply
 SpadApply(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -517,7 +574,7 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
       "and"/([f = g for f in [n.function, :n.args]
                     for g in [m.function, :m.args]])
 
-)abbrev domain SPSEG SpadSegment
+)abbrev domain SSEGMENT SpadSegment
 SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -580,7 +637,7 @@ SpadIterator(N : SpadNodeCategory) : Exports == Implementation where
     coerce itor ==
       spaces ["for" :: PF, itor.var :: PF, "in" :: PF, itor.seq :: PF]
 
-)abbrev domain SPTEX SpadTypeExpr
+)abbrev domain STEXPR SpadTypeExpr
 SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -623,7 +680,7 @@ SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
     n = m ==
       n.kind = m.kind and n.expr = m.expr and n.type = m.type
 
-)abbrev domain SPLOOP SpadLoop
+)abbrev domain SLOOP SpadLoop
 SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
   K ==> Union("loop", "collect", "repeat")
   IT ==> SpadIterator(N)
@@ -727,7 +784,7 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       n.kind case "repeat" =>
         spaces ["repeat" :: PF, loopBody]
 
-)abbrev domain SPLAM SpadLambda
+)abbrev domain SLAMBDA SpadLambda
 SpadLambda(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
   MT ==> SpadMappingType(N)
@@ -780,7 +837,7 @@ SpadLambda(N : SpadNodeCategory) : Exports == Implementation where
       spaces([paren [arg :: PF for arg in n.args], ":" :: PF, n.type :: PF,
              "+->" :: PF, n.body :: PF])
 
-)abbrev package SPSEQ SpadSequence
+)abbrev package SSEQ SpadSequence
 SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
   K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body")
   PF ==> PrintableForm
@@ -873,7 +930,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
     n = m ==
       n.kind = m.kind and n.list = m.list
 
-)abbrev package SPCOND SpadCondExpr
+)abbrev package SCEXPR SpadCondExpr
 SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -917,7 +974,7 @@ SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
         fs := [:fs, pile ["else" :: PF, c.falsebr :: PF]]
       vconcat fs
 
-)abbrev package SPFN SpadFunction
+)abbrev package SFUNC SpadFunction
 ++ SPAD function
 SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
   NT ==> SpadNamedType(N)
@@ -991,7 +1048,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       pile ([spaces [n.name :: PF, paren fargs, :retType, "==" :: PF],
              n.body :: PF])
 
-)abbrev package SPMACRO SpadMacro
+)abbrev package SMACRO SpadMacro
 ++ SPAD macro representation
 SpadMacro(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
@@ -1029,7 +1086,7 @@ SpadMacro(N : SpadNodeCategory) : Exports == Implementation where
       margs := paren [arg :: PF for arg in m.args]
       spaces [m.name :: PF, margs, "==>" :: PF, m.body :: PF]
 
-)abbrev package SPWHERE SpadWhere
+)abbrev package SWHERE SpadWhere
 SpadWhere(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
@@ -1056,7 +1113,7 @@ SpadWhere(N : SpadNodeCategory) : Exports == Implementation where
     coerce w ==
       spaces [w.body :: PF, "where" :: PF, w.env :: PF]
 
-)abbrev package SPFTOR SpadFunctor
+)abbrev package SFTOR SpadFunctor
 ++ SPAD functor representation
 SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
   NT ==> SpadNamedType(N)
@@ -1122,11 +1179,11 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     signature ft ==
       [ft.name, [[[arg.type for arg in ft.args], ft.type] $ MT]]
 
-)abbrev domain SPNODE SpadNode
+)abbrev domain SNODE SpadNode
 ++ SPAD generic expression
 SpadNode() : Exports == Implementation where
   DF ==> DoubleFloat
-  NNI ==> NonNegativeInteger
+  PI ==> PositiveInteger
   PF ==> PrintableForm
 
   APP ==> SpadApply(%)
@@ -1139,6 +1196,7 @@ SpadNode() : Exports == Implementation where
   LAM ==> SpadLambda(%)
   LP ==> SpadLoop(%)
   M ==> SpadMacro(%)
+  MP ==> SpadMarkerPath
   MR ==> SpadMarker(%)
   MT ==> SpadMappingType(%)
   NT ==> SpadNamedType(%)
@@ -1163,7 +1221,7 @@ SpadNode() : Exports == Implementation where
     nodeMappingType : (List(%), %) -> %
     nodeNamedType : (Symbol, %) -> %
     nodeRecordType : List(NT) -> %
-    nodeRef : NNI -> %
+    nodeRef : MP -> %
     nodeSeg : (%, %, %) -> %
     nodeSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), List(%)) -> %
     nodeSubType : (%, %) -> %
@@ -1534,7 +1592,7 @@ SpadNode() : Exports == Implementation where
       rt := [fields]$RT
       rt case "failed" => emptyNode()
       [rt]
-    nodeRef (i) == [[i, 'noderef]$MR]
+    nodeRef (path) == [['noderef, path]$MR]
     nodeSeq (kind, list) == [[kind, list]$SEQ]
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeExpr (kind, expr, type) == [[kind, expr, type]$TE]
@@ -1544,78 +1602,3 @@ SpadNode() : Exports == Implementation where
       ut case "failed" => emptyNode()
       [ut]
     nodeWhere (body, env) == [[body, env]$W]
-
-)abbrev package SPNFACT SpadNodeFactory
-SpadNodeFactory() : Exports == Implementation where
-  NNI ==> NonNegativeInteger
-  N ==> SpadNode
-  MR ==> SpadMarker(N)
-  NT ==> SpadNamedType(N)
-  MT ==> SpadMappingType(N)
-  RT ==> SpadRecordType(N)
-  UT ==> SpadUnionType(N)
-  mt ==> nodeMappingType
-
-  Exports ==> with
-    booleanType : () -> N
-    floatType : () -> N
-    integerType : () -> N
-    outputFormType : () -> N
-    stringType : () -> N
-    symbolType : () -> N
-    voidType : () -> N
-    categoryType : () -> N
-
-    typeAny : () -> N
-    typeVar : NNI -> N
-    typeVar : (NNI, NNI) -> N
-    typeUndef : () -> N
-
-    makeRecordFunList : N -> List(NT)
-    makeUnionFunList : N -> List(NT)
-
-  Implementation ==> add
-    booleanType () == nodeApp(['Boolean], [])
-    floatType () == nodeApp(['DoubleFloat], [])
-    integerType () == nodeApp(['Integer], [])
-    outputFormType () == nodeApp(['OutputForm], [])
-    stringType () == nodeApp(['String], [])
-    symbolType () == nodeApp(['Symbol], [])
-    voidType () == nodeApp(['Void], [])
-    categoryType () == nodeApp(['Category], [])
-
-    typeAny() == [[0, 'typeany]$MR]
-    typeUndef() == [[0, 'typeundef]$MR]
-    typeVar(i) == [[i, 'typevar]$MR]
-    typeVar(i, v) == [[i, v, 'typevar]$MR]
-
-    makeRecordFunList n ==
-      r := n :: RT
-      funs : List(NT) :=
-       ([['=, mt([n, n], booleanType())],
-         ['~=, mt([n, n], booleanType())],
-         ['copy, mt([n], n)],
-         ['coerce, mt([n], outputFormType())],
-         ['construct, mt([f.type for f in r.fields], n)]
-        ])
-      for f in r.fields repeat
-        s : N := [f.name]
-        r : N := f.type
-        funs := ([[f.name, mt([['constant]$N], [f.name])],
-                  ['elt, mt([n, s], r)],
-                  ['setelt!, mt([n, s, r], r)], :funs])
-      funs
-
-    makeUnionFunList n ==
-      u := n :: UT
-      funs : List(NT) :=
-       ([['=, mt([n, n], booleanType())],
-         ['~=, mt([n, n], booleanType())],
-         ['coerce, mt([n], outputFormType())]
-        ])
-      vs := u.variants
-      if not namedType? vs.1 then
-        for v in vs repeat
-          funs := [['construct, mt([v], n)], 
-                   ['coerce, mt([n], v)], :funs]
-      funs

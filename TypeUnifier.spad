@@ -309,7 +309,7 @@ TypeUnifier() : Exports == Implementation where
         mr2 := n2 :: MR
         mr1 = mr2 => [[]]
         -- always substitute newer variable with older one to avoid (?) cycles
-        if mr1.id > mr2.id
+        if mr1.path > mr2.path
           then [[[mr1, [n2]]]]
           else [[[mr2, [n1]]]]
       typeVar? n1 =>

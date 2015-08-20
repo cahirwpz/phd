@@ -29,9 +29,9 @@ SpadEnvironment() : Exports == Implementation where
     import SExpression
     import SpadNode
     import SpadNodeFactory
-    import Logger('Env)
-    import TypeInfo
+    import SpadTypeInfo
     import TypeUnifier
+    import Logger('Env)
     import Printer
 
     -- create empty environment
@@ -53,7 +53,7 @@ SpadEnvironment() : Exports == Implementation where
       debug ["EnvAddDomain" :: PF, paren [dom :: PF]]
       ti := getTypeInfo(dom)
       for n in ti.body.list repeat
-        n' := substitute(n, typeVar(0) :: MR, [dom])
+        n' := substitute(n, typeVar() :: MR, [dom])
         guard := emptyNode()
         if typeGuard? n' then
           te := n' :: TE
