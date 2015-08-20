@@ -32,37 +32,7 @@ SpadTypeRule() : Exports == Implementation where
     elt (x, "solution") == x.r_solution
 
     references (x : %) : List(MP) ==
-      refs : List(MP) := []
-
-      pathOf (n : N) : MP ==
-        not nodeRef? n => error ""
-        (n :: MR).path
-
-      for f in x.formulas repeat
-        nodeRef? f =>
-          refs := concat(refs, pathOf(f))
-        apply? f =>
-          r := f :: APP
-          refs := concat(refs, [pathOf(n) for n in [r.function, :r.args]])
-        assign? f =>
-          r := f :: ASS
-          refs := concat(refs, [pathOf(r.lval), pathOf(r.rval)])
-        condExpr? f =>
-          r := f :: CE
-          refs := concat(refs, [pathOf(r.cond), pathOf(r.truebr), pathOf(r.falsebr)])
-        subType? f =>
-          te := f :: TE
-          refs := concat(refs, [pathOf(te.expr), pathOf(te.type)])
-        typeOrigin? f =>
-          te := f :: TE
-          refs := concat(refs, pathOf(te.expr))
-        capsule? f =>
-          items := (f :: SEQ).list
-          refs := concat(refs, [pathOf(item) for item in items])
-        fail ["references: case not handled for" :: PF, f :: PF]
-        error ""
-
-      refs
+      [(f :: MR).path for f in x.formulas | nodeRef? f]
 
     references (lx : List(%)) : List(MP) ==
       empty? lx => []
@@ -893,6 +863,7 @@ SpadTypeChecker() : Exports == Implementation where
 
   ENV ==> SpadEnvironment
   TN ==> SpadTypeNode
+  TR ==> SpadTypeRule
   CTX ==> SpadTypeNodeArray
   SUBST ==> AssociationList(MR, List(N))
   PF ==> PrintableForm
@@ -1423,12 +1394,11 @@ SpadTypeChecker() : Exports == Implementation where
 
           ftorArgList := [ftorArg, :ftorArgList]
 
-        --ftorResType := substitute(ti.type, ftorArgRenames)
         ftorResType := nodeApp(['Type], [])
         ftorType := nodeMappingType(reverse ftorArgList, ftorResType)
         env(s) := ftorType
         types := [ftorType, :types]
-        
+
         if not empty? ftorArgNodeList then
           this.rules := [[[nodeRef(n) for n in ftorArgNodeList], [s]]]
 
