@@ -40,7 +40,7 @@ SpadTypeRule() : Exports == Implementation where
 
       for f in x.formulas repeat
         nodeRef? f =>
-          [pathOf(f)]
+          refs := concat(refs, pathOf(f))
         apply? f =>
           r := f :: APP
           refs := concat(refs, [pathOf(n) for n in [r.function, :r.args]])
@@ -188,39 +188,15 @@ SpadTypeNode() : Exports == Implementation where
         bold yellow("?" :: PF)
       spaces [prefix, node, ":" :: PF, bold (x.type :: PF)]
 
-)abbrev category STNACAT SpadTypeNodeArrayCategory
-SpadTypeNodeArrayCategory() : Category == Exports where
-  PI ==> PositiveInteger
-  PF ==> PrintableForm
-  N ==> SpadNode
-  MP ==> SpadMarkerPath
-  MR ==> SpadMarker(N)
-  ENV ==> SpadEnvironment
-  TN ==> SpadTypeNode
-
-  Exports ==> CoercibleTo(PF) with
-    construct : MP -> %
-
-    node : (%, PI) -> TN
-    node : (%, MP) -> TN
-    node : (%, N) -> TN
-
-    addNode! : (%, N) -> TN
-    addNode! : (%, N, ENV) -> TN
-    addTypeVar! : % -> N
-    addTypeVar! : (%, List(N)) -> N
-    addType! : (%, MR, N) -> Void
-    checkAndMarkIfDone! : (TN, %) -> Boolean
-
-    check : % -> Boolean
-
 )abbrev package STFITS SpadTreeFillInTypes
-SpadTreeFillInTypes(ctx : STNACAT) : SpadTreeWalkerCategory == Implementation where
+SpadTreeFillInTypes(findTypeNode : MP -> TN) : SpadTreeWalkerCategory == Implementation where
   STNACAT ==> SpadTypeNodeArrayCategory
   PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)
   TE ==> SpadTypeExpr(N)
+  TN ==> SpadTypeNode
+  MP ==> SpadMarkerPath
   MR ==> SpadMarker(N)
 
   Implementation ==> add
@@ -249,7 +225,7 @@ SpadTreeFillInTypes(ctx : STNACAT) : SpadTreeWalkerCategory == Implementation wh
 
     rewrite (mr : MR) : N ==
       mr.kind = 'typevar =>
-        t := node(ctx, mr.path).type
+        t := findTypeNode(mr.path).type
         typeOrigin? t =>
           te := coerce(t)@TE
           typeOrigin? te.type =>
@@ -258,9 +234,9 @@ SpadTreeFillInTypes(ctx : STNACAT) : SpadTreeWalkerCategory == Implementation wh
           te.type
         t
       mr.kind = 'noderef =>
-        n := node(ctx, mr.path).node
+        n := findTypeNode(mr.path).node
         n = [mr] =>
-          fail pile ["Self reference detected:" :: PF, node(ctx, mr.path) :: PF]
+          fail pile ["Self reference detected:" :: PF, findTypeNode(mr.path) :: PF]
           error ""
         rewrite n
       error ""
@@ -287,7 +263,21 @@ SpadTypeNodeArray() : Exports == Implementation where
   TR ==> SpadTypeRule
   PF ==> PrintableForm
 
-  Exports ==> with SpadTypeNodeArrayCategory 
+  Exports ==> CoercibleTo(PF) with
+    construct : MP -> %
+
+    node : (%, PI) -> TN
+    node : (%, MP) -> TN
+    node : (%, N) -> TN
+
+    addNode! : (%, N) -> TN
+    addNode! : (%, N, ENV) -> TN
+    addTypeVar! : % -> N
+    addTypeVar! : (%, List(N)) -> N
+    addType! : (%, MR, N) -> Void
+    checkAndMarkIfDone! : (TN, %) -> Boolean
+
+    check : % -> Boolean
 
   Implementation ==> add
     Rep := Record(root : SpadMarkerPath,
@@ -547,7 +537,6 @@ SpadTypeNodeArray() : Exports == Implementation where
       debug (["Run type inference for" :: PF, n.path :: PF,
               "of" :: PF, n.type :: PF, "type." :: PF])
       --debug(x :: PF)
-      --debug(x.typevars :: PF)
 
       apply? rule =>
         r := rule :: APP
@@ -702,8 +691,8 @@ SpadTypeNodeArray() : Exports == Implementation where
         rewriteIfInferred!(n, x)
         enqueue!(n, q)
 
-      info vconcat(["Tree ready for type checking..." :: PF,
-                    x :: PF, x.typevars :: PF])
+      info vconcat ["Tree ready for type checking..." :: PF, x :: PF]
+      info ["Processing order:" :: PF, bracket [n.path :: PF for n in members q]]
 
       p := countProgress x
       s := 1 :: NNI
@@ -755,9 +744,13 @@ SpadTypeNodeArray() : Exports == Implementation where
       info (x :: PF)
 
       -- Rewrite the tree if succeeded !
-      ns := entries x.nodes
-      root := first ns
-      root.node := rewrite(root.node)$SpadTreeFillInTypes(ns)
+
+      -- capture x in closure, so that we don't need to expose TCNA type to
+      -- SpadTreeFillInTypes
+      findTypeNode := ((path : MP) : TN +-> node(x, path))
+
+      root := node(x, 1)
+      root.node := rewrite(root.node)$SpadTreeFillInTypes(findTypeNode)
 
       true
 
@@ -1197,7 +1190,6 @@ SpadTypeChecker() : Exports == Implementation where
         argNode.type := argType
         ftDeps := [nodeRef(argNode), :ftDeps]
         env(arg.name :: Symbol) := argType
-        warn [arg.name :: PF, "=>" :: PF, argType :: PF]
         argSub(arg.name) := argType
         argLst := [argType, :argLst]
 
