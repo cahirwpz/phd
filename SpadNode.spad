@@ -928,7 +928,10 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
       vconcat ls
 
     n = m ==
-      n.kind = m.kind and n.list = m.list
+      n.kind ~= m.kind => false
+      n.kind = "Join" =>
+        empty? setDifference(n.list, m.list)
+      n.list = m.list
 
 )abbrev package SCEXPR SpadCondExpr
 SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
@@ -1573,6 +1576,7 @@ SpadNode() : Exports == Implementation where
       unionType? n and unionType? m => (n :: UT) = (m :: UT)
       typeExpr? n and typeExpr? m => (n :: TE) = (m :: TE)
       marker? n and marker? m => (n :: MR) = (m :: MR)
+      sequence? n and sequence? m => (n :: SEQ) = (m :: SEQ)
       emptyNode? n and emptyNode? m => true
       false
 

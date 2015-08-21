@@ -424,8 +424,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
         argLst := [argType, :argLst]
 
       argLst := reverse argLst
+      -- FIXME: Functor's return type is not of "Join" node!
+      ftorResType := (sequence? ft.type => nodeSeq("Join", (ft.type :: SEQ).list); ft.type)
       ftorResNode := addNode!(ctx, ft.type, env)
-      ftorResNode.type := addTypeVar!(ctx, [ft.type])
+      ftorResNode.type := addTypeVar!(ctx, [ftorResType])
       ftDeps := [nodeRef(ftorResNode), :ftDeps]
 
       this.type := addTypeVar!(ctx, [nodeMappingType(argLst, ftorResNode.type)])
@@ -617,7 +619,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         errorType := nodeMappingType([stringType], typeAny)
         types := [errorType, :types]
       if s = 'return then
-        returnType := nodeMappingType([integerType, node(ctx, 1).type], typeAny)
+        returnType := nodeMappingType([integerType, root(ctx).type], typeAny)
         types := [returnType, :types]
 
       -- handle a symbol which is a type constructor
