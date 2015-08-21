@@ -61,7 +61,7 @@ SpadCompilerTest() : Exports == Implementation where
       tree := walk(root, ctx, env) $ SpadTypeTreeCreator
 
       not walk(ctx)$SpadTypeTreeChecker =>
-        error "Type error detected!"
+        convert []
 
       root := tree.node
       notice pile ["Final tree with type annotations:" :: PF, root :: PF]
