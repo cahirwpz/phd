@@ -1,479 +1,5 @@
-)abbrev domain STRULE SpadTypeRule
-SpadTypeRule() : Exports == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  NR ==> SpadNodeRef(N)
-  TV ==> SpadTypeVar(N)
-  TE ==> SpadTypeExpr(N)
-  SEQ ==> SpadSequence(N)
-
-  PF ==> PrintableForm
-
-  Exports ==> CoercibleTo(PrintableForm) with
-    construct : (List(N), N) -> %
-
-    elt : (%, "formulas") -> List(N)
-    elt : (%, "solution") -> N
-
-    references : % -> List(NR)
-    references : List(%) -> List(NR)
-
-  Implementation ==> add
-    import Logger('Rule)
-
-    Rep := Record(m_formulas : List(N), m_solution : N)
-
-    construct (fs, s) == [fs, s]$Rep
-
-    elt (x, "formulas") == x.m_formulas
-    elt (x, "solution") == x.m_solution
-
-    references (x : %) : List(NR) ==
-      [(f :: NR) for f in x.m_formulas | nodeRef? f]
-
-    references (lx : List(%)) : List(NR) ==
-      empty? lx => []
-      -- PARSER BUG? Parens are required around reduce expression.
-      removeDuplicates("concat"/[references x for x in lx])
-
-    coerce x ==
-      pfs : List(PF) := []
-
-      for f in x.m_formulas repeat
-        pf :=
-          condExpr? f =>
-            ce := f :: CE
-            spaces(["if" :: PF, ce.cond :: PF,
-                    "then" :: PF, ce.truebr :: PF,
-                    "else" :: PF, ce.falsebr :: PF])
-          sequence? f =>
-            seq := f :: SEQ
-            paren sepBy("; " :: PF, [n :: PF for n in seq.list])
-          f :: PF
-        pfs := [pf, :pfs]
-
-      brace reverse pfs
-
-)abbrev domain STNODE SpadTypeNode
-SpadTypeNode() : Exports == Implementation where
-  PF ==> PrintableForm
-  PI ==> PositiveInteger
-  TR ==> SpadTypeRule
-  ENV ==> SpadEnvironment
-  N ==> SpadNode
-  NR ==> SpadNodeRef(N)
-  TE ==> SpadTypeExpr(N)
-  TV ==> SpadTypeVar(N)
-  FN ==> SpadFunction(N)
-  SUBST ==> AssociationList(TV, List(N))
-
-  Exports ==> CoercibleTo(PF) with
-    construct : (PI, PI, N) -> %
-
-    elt : (%, "index") -> NR
-    elt : (%, "node") -> N
-    elt : (%, "rules") -> List(TR)
-    elt : (%, "type") -> N
-    elt : (%, "env") -> ENV
-
-    setelt! : (%, "rules", List(TR)) -> List(TR)
-    setelt! : (%, "type", N) -> N
-    setelt! : (%, "node", N) -> N
-    setelt! : (%, "env", ENV) -> ENV
-
-    done? : % -> Boolean
-    done! : % -> %
-
-    references : % -> List(NR)
-
-    nodeRef : % -> N
-    typeRef : % -> N
-
-  Implementation ==> add
-    import SpadNode
-    import Printer
-    import TypeUnifier
-    import SpadNodeFactory
-
-    Rep := Record(m_index : NR,
-                  m_node : N,
-                  m_rules : List(TR),
-                  m_type : N,
-                  m_env : ENV,
-                  m_done : Boolean)
-
-    construct (i, j, n) ==
-      [[i, j]$NR, n, [], emptyNode(), new(), false]$Rep
-
-    elt (x, "index") == x.m_index
-    elt (x, "node") == x.m_node
-    elt (x, "rules") == x.m_rules
-    elt (x, "type") == x.m_type
-    elt (x, "env") == x.m_env
-
-    setelt! (x, "node", n) ==
-      x.m_node := n
-    setelt! (x, "rules", r) ==
-      x.m_rules := r
-    setelt! (x, "type", ts) ==
-      x.m_type := ts
-    setelt! (x, "env", env) ==
-      x.m_env := env
-
-    done? x ==
-      x.m_done
-
-    done! x ==
-      x.m_done := true
-      x
-
-    references x ==
-      references x.m_rules
-
-    nodeRef x ==
-      nodeNodeRef(x.m_index.major :: PI, x.m_index.minor :: PI)
-
-    typeRef x ==
-      nodeTypeVar(x.m_index.major :: PI, x.m_index.minor :: PI)
-
-    coerce x ==
-      done := if done? x then green("(+)" :: PF) else red("(-)" :: PF)
-      prefix := hconcat [done, right(6, x.m_index:: PF)]
-      not empty? x.m_rules =>
-        r := sepBy(" | " :: PF, [(r :: PF) for r in x.m_rules])
-        spaces([prefix, r, "is" :: PF, bold (x.m_type :: PF)])
-      import? x.m_node or typeDecl? x.m_node =>
-        spaces [prefix, bold ("()" :: PF), white(x.m_node :: PF)]
-      n := stripOriginIfCan x.m_node
-      pn :=
-        value? n or typeVar? n =>
-          symbol? n => bold cyan(n :: PF)
-          bold(n :: PF)
-        function? n =>
-          bold cyan((n :: FN).name :: PF)
-        sequence? n =>
-          bold("(...)" :: PF)
-        bold yellow("?" :: PF)
-      spaces [prefix, pn, ":" :: PF, bold (x.m_type :: PF)]
-
-)abbrev package STNA SpadTypeNodeArray
-SpadTypeNodeArray() : Exports == Implementation where
-  PI ==> PositiveInteger
-  NNI ==> NonNegativeInteger
-  PF ==> PrintableForm
-
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  FN ==> SpadFunction(N)
-  MT ==> SpadMappingType(N)
-  NR ==> SpadNodeRef(N)
-  SEQ ==> SpadSequence(N)
-  TE ==> SpadTypeExpr(N)
-  TV ==> SpadTypeVar(N)
-  UT ==> SpadUnionType(N)
-  SUBST ==> AssociationList(TV, List(N))
-  URES ==> Union(SUBST, "failed")
-
-  ENV ==> SpadEnvironment
-  TN ==> SpadTypeNode
-  TR ==> SpadTypeRule
-
-  Exports ==> CoercibleTo(PF) with
-    construct : PI -> %
-
-    nodeList : % -> List(TN)
-    typeVarCount: % -> NNI
-
-    root : % -> TN
-    node : (%, NR) -> TN
-    node : (%, N) -> TN
-    addNode! : (%, N) -> TN
-    addNode! : (%, N, ENV) -> TN
-    killNode! : (%, NR) -> Void
-    killNode! : (%, TN) -> Void
-    typeOf : (%, TN) -> List(N)
-    hasUnknownType? : (%, TN) -> Boolean
-
-    addTypeVar! : % -> N
-    addTypeVar! : (%, List(N)) -> N
-    addType! : (%, TV, N) -> Void
-
-    limitTypeVar! : (%, TV, List(N)) -> Boolean
-    limitTypeVar! : (%, SUBST) -> Boolean
-    limitNodeType! : (%, TN, List(N)) -> Boolean
-
-    nodeSubType! : (%, TN, TN) -> Boolean
-    nodesTypeMatch! : (%, TN, TN) -> Boolean 
-
-    rewriteIfInferred! : (%, TN) -> Boolean
-
-  Implementation ==> add
-    Rep := Record(m_major : PI,
-                  m_minorNR : PI,
-                  m_minorTV : PI,
-                  m_nodes : FlexibleArray(TN),
-                  m_typevars : SUBST)
-
-    import SpadNode
-    import TypeUnifier
-    import SpadNodeFactory
-    import Printer
-    import Logger('Tree)
-
-    construct major ==
-      [major, 1, 1, flexibleArray [], [[]]]
-
-    nodeList x ==
-      members x.m_nodes
-
-    typeVarCount x ==
-      #(x.m_typevars)
-
-    root x ==
-      x.m_nodes.1
-
-    node (x : %, nr : NR) ==
-      nr.major ~= x.m_major => error "BUG: dereferenced wrong TNA!"
-      (x.m_nodes)(nr.minor)
-
-    node (x : %, n : N) ==
-      not nodeRef? n => error "BUG: nodeRef expected!"
-      node(x, n :: NR)
-
-    addNode! (x, n, env) ==
-      tn := addNode!(x, n)
-      tn.env := env
-      tn
-
-    addNode! (x, n) ==
-      tn := [x.m_major, x.m_minorNR, n]
-      concat!(x.m_nodes, tn)
-      x.m_minorNR := x.m_minorNR + 1
-      tn
-
-    killNode! (x : %, nr : NR) ==
-      killNode!(x, node(x, nr))
-
-    killNode! (x : %, n : TN) ==
-      info ["Killing" :: PF, n.index :: PF, "node!" :: PF]
-      if typeVar? n.type then
-        remove!(n.type :: TV, x.m_typevars)
-        n.type := typeUndef()
-      done! n
-
-    unknownType? (terms : List(N)) : Boolean ==
-      #terms = 1 and emptyNode?(first terms)
-
-    aliasType? (terms : List(N)) : Boolean ==
-      #terms = 1 and typeVar?(first terms)
-
-    typeOf (x : %, n : TN) : List(N) ==
-      not typeVar? n.type => [n.type] 
-      tl := (x.m_typevars)(n.type :: TV)
-      unknownType? tl => [n.type]
-      tl
-
-    setTypeOf! (x : %, n : TN, terms : List(N)) : Void ==
-      typeVar? n.type =>
-        (x.m_typevars)(n.type :: TV) := terms
-      #terms > 1 or n.type ~= terms.1 =>
-        fail pile(
-          ["Cannot set the type of node! Types not equal:" :: PF,
-           bold red("old:" :: PF),
-           indent(2, n.type :: PF),
-           bold red("new:" :: PF), 
-           indent(2, vconcat [t :: PF for t in terms])])
-        error ""
-
-    -- checks if type attached to the node has form "%a[?]"
-    hasUnknownType? (x, n) ==
-      not typeVar? n.type => false
-      unknownType? (x.m_typevars)(n.type :: TV)
-
-    addTypeVar! (x, types) ==
-      if empty? types then 
-        types := [emptyNode()]
-      tv := typeVar(x.m_major, x.m_minorTV)
-      (x.m_typevars)(tv :: TV) := types
-      x.m_minorTV := x.m_minorTV + 1
-      tv
-
-    addTypeVar! x == addTypeVar!(x, [])
-
-    addType! (x, var, type) ==
-      terms := (x.m_typevars)(var)
-      unknownType? terms => error ""
-      (x.m_typevars)(var) := [type, :terms]
-
-    rewriteTypeVars! (x : %, var : TV, term : N) : Void ==
-      debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
-             "in all type variables." :: PF])
-      for tv in entries x.m_typevars | not unknownType? tv.entry repeat
-        ts : List(N) := []
-        for t in tv.entry repeat
-          t := substitute(t, var, term)
-          -- Remove duplicates.
-          member?(t, ts) => "iterate"
-          -- Avoid ill-formed types (for now only unions).
-          emptyNode? t => "iterate"
-          ts := [t, :ts]
-        tv.entry := reverse ts
-
-    -- rewrite all nodes with type that contains given variable
-    rewriteNodes! (x : %, var : TV, term : N) : Void ==
-      for n in entries x.m_nodes | occurs?(var, n.type) repeat
-        n.type := substitute(n.type, var, term)
-        debug (["Rewrote" :: PF, n.index :: PF, "with" :: PF,
-                brace spaces [var :: PF, "=>" :: PF, term :: PF]])
-
-    rewriteIfInferred! (x : %, n : TN) : Boolean ==
-      not typeVar? n.type => false
-      tv := n.type :: TV
-      terms := (x.m_typevars)(tv)
-      unknownType? terms or #terms > 1 => false
-      term := first terms
-      rewriteTypeVars!(x, tv, term)
-      debug ["Removing" :: PF, bold(tv :: PF), "type variable." :: PF]
-      remove!(tv, x.m_typevars)
-      info (["Type inferred for node" :: PF, n.index :: PF,
-             ":" :: PF, bold(term :: PF)])
-      rewriteNodes!(x, tv, term)
-      true
-
-    removeAlias! (x : %, var : TV, alias : N) : Void ==
-      var = (alias :: TV) => void() -- BUG? Handle degenerate case!
-      debug ["Removing alias:" :: PF, var :: PF, "=>" :: PF, alias :: PF]
-      rewriteTypeVars!(x, var, alias)
-      for n in entries x.m_nodes | occurs?(var, n.type) repeat
-        n.type := substitute(n.type, var, alias)
-        debug (["Rewrote" :: PF, n.index :: PF, "with" :: PF,
-                brace spaces [var :: PF, "=>" :: PF, alias :: PF]])
-      debug ["Removing" :: PF, bold(var :: PF), "type variable." :: PF]
-      remove!(var, x.m_typevars)
-
-    limitTypeVar! (x : %, var : TV, terms : List(N)) : Boolean ==
-      debug(["Modyfing" :: PF, bold(var :: PF), "type variable with" :: PF,
-             bracket [bold(t :: PF) for t in terms]])
-      -- 1) typevars(%x) = [?]
-      unknownType? (x.m_typevars)(var) =>
-        -- a) %x = %y => alias removal
-        -- b) %x = [t1, t2, t3, ...]
-        if aliasType? terms
-          then removeAlias!(x, var, first terms)
-          else (x.m_typevars)(var) := terms
-        true
-      -- 2) typevars(%x) = [s1, s2, s3, ...], %x = [t1, t2, t3, ...]
-      -- Unify proposed values with already stored in the variable
-      -- store only matching ones (without performing substitutions).
-      ms := findMatches((x.m_typevars)(var), terms)
-      not empty? ms.terms =>
-        (x.m_typevars)(var) := ms.terms
-        true
-      -- Unification failed, as a last resort use subtyping.
-      for term in terms repeat
-        for t in (x.m_typevars)(var) repeat
-          if not isSubType(t, term) then
-            return false
-      (x.m_typevars)(var) := terms
-      true
-
-    limitTypeVar! (x : %, substitutions : SUBST) : Boolean ==
-      empty? substitutions => true
-      "and"/[limitTypeVar!(x, s.key, s.entry) for s in entries substitutions]
-
-    nodesTypeMatch! (x : %, ln : TN, rn : TN) : Boolean ==
-      -- %a[?] ~ %b[?]
-      hasUnknownType?(x, ln) and hasUnknownType?(x, rn) =>
-        ures := unifyType(ln.type, rn.type)
-        failed? ures => false
-        limitTypeVar!(x, ures :: SUBST)
-      -- %a[?] ~ (%b[t1, t2, ...] | T)
-      hasUnknownType?(x, ln) and not hasUnknownType?(x, rn) =>
-        limitTypeVar!(x, ln.type :: TV, [rn.type])
-      -- (%a[t1, t2, ...] | T) ~ %b[?]
-      not hasUnknownType?(x, ln) and hasUnknownType?(x, rn) =>
-        limitTypeVar!(x, rn.type :: TV, [ln.type])
-      -- (%a[t1, t2, ...] | T) ~ (%b[s1, s2, ...] | S)
-      ms := findMatches(typeOf(x, ln), typeOf(x, rn))
-      empty? ms.terms => false
-      if not aliasType? ms.terms then
-        setTypeOf!(x, ln, ms.terms)
-        setTypeOf!(x, rn, ms.terms)
-      limitTypeVar!(x, ms.subst)
-
-    limitNodeType! (x : %, n : TN, types : List(N)) : Boolean ==
-      -- %a[?] ~ [s1, s2, ...]
-      hasUnknownType?(x, n) =>
-        limitTypeVar!(x, n.type :: TV, types)
-      -- (%a[t1, t2, ...] | T) ~ [s1, s2, ...]
-      ms := findMatches(typeOf(x, n), types)
-      empty? ms.terms => false
-      if not aliasType? ms.terms then
-        setTypeOf!(x, n, ms.terms)
-      limitTypeVar!(x, ms.subst)
-
-    -- With limited knowledge this routine tries to constraint types in given
-    -- nodes to pairs which are (possibly) in subtyping relation.
-    nodeSubType! (x : %, sn : TN, tn : TN) : Boolean ==
-      -- In both cases we can assume nothing...
-      -- a) {%s[s1, s2, ...] | S} <: {%t[?]}
-      -- b) {%s[?]} <: {%t[t1, t2, ...] | T}
-      hasUnknownType?(x, sn) or hasUnknownType?(x, tn) => true
-      -- We're left with: {%s[s1, s2, ...] | S} <: {%t[t1, t2, ...] | T}
-      sl : List(N) := []
-      tl : List(N) := []
-      -- In %s and %t there are usually some type variables. We could
-      -- start normalizing terms to find out what's their exact structure, but
-      -- I consider it to be dangerous. Deal with them later...
-      sl := concat([s for s in typeOf(x, sn) | unbound? s], sl)
-      tl := concat([t for t in typeOf(x, tn) | unbound? t], tl)
-      -- With terms of known structure we can deal quite well.
-      for s in typeOf(x, sn) | not unbound? s repeat
-        for t in typeOf(x, tn) | not unbound? t repeat
-          if isSubType(s, t) then
-            sl := [s, :sl]
-            tl := [t, :tl]
-      empty? sl or empty? tl => false
-      setTypeOf!(x, sn, removeDuplicates sl)
-      setTypeOf!(x, sn, removeDuplicates tl)
-      true
-
-    nodeSubTypeOfList! (x : %, sn : TN, types : List(N)) : Boolean ==
-      -- {%s[?]} <: [t1, t2, ...]
-      hasUnknownType?(x, sn) => false
-      -- {%s[s1, s2, ...] | S} <: [t1, t2, ...]
-      sl : List(N) := []
-      for s in typeOf(x, sn) repeat
-        for t in types repeat
-          if isSubType(s, t) then
-            sl := [s, :sl]
-      empty? sl => false
-      setTypeOf!(x, sn, removeDuplicates sl)
-      true
-
-    coerce (x : %) : PF ==
-      pns := pile concat("Nodes :" :: PF, [n :: PF for n in entries x.m_nodes])
-      ptvs :=
-        empty? x.m_typevars =>
-          "No type variables!" :: PF
-        pss : List(PF) := []
-        for e in entries x.m_typevars repeat
-          (var, types) := (e.key, e.entry)
-          pt :=
-            #types = 1 => (first types) :: PF
-            bracket [t :: PF for t in types]
-          ps := spaces [right(6, var :: PF), ":" :: PF, pt]
-          pss := [ps, :pss]
-        pile concat("Type variables :" :: PF, pss)
-      vconcat [pns, ptvs]
-
 )abbrev package STFITS SpadTreeFillInTypes
 SpadTreeFillInTypes(findTypeNode : (PI, PI) -> TN) : SpadTreeWalkerCategory == Implementation where
-  STNACAT ==> SpadTypeNodeArrayCategory
   PF ==> PrintableForm
   PI ==> PositiveInteger
   N ==> SpadNode
@@ -547,21 +73,21 @@ SpadTypeTreeChecker() : Exports == Implementation where
   SUBST ==> AssociationList(TV, List(N))
   URES ==> Union(SUBST, "failed")
 
-  TNA ==> SpadTypeNodeArray
+  TT ==> SpadTypeTree
   TN ==> SpadTypeNode
   TR ==> SpadTypeRule
 
   Exports ==> with
-    walk : TNA -> Boolean
+    walk : TT -> Boolean
 
   Implementation ==> add
     import Logger('Check)
     import TypeUnifier
     import SpadNodeFactory
     import SpadTypeNode
-    import SpadTypeNodeArray
+    import SpadTypeTree
 
-    evalApply(r : APP, n : TN, x : TNA) : Boolean ==
+    evalApply(r : APP, n : TN, x : TT) : Boolean ==
       nfun := node(x, r.function) -- function node
       nargs := [node(x, arg) for arg in r.args] -- argument nodes
 
@@ -613,11 +139,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
       limitNodeType!(x, n, [mt.result for mt in mappings]) 
       true
 
-    evalAssign(r : ASS, n : TN, x : TNA) : Boolean ==
+    evalAssign(r : ASS, n : TN, x : TT) : Boolean ==
       ln := node(x, r.lval) -- left node
       rn := node(x, r.rval) -- right node
       -- a) {%s[?]} := {%t[t1, t2, ...] | T}
-      -- given a type information flows from nodes above during TNA
+      -- given a type information flows from nodes above during TT
       -- construction and we don't know anything, let's accept types
       -- from below
       hasUnknownType?(x, ln) => limitNodeType!(x, ln, [rn.type])
@@ -629,7 +155,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       not nodeSubType!(x, rn, ln) and not nodesTypeMatch!(x, ln, rn) => false
       limitNodeType!(x, n, [ln.type])
 
-    evalCondExpr(r : CE, n : TN, x : TNA) : Boolean ==
+    evalCondExpr(r : CE, n : TN, x : TT) : Boolean ==
       cn := node(x, r.cond) -- condition node
       tn := node(x, r.truebr) -- true branch node
       fn := node(x, r.falsebr) -- false branch node
@@ -644,16 +170,16 @@ SpadTypeTreeChecker() : Exports == Implementation where
         true
       false
 
-    evalSubType(r : TE, n : TN, x : TNA) : Boolean ==
+    evalSubType(r : TE, n : TN, x : TT) : Boolean ==
       n1 := node(x, r.expr)
       n2 := node(x, r.type)
       nodeSubType!(x, n1, n2)
 
-    evalTypeOrigin(r : TE, n : TN, x : TNA) : Boolean ==
+    evalTypeOrigin(r : TE, n : TN, x : TT) : Boolean ==
       fun := node(x, r.expr)
       limitNodeType!(x, n, [fun.type])
 
-    evalCapsule(r : SEQ, n : TN, x : TNA) : Boolean ==
+    evalCapsule(r : SEQ, n : TN, x : TT) : Boolean ==
       items := r.list
       types : List(N) := []
       for item in items repeat
@@ -665,7 +191,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
     -- evaluates single rule; note that it can happen that nothing was changed
     -- even if no type error was detected (result "true" means yes or maybe)
-    evalFormula(f : N, n : TN, x : TNA) : Boolean ==
+    evalFormula(f : N, n : TN, x : TT) : Boolean ==
       emptyNode? f => true
       nodeRef? f => true
 
@@ -682,7 +208,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       fail ["evalFormula: case not handled for" :: PF, f :: PF]
       error "Internal error!"
 
-    evalAnyRule(n : TN, x : TNA) : Boolean ==
+    evalAnyRule(n : TN, x : TT) : Boolean ==
       rules := n.rules
       empty? rules => true
       while not empty? rules repeat
@@ -696,7 +222,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       n.rules := rules
       true
 
-    checkAndMarkIfDone! (x : TNA, n : TN) : Boolean ==
+    checkAndMarkIfDone! (x : TT, n : TN) : Boolean ==
       unbound? n.type => false
       if not empty? n.rules then
         -- We only care about first rule, because it produced actual solution.
@@ -712,7 +238,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         n.node := rule.solution
       done! n; true
 
-    countProgress (x : TNA) : Record(a : NNI, b : NNI) ==
+    countProgress (x : TT) : Record(a : NNI, b : NNI) ==
       -- a = number of type variables and nodes to be processed
       --     (empty type variable counts twice)
       -- b = sum of types assigned to each type variable
@@ -724,7 +250,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
           else p.b := p.b + #typeOf(x, n)
       p
 
-    walkPostOrder(n : TN, x : TNA) : List(TN) ==
+    walkPostOrder(n : TN, x : TT) : List(TN) ==
       lst := [walkPostOrder(node(x, i), x) for i in references(n)]
       "concat"/concat(lst, [n])
 

@@ -127,7 +127,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
   ENV ==> SpadEnvironment
   TN ==> SpadTypeNode
   TR ==> SpadTypeRule
-  CTX ==> SpadTypeNodeArray
+  CTX ==> SpadTypeTree
 
   Exports ==> with
     walk : (N, CTX, ENV) -> TN
@@ -335,7 +335,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       for candidate in candidateList repeat
         info ["Assume" :: PF, fn.name :: PF, "has type :" :: PF, candidate :: PF]
 
-        ctx' : TNA := []
+        ctx' : TT := []
         env' := env
 
         this := addNode!(ctx', [fn], env)

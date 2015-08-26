@@ -16,7 +16,7 @@ SpadCompilerTest() : Exports == Implementation where
     import Printer 
     import SpadNode
     import SpadTreeMacroExpander
-    import SpadTypeNodeArray
+    import SpadTypeTree
     import MainLogger
     import Logger('Main)
 
@@ -56,7 +56,7 @@ SpadCompilerTest() : Exports == Implementation where
       root := rewrite(root) $ SpadMacroExpander
 
       notice pile ["Tree ready for type checking:" :: PF, root :: PF]
-      ctx : SpadTypeNodeArray := [1]
+      ctx : SpadTypeTree := [1]
       env : SpadEnvironment := new ()
       tree := walk(root, ctx, env) $ SpadTypeTreeCreator
 

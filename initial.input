@@ -8,8 +8,9 @@
 )compile TypeUnifier.spad
 )compile TypeEvaluator.spad
 )compile SpadEnvironment.spad
-)compile SpadTypeChecker.spad
+)compile SpadTypeTree.spad
 )compile SpadTypeTreeCreator.spad
+)compile SpadTypeChecker.spad
 )compile SpadCompilerPasses.spad
 )compile SpadCompilerTest.spad
 
