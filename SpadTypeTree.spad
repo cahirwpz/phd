@@ -190,10 +190,8 @@ SpadTypeTree() : Exports == Implementation where
 
     root : % -> TN
     node : (%, NR) -> TN
-    node : (%, N) -> TN
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
-    killNode! : (%, NR) -> Void
     killNode! : (%, TN) -> Void
     typeOf : (%, TN) -> List(N)
     hasUnknownType? : (%, TN) -> Boolean
@@ -236,13 +234,9 @@ SpadTypeTree() : Exports == Implementation where
     root x ==
       x.m_nodes.1
 
-    node (x : %, nr : NR) ==
+    node (x, nr) ==
       nr.major ~= x.m_major => error "BUG: dereferenced wrong TNA!"
       (x.m_nodes)(nr.minor)
-
-    node (x : %, n : N) ==
-      not nodeRef? n => error "BUG: nodeRef expected!"
-      node(x, n :: NR)
 
     addNode! (x, n, env) ==
       tn := addNode!(x, n)
@@ -254,9 +248,6 @@ SpadTypeTree() : Exports == Implementation where
       concat!(x.m_nodes, tn)
       x.m_minorNR := x.m_minorNR + 1
       tn
-
-    killNode! (x : %, nr : NR) ==
-      killNode!(x, node(x, nr))
 
     killNode! (x : %, n : TN) ==
       info ["Killing" :: PF, n.index :: PF, "node!" :: PF]

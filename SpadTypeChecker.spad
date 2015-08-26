@@ -88,8 +88,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
     import SpadTypeTree
 
     evalApply(r : APP, n : TN, x : TT) : Boolean ==
-      nfun := node(x, r.function) -- function node
-      nargs := [node(x, arg) for arg in r.args] -- argument nodes
+      nfun := node(x, r.function :: NR) -- function node
+      nargs := [node(x, arg :: NR) for arg in r.args] -- argument nodes
 
       sigs : List(N) := []
       substList : List(SUBST) := []
@@ -140,8 +140,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
       true
 
     evalAssign(r : ASS, n : TN, x : TT) : Boolean ==
-      ln := node(x, r.lval) -- left node
-      rn := node(x, r.rval) -- right node
+      ln := node(x, r.lval :: NR) -- left node
+      rn := node(x, r.rval :: NR) -- right node
       -- a) {%s[?]} := {%t[t1, t2, ...] | T}
       -- given a type information flows from nodes above during TT
       -- construction and we don't know anything, let's accept types
@@ -156,9 +156,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
       limitNodeType!(x, n, [ln.type])
 
     evalCondExpr(r : CE, n : TN, x : TT) : Boolean ==
-      cn := node(x, r.cond) -- condition node
-      tn := node(x, r.truebr) -- true branch node
-      fn := node(x, r.falsebr) -- false branch node
+      cn := node(x, r.cond :: NR) -- condition node
+      tn := node(x, r.truebr :: NR) -- true branch node
+      fn := node(x, r.falsebr :: NR) -- false branch node
       not limitNodeType!(x, cn, [booleanType]) => false
       nodeSubType!(x, tn, n) and nodeSubType!(x, fn, n) => true
       nodesTypeMatch!(x, n, tn) and nodesTypeMatch!(x, n, fn) => true
@@ -171,19 +171,19 @@ SpadTypeTreeChecker() : Exports == Implementation where
       false
 
     evalSubType(r : TE, n : TN, x : TT) : Boolean ==
-      n1 := node(x, r.expr)
-      n2 := node(x, r.type)
+      n1 := node(x, r.expr :: NR)
+      n2 := node(x, r.type :: NR)
       nodeSubType!(x, n1, n2)
 
     evalTypeOrigin(r : TE, n : TN, x : TT) : Boolean ==
-      fun := node(x, r.expr)
+      fun := node(x, r.expr :: NR)
       limitNodeType!(x, n, [fun.type])
 
     evalCapsule(r : SEQ, n : TN, x : TT) : Boolean ==
       items := r.list
       types : List(N) := []
       for item in items repeat
-        tn := node(x, item)
+        tn := node(x, item :: NR)
         not done? tn => return true
         if function? tn.node then
           types := [nodeNamedType((tn.node :: FN).name, tn.type), :types]
@@ -218,7 +218,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       empty? rules => false
       -- Immediately remove rules that fail to apply.
       for victim in setDifference(references n.rules, references rules) repeat
-        killNode!(x, victim)
+        killNode!(x, node(x, victim))
       n.rules := rules
       true
 
@@ -228,13 +228,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
         -- We only care about first rule, because it produced actual solution.
         rule := first n.rules
         for ref in references rule repeat
-          cn := node(x, ref)
+          cn := node(x, ref :: NR)
           import? cn.node or typeDecl? cn.node => "iterate"
           if unbound? cn.type then
             return false
         -- Remove leftovers from other alternative rules.
         for victim in setDifference(references n.rules, references rule) repeat
-          killNode!(x, victim)
+          killNode!(x, node(x, victim))
         n.node := rule.solution
       done! n; true
 
