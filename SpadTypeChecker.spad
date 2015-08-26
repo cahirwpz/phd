@@ -507,8 +507,8 @@ SpadTreeFillInTypes(findTypeNode : (PI, PI) -> TN) : SpadTreeWalkerCategory == I
                            cons(rewrite arg, [rewrite a for a in rest app.args]))
       nodeApp(rewrite app.function, [rewrite a for a in app.args])
 
-    rewrite (nr : NR) : N ==
-      tn := findTypeNode(nr.major :: PI, nr.minor :: PI)
+    rewrite (tv : TV) : N ==
+      tn := findTypeNode(tv.major :: PI, tv.minor :: PI)
       t := tn.type
       typeOrigin? t =>
         te := coerce(t)@TE
@@ -518,9 +518,9 @@ SpadTreeFillInTypes(findTypeNode : (PI, PI) -> TN) : SpadTreeWalkerCategory == I
         te.type
       t
 
-    rewrite (tv : TV) : N ==
-      tn := findTypeNode(tv.major :: PI, tv.minor :: PI)
-      tn.node = [tv] =>
+    rewrite (nr : NR) : N ==
+      tn := findTypeNode(nr.major :: PI, nr.minor :: PI)
+      tn.node = [nr] =>
         fail pile ["Self reference detected:" :: PF, tn :: PF]
         error ""
       rewrite tn.node
