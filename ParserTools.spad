@@ -29,6 +29,7 @@ ParserTools() : with
     mapping? : SExpression -> Boolean
     marker? : SExpression -> Boolean
     nobranch? : SExpression -> Boolean
+    noderef? : SExpression -> Boolean
     package? : SExpression -> Boolean
     pretend? : SExpression -> Boolean
     progn? : SExpression -> Boolean
@@ -41,6 +42,7 @@ ParserTools() : with
     signature? : SExpression -> Boolean
     step? : SExpression -> Boolean
     tuple? : SExpression -> Boolean
+    typevar? : SExpression -> Boolean
     union? : SExpression -> Boolean
     var? : SExpression -> Boolean
     where? : SExpression -> Boolean
@@ -102,7 +104,8 @@ ParserTools() : with
     loop? ex == list_of_ge?(ex, 'REPEAT, 3)
     macro? ex == list_of_eq?(ex, 'MDEF, 5)
     mapping? ex == list_of_ge?(ex, 'Mapping, 2)
-    marker? ex == list_of_eq?(ex, '_@Marker, 3)
+    marker? ex == list_of_eq?(ex, '_@Marker, 2)
+    noderef? ex == list_of_eq?(ex, '_@NodeRef, 3)
     package? ex == list_of_ge?(ex, 'CATEGORY, 2) and symbol ex.2 = 'package
     pretend? ex == list_of_eq?(ex, 'pretend, 3)
     progn? ex == list_of_ge?(ex, 'PROGN, 2)
@@ -115,6 +118,7 @@ ParserTools() : with
     signature? ex == list_of_eq?(ex, 'SIGNATURE, 3) or list_of_eq?(ex, 'SIGNATURE, 4)
     step? ex == list_of_eq?(ex, 'STEP, 4) or list_of_eq?(ex, 'STEP, 5)
     tuple? ex == list_of_ge?(ex, '_@Tuple, 3)
+    typevar? ex == list_of_eq?(ex, '_@TypeVar, 3)
     union? ex == list_of_ge?(ex, 'Union, 3)
     var? ex == list_of_eq?(ex, ':, 3)
     where? ex == list_of_eq?(ex, 'where, 3)

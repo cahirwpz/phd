@@ -7,29 +7,30 @@ TypeUnifier() : Exports == Implementation where
   CE ==> SpadCondExpr(N)
   MT ==> SpadMappingType(N)
   NT ==> SpadNamedType(N)
-  MR ==> SpadMarker(N)
+  NR ==> SpadNodeRef(N)
   SEQ ==> SpadSequence(N)
   RT ==> SpadRecordType(N)
   TE ==> SpadTypeExpr(N)
+  TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
   SEQ ==> SpadSequence(N)
   FT ==> SpadFunctor(N)
   FN ==> SpadFunction(N)
-  SUBST ==> AssociationList(MR, List(N))
+  SUBST ==> AssociationList(TV, List(N))
   P ==> Record(t1 : N, t2 : N)
   URES ==> Union(SUBST, "failed")
 
   Exports ==> with
     failed? : URES -> Boolean 
 
-    occurs? : (MR, N) -> Boolean
+    occurs? : (TV, N) -> Boolean
     unbound? : N -> Boolean
     containsWildcard? : N -> Boolean
 
-    freeVars : N -> List(MR)
-    refList : N -> List(MR)
+    freeVars : N -> List(TV)
+    refList : N -> List(NR)
 
-    substitute : (N, MR, N) -> N
+    substitute : (N, TV, N) -> N
     substitute : (N, SUBST) -> N
 
     coerce : SUBST -> PF
@@ -84,7 +85,7 @@ TypeUnifier() : Exports == Implementation where
         te := n :: TE
         occurs?(tvar, te.expr) or occurs?(tvar, te.type)
       typeVar? n =>
-        (n :: MR) = tvar
+        (n :: TV) = tvar
 
       fail ["occurs?: case not handled for" :: PF, n :: PF]
       error ""
@@ -177,7 +178,7 @@ TypeUnifier() : Exports == Implementation where
       unionType? n =>
         ut := n :: UT
         removeDuplicates("concat"/[freeVars i for i in ut.variants])
-      typeVar? n => [n :: MR]
+      typeVar? n => [n :: TV]
       typeExpr? n =>
         te := n :: TE
         removeDuplicates(concat(freeVars te.type, freeVars te.expr))
@@ -185,12 +186,12 @@ TypeUnifier() : Exports == Implementation where
       fail ["freeVars: case not handled for" :: PF, n :: PF]
       error ""
 
-    refListRec(n : N) : List(MR) ==
+    refListRec(n : N) : List(NR) ==
       import List(N)
 
       emptyNode? n => []
       symbol? n => []
-      nodeRef? n => [n :: MR]
+      nodeRef? n => [n :: NR]
       
       apply? n =>
         app := n :: APP
@@ -214,7 +215,7 @@ TypeUnifier() : Exports == Implementation where
     refList n ==
       removeDuplicates(refListRec n)
 
-    substitute(n : N, var : MR, term : N) : N ==
+    substitute(n : N, var : TV, term : N) : N ==
       emptyNode? n => n
       integer? n => n
       string? n => n
@@ -249,7 +250,7 @@ TypeUnifier() : Exports == Implementation where
         type := substitute(te.type, var, term)
         nodeTypeExpr(te.kind, expr, type)
       typeVar? n =>
-        if (n :: MR) = var then term else n
+        if (n :: TV) = var then term else n
       condExpr? n =>
         ce := n :: CE
         cond := substitute(ce.cond, var, term)
@@ -305,19 +306,19 @@ TypeUnifier() : Exports == Implementation where
     unifyType'(n1 : N, n2 : N) : URES ==
       -- left or right node is a type variable => just generate a substitution
       typeVar? n1 and typeVar? n2 =>
-        mr1 := n1 :: MR
-        mr2 := n2 :: MR
-        mr1 = mr2 => [[]]
+        tv1 := n1 :: TV
+        tv2 := n2 :: TV
+        tv1 = tv2 => [[]]
         -- always substitute newer variable with older one to avoid (?) cycles
-        if mr1.path > mr2.path
-          then [[[mr1, [n2]]]]
-          else [[[mr2, [n1]]]]
+        if tv1 < tv2
+          then [[[tv1, [n2]]]]
+          else [[[tv2, [n1]]]]
       typeVar? n1 =>
-        occurs? (n1 :: MR, n2) => "failed"
-        [[[n1 :: MR, [n2]]]]
+        occurs? (n1 :: TV, n2) => "failed"
+        [[[n1 :: TV, [n2]]]]
       typeVar? n2 =>
-        occurs? (n2 :: MR, n1) => "failed"
-        [[[n2 :: MR, [n1]]]]
+        occurs? (n2 :: TV, n1) => "failed"
+        [[[n2 :: TV, [n1]]]]
 
       -- type wildcard found? => leave without generating a substitution
       typeAny? n1 or typeAny? n2 => [[]]

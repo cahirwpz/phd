@@ -4,11 +4,13 @@ SpadNodeFactory() : Exports == Implementation where
   MP ==> SpadMarkerPath
   N ==> SpadNode
   MR ==> SpadMarker(N)
-  NT ==> SpadNamedType(N)
   MT ==> SpadMappingType(N)
+  NR ==> SpadNodeRef(N)
+  NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
   UT ==> SpadUnionType(N)
   TE ==> SpadTypeExpr(N)
+  TV ==> SpadTypeVar(N)
   mt ==> nodeMappingType
 
   Exports ==> with
@@ -24,8 +26,10 @@ SpadNodeFactory() : Exports == Implementation where
     typeAny : () -> N
     typeUndef : () -> N
     typeVar : () -> N
-    typeVar : MP -> N
-    typeVar : List(PI) -> N
+    typeVar : PI -> N
+    typeVar : (PI, PI) -> N
+
+    nodeRef : (PI, PI) -> N
 
     stripOriginIfCan : N -> N
 
@@ -42,11 +46,13 @@ SpadNodeFactory() : Exports == Implementation where
     voidType () == nodeApp(['Void], [])
     categoryType () == nodeApp(['Category], [])
 
-    typeAny() == [['typeany]$MR]
-    typeUndef() == [['typeundef]$MR]
-    typeVar() == [['typevar]$MR]
-    typeVar(path : MP) == [['typevar, path]$MR]
-    typeVar(li : List(PI)) == [['typevar, [li]]$MR]
+    typeAny() == [["%any"]$MR]
+    typeUndef() == [["%undef"]$MR]
+    typeVar() == [[0, 0]$TV]
+    typeVar(j) == [[0, j]$TV]
+    typeVar(i, j) == [[i, j]$TV]
+
+    nodeRef(i, j) == [[i, j]$NR]
 
     stripOriginIfCan t ==
       (typeOrigin? t => (t :: TE).expr; t)
@@ -81,4 +87,3 @@ SpadNodeFactory() : Exports == Implementation where
           funs := [['construct, mt([v], n)], 
                    ['coerce, mt([n], v)], :funs]
       funs
-

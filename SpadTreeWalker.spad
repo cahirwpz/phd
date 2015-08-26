@@ -12,12 +12,14 @@ SpadTreeWalkerCategory() : Category == Definition where
   LP ==> SpadLoop(N)
   M ==> SpadMacro(N)
   MR ==> SpadMarker(N)
+  NR ==> SpadNodeRef(N)
   MT ==> SpadMappingType(N)
   NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
   TE ==> SpadTypeExpr(N)
+  TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
   W ==> SpadWhere(N)
 
@@ -37,12 +39,14 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : MR -> N
       rewrite : MT -> N
       rewrite : NT -> N
+      rewrite : NR -> N
       rewrite : RT -> N
       rewrite : SEG -> N
       rewrite : SEQ -> N
       rewrite : String -> N
       rewrite : Symbol -> N
       rewrite : TE -> N
+      rewrite : TV -> N
       rewrite : UT -> N
       rewrite : W -> N
       rewrite : N -> N 
@@ -88,6 +92,8 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite (mr : MR) : N == [mr]
 
+      rewrite (nr : NR) : N == [nr]
+
       rewrite (mt : MT) : N ==
         nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.result)
 
@@ -110,6 +116,8 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (te : TE) : N ==
         nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
 
+      rewrite (tv : TV) : N == [tv]
+
       rewrite (ut : UT) : N ==
         nodeUnionType([rewrite v for v in ut.variants])
 
@@ -130,12 +138,14 @@ SpadTreeWalkerCategory() : Category == Definition where
         mappingType? n => rewrite (n :: MT)
         marker? n => rewrite(n :: MR)
         namedType? n => rewrite (n :: NT)
+        nodeRef? n => rewrite (n :: NR)
         recordType? n => rewrite (n :: RT)
         segment? n => rewrite (n :: SEG)
         sequence? n => rewrite (n :: SEQ)
         string? n => rewrite (n :: String)
         symbol? n => rewrite (n :: Symbol)
         typeExpr? n => rewrite (n :: TE)
+        typeVar? n => rewrite (n :: TV)
         unionType? n => rewrite (n :: UT)
         where? n => rewrite (n :: W)
         -- skip integer, float and empty node

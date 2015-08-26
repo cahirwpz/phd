@@ -98,6 +98,8 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
+  PF ==> PrintableForm
+
   N ==> SpadNode
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
@@ -105,26 +107,27 @@ SpadTypeTreeCreator() : Exports == Implementation where
   FN ==> SpadFunction(N)
   FT ==> SpadFunctor(N)
   IM ==> SpadImport(N)
-  LAM ==> SpadLambda(N)
   IT ==> SpadIterator(N)
+  LAM ==> SpadLambda(N)
   LP ==> SpadLoop(N)
-  M ==> SpadMacro(N)
   MT ==> SpadMappingType(N)
+  M ==> SpadMacro(N)
+  NR ==> SpadNodeRef(N)
   NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
   TE ==> SpadTypeExpr(N)
+  TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
   W ==> SpadWhere(N)
-  MR ==> SpadMarker(N)
+
+  SUBST ==> AssociationList(TV, List(N))
 
   ENV ==> SpadEnvironment
   TN ==> SpadTypeNode
   TR ==> SpadTypeRule
   CTX ==> SpadTypeNodeArray
-  SUBST ==> AssociationList(MR, List(N))
-  PF ==> PrintableForm
 
   Exports ==> with
     walk : (N, CTX, ENV) -> TN
@@ -208,7 +211,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         item.type := var
         constructSig :=
           nodeMappingType([var for i in 1..#a.args], nodeApp(['List], [var]))
-        addType!(ctx, funExpr.type :: MR, constructSig)
+        addType!(ctx, funExpr.type :: TV, constructSig)
         this.rules := [ruleApply(funExpr, argExprList, [item]), :this.rules]
       else
         this.rules := [ruleApply(funExpr, argExprList), :this.rules]
@@ -642,7 +645,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
             ftorArgTypeNode.type := addTypeVar!(ctx, [ftorArgType])
 
             ftorArg := addTypeVar!(ctx)
-            ftorArgRenames(origFtorArg :: MR) := [ftorArg]
+            ftorArgRenames(origFtorArg :: TV) := [ftorArg]
 
             ftorArgNode := addNode!(ctx, ftorArg, env)
             ftorArgNode.type := ftorArg

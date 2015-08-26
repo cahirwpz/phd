@@ -10,18 +10,16 @@ SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
       r case "failed" => [s]
       r.entry
 
-)abbrev package STMSETV SpadTreeMarkerSetVersion
-SpadTreeMarkerSetVersion(newver : NNI) : WALKER == Implementation where
+)abbrev package STTVSM SpadTreeTypeVarSetMajor
+SpadTreeTypeVarSetMajor(major : NNI) : WALKER == Implementation where
   N ==> SpadNode
-  MR ==> SpadMarker(N)
-  NNI ==> NonNegativeInteger
+  NNI ==> NonNegativeInteger 
+  TV ==> SpadTypeVar(N)
   WALKER ==> SpadTreeWalkerCategory 
 
   Implementation ==> add
-    rewrite (mr : MR) : N ==
-      if mr.kind = 'typevar then
-        mr := ['typevar, mr.path]
-      [mr]
+    rewrite (tv : TV) : N ==
+      nodeTypeVar(major, tv.minor)
 
 )abbrev package FLATDBT FlattenDatabaseType
 FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
@@ -80,14 +78,14 @@ SpadTypeInfo() : Exports == Implementation where
   PI ==> PositiveInteger
   N ==> SpadNode
   APP ==> SpadApply(N)
-  MR ==> SpadMarker(N)
-  TE ==> SpadTypeExpr(N)
   MT ==> SpadMappingType(N)
   NT ==> SpadNamedType(N)
   SEQ ==> SpadSequence(N)
+  TE ==> SpadTypeExpr(N)
+  TV ==> SpadTypeVar(N)
   CACHE ==> AssociationList(APP, %)
   DAASE ==> AssociationList(Symbol, %)
-  SUBST ==> AssociationList(MR, List(N))
+  SUBST ==> AssociationList(TV, List(N))
 
   Exports ==> CoercibleTo(PF) with
     typeInfo : (Symbol, List TE, List N, List N, SEQ) -> %
@@ -215,18 +213,18 @@ SpadTypeInfo() : Exports == Implementation where
       ++ "#1" => "%1", "#2" => "%2", ...
       for i in 1..#cmm.args repeat
         s := mkvar("#", string i)
-        v := typeVar [i :: PI]
+        v := typeVar(i :: PI)
         ctx(s) := v
       ++ "t#1" => "%1", "t#2" => "%2", ...
       for arg in cmm.args for i in 1.. repeat
         s := mkvar("t", string arg.name)
-        v := typeVar [i :: PI]
+        v := typeVar(i :: PI)
         ctx(s) := v
 
       ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
       ++ change name.
       types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
-      args := [[':, typeVar [i :: PI], typ]$TE for typ in types for i in 1..]
+      args := [[':, typeVar(i :: PI), typ]$TE for typ in types for i in 1..]
       body := (cat? => getCtorCategory(t); cmm.type)
 
       body := nodeSeq((cat? => "Join"; "Domain"),
@@ -236,8 +234,8 @@ SpadTypeInfo() : Exports == Implementation where
 
       typeInfo(cmm.name, args, [], [], body :: SEQ)
 
-    DelVer := SpadTreeMarkerSetVersion(0)
-    AddVer := SpadTreeMarkerSetVersion(1)
+    DelVer := SpadTreeTypeVarSetMajor(0)
+    AddVer := SpadTreeTypeVarSetMajor(1)
 
     apply(ti : %, values : List(N)) : % ==
       before := bold hconcat [ti.name :: PF, paren [arg :: PF for arg in ti.args]]
@@ -401,7 +399,7 @@ SpadTypeInfo() : Exports == Implementation where
           app.function = [ti.name] => ti -- will have to investigate that
           getTypeInfo(app)
         t0 = typeVar() => ti
-        typeVar?(t0) => return false
+        typeVar? t0 => return false
         fail [te :: PF]
         error "Not handled!"
 
@@ -421,7 +419,7 @@ SpadTypeInfo() : Exports == Implementation where
           if typeOrigin? n then
             n := (n :: TE).expr
           not namedType? n => "iterate"
-          n := substitute(n, typeVar() :: MR, t0)
+          n := substitute(n, typeVar() :: TV, t0)
           if n = t1 then
             return true
         false
@@ -525,7 +523,7 @@ TypeEvaluatorTest() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   NT ==> SpadNamedType(N)
-  MR ==> SpadMarker(N)
+  TV ==> SpadTypeVar(N)
   FN ==> SpadFunction(N)
   TI ==> SpadTypeInfo
 
