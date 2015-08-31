@@ -166,7 +166,6 @@ SpadNodeRef(N : SpadNodeCategory) : Exports == Implementation where
 
 )abbrev domain STYPEVAR SpadTypeVar
 SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
-  PI ==> PositiveInteger
   NNI ==> NonNegativeInteger
   PF ==> PrintableForm
 
@@ -181,7 +180,7 @@ SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
 
     import ParserTools
 
-    construct(i, j) == [i, j]$Rep
+    construct(ma, mi) == [ma, mi]$Rep
 
     elt(x, "major") == x.m_major
     elt(x, "minor") == x.m_minor
@@ -190,7 +189,7 @@ SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
       [(integer ex.2) :: NNI, (integer ex.3) :: NNI]
 
     convert x ==
-      convert [convert("@TypeVar" :: Symbol), convert x.m_major, convert x.m_minor]
+      convert [convert('_@TypeVar), convert x.m_major, convert x.m_minor]
 
     coerce (x : %) : PF ==
       x.m_major = 0 and x.m_minor = 0 => "%" :: PF

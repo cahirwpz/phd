@@ -1,12 +1,9 @@
 )abbrev domain STRULE SpadTypeRule
 SpadTypeRule() : Exports == Implementation where
   N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
   CE ==> SpadCondExpr(N)
   NR ==> SpadNodeRef(N)
   TV ==> SpadTypeVar(N)
-  TE ==> SpadTypeExpr(N)
   SEQ ==> SpadSequence(N)
 
   PF ==> PrintableForm
@@ -64,7 +61,6 @@ SpadTypeNode() : Exports == Implementation where
   ENV ==> SpadEnvironment
   N ==> SpadNode
   NR ==> SpadNodeRef(N)
-  TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   FN ==> SpadFunction(N)
   SUBST ==> AssociationList(TV, List(N))
@@ -158,6 +154,104 @@ SpadTypeNode() : Exports == Implementation where
         bold yellow("?" :: PF)
       spaces [prefix, pn, ":" :: PF, bold (x.m_type :: PF)]
 
+)abbrev category STTCAT SpadTypeTreeCategory
+SpadTypeTreeCategory() : Category == Definition where
+  PF ==> PrintableForm
+  TN ==> SpadTypeNode
+
+  Definition ==> CoercibleTo(PF) with
+    registerNode! : (%, TN) -> Void
+    unregisterNode! : (%, TN) -> Void
+
+)abbrev package STNARR SpadTypeNodeArray
+SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
+  PI ==> PositiveInteger
+  PF ==> PrintableForm
+
+  N ==> SpadNode
+  NR ==> SpadNodeRef(N)
+  TV ==> SpadTypeVar(N)
+
+  ENV ==> SpadEnvironment
+  TN ==> SpadTypeNode
+  TR ==> SpadTypeRule
+
+  Exports ==> CoercibleTo(PF) with
+    construct : (TT, PI) -> %
+
+    root : % -> TN
+    node : (%, PI) -> TN
+    members : % -> List(TN)
+    addNode! : (%, N) -> TN
+    addNode! : (%, N, ENV) -> TN
+    killNode! : (%, TN) -> Void
+    rewriteNodes! : (%, TV, N) -> Void
+
+    listTypeVars : % -> List(TV)
+    listPostOrder : % -> List(TN)
+
+  Implementation ==> add
+    Rep := Record(m_tree : TT,
+                  m_major : PI,
+                  m_nodes : FlexibleArray(TN))
+
+    import SpadNode
+    import SpadNodeFactory
+    import TypeUnifier
+    import Printer
+    import Logger('TNArray)
+
+    construct (tree, major) ==
+      [tree, major, [[]]]
+
+    root x ==
+      x.m_nodes.1
+
+    node (x, i) ==
+      x.m_nodes.i
+
+    members x ==
+      members x.m_nodes
+
+    addNode! (x, n, env) ==
+      tn := addNode!(x, n)
+      tn.env := env
+      tn
+
+    addNode! (x, n) ==
+      i := (#(x.m_nodes) + 1) :: PI
+      tn := [x.m_major, i, n]
+      tn.type := typeVar(x.m_major, i)
+      concat!(x.m_nodes, tn)
+      registerNode!(x.m_tree, tn)
+      tn
+
+    killNode! (x : %, tn : TN) ==
+      info ["Killing" :: PF, tn.index :: PF, "node!" :: PF]
+      if typeVar? tn.type then
+        unregisterNode!(x.m_tree, tn)
+      done! tn
+
+    -- rewrite all nodes with type that contains given variable
+    rewriteNodes! (x, tv, term) ==
+      for n in entries x.m_nodes | occurs?(tv, n.type) repeat
+        n.type := substitute(n.type, tv, term)
+        debug (["Rewrote" :: PF, n.index :: PF, "with" :: PF,
+                brace spaces [tv :: PF, "=>" :: PF, term :: PF]])
+
+    listTypeVars x ==
+      [n.type :: TV for n in entries x.m_nodes | typeVar? n.type]
+
+    walkPostOrder(x : %, tn : TN) : List(TN) ==
+      lst := [walkPostOrder(x, (x.m_nodes)(nr.minor)) for nr in references(tn)]
+      "concat"/concat(lst, [tn])
+
+    listPostOrder x ==
+      walkPostOrder(x, x.m_nodes.1)
+
+    coerce (x : %) : PF ==
+      indent(2, vconcat [n :: PF for n in members x.m_nodes])
+
 )abbrev package STTREE SpadTypeTree
 SpadTypeTree() : Exports == Implementation where
   PI ==> PositiveInteger
@@ -165,40 +259,34 @@ SpadTypeTree() : Exports == Implementation where
   PF ==> PrintableForm
 
   N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  FN ==> SpadFunction(N)
-  MT ==> SpadMappingType(N)
   NR ==> SpadNodeRef(N)
-  SEQ ==> SpadSequence(N)
-  TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
+
   SUBST ==> AssociationList(TV, List(N))
-  URES ==> Union(SUBST, "failed")
 
   ENV ==> SpadEnvironment
   TN ==> SpadTypeNode
+  TNA ==> SpadTypeNodeArray(%)
   TR ==> SpadTypeRule
 
-  Exports ==> CoercibleTo(PF) with
-    construct : PI -> %
+  Exports ==> SpadTypeTreeCategory with
+    construct : () -> %
 
-    nodeList : % -> List(TN)
-    typeVarCount: % -> NNI
+    coerce : % -> N
 
-    root : % -> TN
+    root : % -> TNA
+    members : % -> List(TNA)
+
     node : (%, NR) -> TN
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
-    killNode! : (%, TN) -> Void
-    typeOf : (%, TN) -> List(N)
     hasUnknownType? : (%, TN) -> Boolean
+    typeOf : (%, TN) -> List(N)
+    extendTypeOf! : (%, TN, List(N)) -> Void
+    setTypeOf! : (%, TN, List(N)) -> Void
 
-    addTypeVar! : % -> N
-    addTypeVar! : (%, List(N)) -> N
-    addType! : (%, TV, N) -> Void
+    killNode! : (%, TN) -> Void
 
     limitTypeVar! : (%, TV, List(N)) -> Boolean
     limitTypeVar! : (%, SUBST) -> Boolean
@@ -210,51 +298,33 @@ SpadTypeTree() : Exports == Implementation where
     rewriteIfInferred! : (%, TN) -> Boolean
 
   Implementation ==> add
-    Rep := Record(m_major : PI,
-                  m_minorNR : PI,
-                  m_minorTV : PI,
-                  m_nodes : FlexibleArray(TN),
-                  m_typevars : SUBST)
-
     import SpadNode
     import TypeUnifier
     import SpadNodeFactory
+    import SpadTypeNode
+    import SpadTypeNodeArray(%)
     import Printer
-    import Logger('Tree)
+    import Logger('TTree)
 
-    construct major ==
-      [major, 1, 1, flexibleArray [], [[]]]
+    Rep := Record(m_nodes : FlexibleArray(TNA),
+                  m_typevars : AssociationList(TV, List(N)))
 
-    nodeList x ==
-      members x.m_nodes
+    construct () ==
+      x := [flexibleArray [], [[]]]
+      insert!([x, 1 :: PI], x.m_nodes, 1)
+      x
 
-    typeVarCount x ==
-      #(x.m_typevars)
+    coerce (x : %) : N ==
+      root(root(x)).node
 
     root x ==
       x.m_nodes.1
 
-    node (x, nr) ==
-      nr.major ~= x.m_major => error "BUG: dereferenced wrong TNA!"
-      (x.m_nodes)(nr.minor)
+    members x ==
+      members x.m_nodes
 
-    addNode! (x, n, env) ==
-      tn := addNode!(x, n)
-      tn.env := env
-      tn
-
-    addNode! (x, n) ==
-      tn := [x.m_major, x.m_minorNR, n]
-      concat!(x.m_nodes, tn)
-      x.m_minorNR := x.m_minorNR + 1
-      tn
-
-    killNode! (x : %, n : TN) ==
-      info ["Killing" :: PF, n.index :: PF, "node!" :: PF]
-      if typeVar? n.type then
-        remove!(n.type :: TV, x.m_typevars)
-        n.type := typeUndef()
-      done! n
+    node (x : %, nr : NR) : TN ==
+      node((x.m_nodes)(nr.major), nr.minor)
 
     unknownType? (terms : List(N)) : Boolean ==
       #terms = 1 and emptyNode?(first terms)
@@ -262,43 +332,49 @@ SpadTypeTree() : Exports == Implementation where
     aliasType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeVar?(first terms)
 
+    addNode! (x : %, tn : N) : TN ==
+      addNode! (x.m_nodes.1, tn)
+
+    addNode! (x : %, tn : N, env : ENV) : TN ==
+      addNode! (x.m_nodes.1, tn, env)
+
+    killNode! (x : %, tn : TN) : Void ==
+      killNode!((x.m_nodes)(tn.index.major), tn)
+
+    registerNode! (x : %, tn : TN) : Void ==
+      (x.m_typevars)(tn.type :: TV) := [emptyNode()]
+
+    unregisterNode! (x : %, tn : TN) : Void ==
+     remove!(tn.type :: TV, x.m_typevars)
+
+    -- checks if type attached to the node has form "%a[?]"
+    hasUnknownType? (x : %, tn : TN) : Boolean ==
+      not typeVar? tn.type => false
+      unknownType? (x.m_typevars)(tn.type :: TV)
+
     typeOf (x : %, n : TN) : List(N) ==
       not typeVar? n.type => [n.type] 
       tl := (x.m_typevars)(n.type :: TV)
       unknownType? tl => [n.type]
       tl
 
-    setTypeOf! (x : %, n : TN, terms : List(N)) : Void ==
-      typeVar? n.type =>
-        (x.m_typevars)(n.type :: TV) := terms
-      #terms > 1 or n.type ~= terms.1 =>
+    extendTypeOf! (x : %, tn : TN, terms : List(N)) : Void ==
+      not typeVar? tn.type =>
+        error "addType!: no type variable associated with the node"
+      tv := tn.type :: TV
+      (x.m_typevars)(tv) := concat((x.m_typevars)(tv), terms)
+
+    setTypeOf! (x : %, tn : TN, terms : List(N)) : Void ==
+      typeVar? tn.type =>
+        (x.m_typevars)(tn.type :: TV) := terms
+      #terms > 1 or tn.type ~= terms.1 =>
         fail pile(
           ["Cannot set the type of node! Types not equal:" :: PF,
            bold red("old:" :: PF),
-           indent(2, n.type :: PF),
+           indent(2, tn.type :: PF),
            bold red("new:" :: PF), 
            indent(2, vconcat [t :: PF for t in terms])])
         error ""
-
-    -- checks if type attached to the node has form "%a[?]"
-    hasUnknownType? (x, n) ==
-      not typeVar? n.type => false
-      unknownType? (x.m_typevars)(n.type :: TV)
-
-    addTypeVar! (x, types) ==
-      if empty? types then 
-        types := [emptyNode()]
-      tv := typeVar(x.m_major, x.m_minorTV)
-      (x.m_typevars)(tv :: TV) := types
-      x.m_minorTV := x.m_minorTV + 1
-      tv
-
-    addTypeVar! x == addTypeVar!(x, [])
-
-    addType! (x, var, type) ==
-      terms := (x.m_typevars)(var)
-      unknownType? terms => error ""
-      (x.m_typevars)(var) := [type, :terms]
 
     rewriteTypeVars! (x : %, var : TV, term : N) : Void ==
       debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
@@ -316,10 +392,8 @@ SpadTypeTree() : Exports == Implementation where
 
     -- rewrite all nodes with type that contains given variable
     rewriteNodes! (x : %, var : TV, term : N) : Void ==
-      for n in entries x.m_nodes | occurs?(var, n.type) repeat
-        n.type := substitute(n.type, var, term)
-        debug (["Rewrote" :: PF, n.index :: PF, "with" :: PF,
-                brace spaces [var :: PF, "=>" :: PF, term :: PF]])
+      for tna in members x.m_nodes repeat
+        rewriteNodes!(tna, var, term)
 
     rewriteIfInferred! (x : %, n : TN) : Boolean ==
       not typeVar? n.type => false
@@ -335,41 +409,37 @@ SpadTypeTree() : Exports == Implementation where
       rewriteNodes!(x, tv, term)
       true
 
-    removeAlias! (x : %, var : TV, alias : N) : Void ==
-      var = (alias :: TV) => void() -- BUG? Handle degenerate case!
-      debug ["Removing alias:" :: PF, var :: PF, "=>" :: PF, alias :: PF]
-      rewriteTypeVars!(x, var, alias)
-      for n in entries x.m_nodes | occurs?(var, n.type) repeat
-        n.type := substitute(n.type, var, alias)
-        debug (["Rewrote" :: PF, n.index :: PF, "with" :: PF,
-                brace spaces [var :: PF, "=>" :: PF, alias :: PF]])
-      debug ["Removing" :: PF, bold(var :: PF), "type variable." :: PF]
-      remove!(var, x.m_typevars)
+    removeAlias! (x : %, tv : TV, alias : N) : Void ==
+      tv = (alias :: TV) => void() -- BUG? Handle degenerate case!
+      debug ["Removing alias:" :: PF, tv :: PF, "=>" :: PF, alias :: PF]
+      rewriteTypeVars!(x, tv, alias)
+      rewriteNodes!(x, tv, alias)
+      remove!(tv, x.m_typevars)
 
-    limitTypeVar! (x : %, var : TV, terms : List(N)) : Boolean ==
-      debug(["Modyfing" :: PF, bold(var :: PF), "type variable with" :: PF,
+    limitTypeVar! (x : %, tv : TV, terms : List(N)) : Boolean ==
+      debug(["Modyfing" :: PF, bold(tv :: PF), "type variable with" :: PF,
              bracket [bold(t :: PF) for t in terms]])
       -- 1) typevars(%x) = [?]
-      unknownType? (x.m_typevars)(var) =>
+      unknownType? (x.m_typevars)(tv) =>
         -- a) %x = %y => alias removal
         -- b) %x = [t1, t2, t3, ...]
         if aliasType? terms
-          then removeAlias!(x, var, first terms)
-          else (x.m_typevars)(var) := terms
+          then removeAlias!(x, tv, first terms)
+          else (x.m_typevars)(tv) := terms
         true
       -- 2) typevars(%x) = [s1, s2, s3, ...], %x = [t1, t2, t3, ...]
       -- Unify proposed values with already stored in the variable
       -- store only matching ones (without performing substitutions).
-      ms := findMatches((x.m_typevars)(var), terms)
+      ms := findMatches((x.m_typevars)(tv), terms)
       not empty? ms.terms =>
-        (x.m_typevars)(var) := ms.terms
+        (x.m_typevars)(tv) := ms.terms
         true
       -- Unification failed, as a last resort use subtyping.
       for term in terms repeat
-        for t in (x.m_typevars)(var) repeat
+        for t in (x.m_typevars)(tv) repeat
           if not isSubType(t, term) then
             return false
-      (x.m_typevars)(var) := terms
+      (x.m_typevars)(tv) := terms
       true
 
     limitTypeVar! (x : %, substitutions : SUBST) : Boolean ==

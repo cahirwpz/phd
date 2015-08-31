@@ -1,5 +1,5 @@
-)abbrev package STFITS SpadTreeFillInTypes
-SpadTreeFillInTypes(findTypeNode : (PI, PI) -> TN) : SpadTreeWalkerCategory == Implementation where
+)abbrev package STREMREF SpadTreeRemoveReferences
+SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Implementation where
   PF ==> PrintableForm
   PI ==> PositiveInteger
   N ==> SpadNode
@@ -34,7 +34,7 @@ SpadTreeFillInTypes(findTypeNode : (PI, PI) -> TN) : SpadTreeWalkerCategory == I
       nodeApp(rewrite app.function, [rewrite a for a in app.args])
 
     rewrite (tv : TV) : N ==
-      tn := findTypeNode(tv.major :: PI, tv.minor :: PI)
+      tn := find(tv.major :: PI, tv.minor :: PI)
       t := tn.type
       typeOrigin? t =>
         te := coerce(t)@TE
@@ -45,7 +45,7 @@ SpadTreeFillInTypes(findTypeNode : (PI, PI) -> TN) : SpadTreeWalkerCategory == I
       t
 
     rewrite (nr : NR) : N ==
-      tn := findTypeNode(nr.major :: PI, nr.minor :: PI)
+      tn := find(nr.major :: PI, nr.minor :: PI)
       tn.node = [nr] =>
         fail pile ["Self reference detected:" :: PF, tn :: PF]
         error ""
@@ -74,6 +74,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
   URES ==> Union(SUBST, "failed")
 
   TT ==> SpadTypeTree
+  TNA ==> SpadTypeNodeArray(SpadTypeTree)
   TN ==> SpadTypeNode
   TR ==> SpadTypeRule
 
@@ -86,14 +87,15 @@ SpadTypeTreeChecker() : Exports == Implementation where
     import SpadNodeFactory
     import SpadTypeNode
     import SpadTypeTree
+    import SpadTypeNodeArray(SpadTypeTree)
 
-    evalApply(r : APP, n : TN, x : TT) : Boolean ==
-      nfun := node(x, r.function :: NR) -- function node
-      nargs := [node(x, arg :: NR) for arg in r.args] -- argument nodes
+    evalApply(ctx : TT, r : APP, n : TN) : Boolean ==
+      nfun := node(ctx, r.function :: NR) -- function node
+      nargs := [node(ctx, arg :: NR) for arg in r.args] -- argument nodes
 
       sigs : List(N) := []
       substList : List(SUBST) := []
-      for t in typeOf(x, nfun) repeat
+      for t in typeOf(ctx, nfun) repeat
         -- 1) Consider signature types with correct number of arguments.
         t' := stripOriginIfCan t
         not mappingType? t' => "iterate"
@@ -104,7 +106,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         --    signature.
         argsOk? := true
         for arg in sig.args for narg in nargs | argsOk? repeat
-          argTypes := typeOf(x, narg)
+          argTypes := typeOf(ctx, narg)
           ures := unifyType(arg, argTypes)
           ures case SUBST =>
             substList := [ures :: SUBST, :substList]
@@ -112,7 +114,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
           argsOk? := false
         not argsOk? => "iterate"
         -- 3) Check if result type is correct for given signature.
-        ures := unifyType(sig.result, typeOf(x, n))
+        ures := unifyType(sig.result, typeOf(ctx, n))
         ures case "failed" => "iterate"
         -- 4) Collect variable substitutions and valid signature.
         substList := [ures :: SUBST, :substList]
@@ -122,10 +124,10 @@ SpadTypeTreeChecker() : Exports == Implementation where
       empty? sigs => false
 
       if typeVar? nfun.type then
-        limitTypeVar!(x, nfun.type :: TV, sigs)
+        limitTypeVar!(ctx, nfun.type :: TV, sigs)
 
       for s in entries subst repeat
-        limitTypeVar!(x, s.key, s.entry)
+        limitTypeVar!(ctx, s.key, s.entry)
 
       -- Fetch all inferred mappings.
       mappings : List(MT) := []
@@ -135,136 +137,132 @@ SpadTypeTreeChecker() : Exports == Implementation where
         mappings := [t :: MT, :mappings]
       -- Propagate function arguments and return type down the tree.
       for i in 1..#nargs for narg in nargs repeat
-        limitNodeType!(x, narg, [(mt.args)(i) for mt in mappings])
-      limitNodeType!(x, n, [mt.result for mt in mappings]) 
+        limitNodeType!(ctx, narg, [(mt.args)(i) for mt in mappings])
+      limitNodeType!(ctx, n, [mt.result for mt in mappings]) 
       true
 
-    evalAssign(r : ASS, n : TN, x : TT) : Boolean ==
-      ln := node(x, r.lval :: NR) -- left node
-      rn := node(x, r.rval :: NR) -- right node
+    evalAssign(ctx : TT, r : ASS, n : TN) : Boolean ==
+      ln := node(ctx, r.lval :: NR) -- left node
+      rn := node(ctx, r.rval :: NR) -- right node
       -- a) {%s[?]} := {%t[t1, t2, ...] | T}
       -- given a type information flows from nodes above during TT
       -- construction and we don't know anything, let's accept types
       -- from below
-      hasUnknownType?(x, ln) => limitNodeType!(x, ln, [rn.type])
+      hasUnknownType?(ctx, ln) => limitNodeType!(ctx, ln, [rn.type])
       -- b) {%s[s1, s2, ...] | S} := {%t[?]}
       -- we simply don't know, wait for types to flow from below
-      hasUnknownType?(x, rn) => true
+      hasUnknownType?(ctx, rn) => true
       -- c) {%s[s1, s2, ...] | S} := {%t[t1, t2, ...] | T}
       -- now it's easy...
-      not nodeSubType!(x, rn, ln) and not nodesTypeMatch!(x, ln, rn) => false
-      limitNodeType!(x, n, [ln.type])
+      not nodeSubType!(ctx, rn, ln) and not nodesTypeMatch!(ctx, ln, rn) => false
+      limitNodeType!(ctx, n, [ln.type])
 
-    evalCondExpr(r : CE, n : TN, x : TT) : Boolean ==
-      cn := node(x, r.cond :: NR) -- condition node
-      tn := node(x, r.truebr :: NR) -- true branch node
-      fn := node(x, r.falsebr :: NR) -- false branch node
-      not limitNodeType!(x, cn, [booleanType]) => false
-      nodeSubType!(x, tn, n) and nodeSubType!(x, fn, n) => true
-      nodesTypeMatch!(x, n, tn) and nodesTypeMatch!(x, n, fn) => true
-      typeUndef? tn.type and limitNodeType!(x, fn, [typeAny]) =>
-        killNode!(x, n)
+    evalCondExpr(ctx : TT, r : CE, n : TN) : Boolean ==
+      cn := node(ctx, r.cond :: NR) -- condition node
+      tn := node(ctx, r.truebr :: NR) -- true branch node
+      fn := node(ctx, r.falsebr :: NR) -- false branch node
+      not limitNodeType!(ctx, cn, [booleanType]) => false
+      nodeSubType!(ctx, tn, n) and nodeSubType!(ctx, fn, n) => true
+      nodesTypeMatch!(ctx, n, tn) and nodesTypeMatch!(ctx, n, fn) => true
+      typeUndef? tn.type and limitNodeType!(ctx, fn, [typeAny]) =>
+        killNode!(ctx, n)
         true
-      typeUndef? fn.type and limitNodeType!(x, tn, [typeAny]) =>
-        killNode!(x, n)
+      typeUndef? fn.type and limitNodeType!(ctx, tn, [typeAny]) =>
+        killNode!(ctx, n)
         true
       false
 
-    evalSubType(r : TE, n : TN, x : TT) : Boolean ==
-      n1 := node(x, r.expr :: NR)
-      n2 := node(x, r.type :: NR)
-      nodeSubType!(x, n1, n2)
+    evalSubType(ctx : TT, r : TE, n : TN) : Boolean ==
+      n1 := node(ctx, r.expr :: NR)
+      n2 := node(ctx, r.type :: NR)
+      nodeSubType!(ctx, n1, n2)
 
-    evalTypeOrigin(r : TE, n : TN, x : TT) : Boolean ==
-      fun := node(x, r.expr :: NR)
-      limitNodeType!(x, n, [fun.type])
+    evalTypeOrigin(ctx : TT, r : TE, n : TN) : Boolean ==
+      fun := node(ctx, r.expr :: NR)
+      limitNodeType!(ctx, n, [fun.type])
 
-    evalCapsule(r : SEQ, n : TN, x : TT) : Boolean ==
+    evalCapsule(ctx : TT, r : SEQ, n : TN) : Boolean ==
       items := r.list
       types : List(N) := []
       for item in items repeat
-        tn := node(x, item :: NR)
+        tn := node(ctx, item :: NR)
         not done? tn => return true
         if function? tn.node then
           types := [nodeNamedType((tn.node :: FN).name, tn.type), :types]
-      limitNodeType!(x, n, [nodeSeq("Join", reverse types)])
+      limitNodeType!(ctx, n, [nodeSeq("Join", reverse types)])
 
     -- evaluates single rule; note that it can happen that nothing was changed
     -- even if no type error was detected (result "true" means yes or maybe)
-    evalFormula(f : N, n : TN, x : TT) : Boolean ==
+    evalFormula(ctx : TT, f : N, n : TN) : Boolean ==
       emptyNode? f => true
       nodeRef? f => true
 
       debug (["Running type inference for" :: PF, n.index :: PF,
               "of" :: PF, n.type :: PF, "type." :: PF])
 
-      apply? f => evalApply(f :: APP, n, x)
-      assign? f => evalAssign(f :: ASS, n, x)
-      condExpr? f => evalCondExpr(f :: CE, n, x)
-      subType? f => evalSubType(f :: TE, n, x)
-      typeOrigin? f => evalTypeOrigin(f :: TE, n, x)
-      capsule? f => evalCapsule(f :: SEQ, n, x)
+      apply? f => evalApply(ctx, f :: APP, n)
+      assign? f => evalAssign(ctx, f :: ASS, n)
+      condExpr? f => evalCondExpr(ctx, f :: CE, n)
+      subType? f => evalSubType(ctx, f :: TE, n)
+      typeOrigin? f => evalTypeOrigin(ctx, f :: TE, n)
+      capsule? f => evalCapsule(ctx, f :: SEQ, n)
 
       fail ["evalFormula: case not handled for" :: PF, f :: PF]
       error "Internal error!"
 
-    evalAnyRule(n : TN, x : TT) : Boolean ==
+    evalAnyRule(ctx : TT, n : TN) : Boolean ==
       rules := n.rules
       empty? rules => true
       while not empty? rules repeat
         fs := (first rules).formulas
-        "and"/[evalFormula(f, n, x) for f in fs] => break
+        "and"/[evalFormula(ctx, f, n) for f in fs] => break
         rules := rest rules
       empty? rules => false
       -- Immediately remove rules that fail to apply.
       for victim in setDifference(references n.rules, references rules) repeat
-        killNode!(x, node(x, victim))
+        killNode!(ctx, node(ctx, victim))
       n.rules := rules
       true
 
-    checkAndMarkIfDone! (x : TT, n : TN) : Boolean ==
+    checkAndMarkIfDone! (ctx : TT, n : TN) : Boolean ==
       unbound? n.type => false
       if not empty? n.rules then
         -- We only care about first rule, because it produced actual solution.
         rule := first n.rules
         for ref in references rule repeat
-          cn := node(x, ref :: NR)
+          cn := node(ctx, ref :: NR)
           import? cn.node or typeDecl? cn.node => "iterate"
           if unbound? cn.type then
             return false
         -- Remove leftovers from other alternative rules.
         for victim in setDifference(references n.rules, references rule) repeat
-          killNode!(x, node(x, victim))
+          killNode!(ctx, node(ctx, victim))
         n.node := rule.solution
       done! n; true
 
-    countProgress (x : TT) : Record(a : NNI, b : NNI) ==
+    countProgress (ctx : TT, x : TNA) : Record(a : NNI, b : NNI) ==
       -- a = number of type variables and nodes to be processed
       --     (empty type variable counts twice)
       -- b = sum of types assigned to each type variable
-      p := [typeVarCount(x), 0]
-      for n in nodeList(x) | not done? n repeat
+      p := [#listTypeVars(x), 0]
+      for n in members x | not done? n repeat
         p.a := p.a + 1
-        if hasUnknownType?(x, n)
+        if hasUnknownType?(ctx, n)
           then p.a := p.a + 1
-          else p.b := p.b + #typeOf(x, n)
+          else p.b := p.b + #typeOf(ctx, n)
       p
 
-    walkPostOrder(n : TN, x : TT) : List(TN) ==
-      lst := [walkPostOrder(node(x, i), x) for i in references(n)]
-      "concat"/concat(lst, [n])
-
-    walk x ==
+    walk' (ctx : TT, na : TNA) : Boolean ==
       q : Queue(TN) := empty()
 
-      for n in walkPostOrder(root(x), x) repeat 
-        rewriteIfInferred!(x, n)
+      for n in listPostOrder(na) repeat 
+        rewriteIfInferred!(ctx, n)
         enqueue!(n, q)
 
-      info vconcat ["Tree ready for type checking..." :: PF, x :: PF]
+      info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
       info ["Processing order:" :: PF, bracket [n.index :: PF for n in members q]]
 
-      p := countProgress x
+      p := countProgress(ctx, na)
       s := 1 :: NNI
 
       while p.a > 0 or p.b > 0 repeat
@@ -279,31 +277,31 @@ SpadTypeTreeChecker() : Exports == Implementation where
           --       n.index :: PF, ":" :: PF,
           --       bracket [m.index :: PF for m in members q]])
 
-          not evalAnyRule(n, x) =>
+          not evalAnyRule(ctx, n) =>
             fail pile([spaces ["Type error for node:" :: PF, n.index :: PF],
                        red(n.node :: PF)])
-            debug (x :: PF)
+            debug (ctx :: PF)
             return false
 
           -- Check if we're done with processing type variable tied to this node.
-          rewriteIfInferred!(x, n)
+          rewriteIfInferred!(ctx, n)
 
           -- If type is inferred for all formulas the node itself won't change
-          checkAndMarkIfDone!(x, n) =>
+          checkAndMarkIfDone!(ctx, n) =>
             debug ["Processing node" :: PF, n.index :: PF, "completed!" :: PF]
 
           enqueue!(n, newQ)
 
         -- check if during meta-step the problem was reduced compared to
         -- previous meta-step
-        newP := countProgress x
+        newP := countProgress(ctx, na)
         correct :=
           newP.a < p.a => true
           newP.a = p.a and newP.b < p.b => true
           false
         not correct =>
           fail ("Type checker does not advance by applying known typing rules!" :: PF)
-          debug (x :: PF)
+          debug (ctx :: PF)
           return false
 
         -- setup new meta-step
@@ -311,15 +309,17 @@ SpadTypeTreeChecker() : Exports == Implementation where
         q := newQ
         s := s + 1
 
-      info (x :: PF)
-
-      -- Rewrite the tree if succeeded !
-
-      -- capture x in closure, so that we don't need to expose TCNA type to
-      -- SpadTreeFillInTypes
-      findTypeNode := ((i : PI, j : PI) : TN +-> node(x, [i, j]$NR))
-
-      r := root(x)
-      r.node := rewrite(r.node)$SpadTreeFillInTypes(findTypeNode)
-
+      info (ctx :: PF)
       true
+
+    walk ctx ==
+      success := walk'(ctx, root(ctx))
+
+      if success then -- Rewrite the tree if succeeded !
+        -- capture x in closure, so that we don't need to expose SpadTypeTree 
+        -- type to SpadTreeFillInTypes
+        for na in members ctx repeat
+          findTypeNode := ((i : PI, j : PI) : TN +-> node(ctx, [i, j]$NR))
+          root(na).node := rewrite(root(na).node)$SpadTreeRemoveReferences(findTypeNode)
+
+      success
