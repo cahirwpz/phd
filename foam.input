@@ -1,0 +1,22 @@
+)compile Printer.spad
+)compile Logger.spad
+)compile ParserTools.spad
+)compile FoamCompiler.spad
+
+-- Set up OutputForm renderer.
+)boot $LINELENGTH := 160
+
+-- Install PostParseHook/PostCompileHook handling.
+)read src/interp/ncomp.boot
+)read src/interp/nlib.lisp
+)read src/interp/lisplib.boot
+
+-- Configure PostParseHook.
+)boot $PostCompileHookFunction := "run"
+)boot $PostCompileHookDomain := ["FoamCompiler"]
+)boot $PostCompileHookEnable := true
+
+-- Configure compiler's environment handling routines:
+-- addDomain, get, getModemap, put, etc.
+)boot $forceAdd := true
+)boot $compErrorMessageStack := []

@@ -1,0 +1,26 @@
+)abbrev package FOAMCOMP FoamCompiler
+++ Author: Krystian Baclawski
+++ Date Created: September 2015
+++ Description:
+++ Experimental FOAM compiler.
+FoamCompiler() : Exports == Implementation where
+  PF ==> PrintableForm
+  SEX ==> SExpression
+
+  Exports ==> with
+    run : List(SEX) -> Void
+
+  Implementation ==> add
+    import Printer 
+    import MainLogger
+    import Logger('Main)
+    import SExpression
+
+    run sexList ==
+      loggerDefaultLevel "debug"
+      resetTime()
+
+      for sex in sexList repeat
+        -- BUG: SExpression does not support Lisp vectors
+        symbol car(sex) = 'MAKEPROP => "iterate"
+        println(convert(sex))
