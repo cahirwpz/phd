@@ -17,8 +17,10 @@
 -- Set up OutputForm renderer.
 )boot $LINELENGTH := 160
 
--- Install PostParseHook handling.
-)read ncomp.boot
+-- Install PostParseHook/PostCompileHook handling.
+)read src/interp/ncomp.boot
+)read src/interp/nlib.lisp
+)read src/interp/lisplib.boot
 
 -- Configure PostParseHook.
 )boot $PostParseHookFunction := "run2"

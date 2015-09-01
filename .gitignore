@@ -3,5 +3,6 @@
 *.ll
 *.bc
 *.native
+*.NRLIB
+*.fasl
 _build
-spadil/primitives.lisp

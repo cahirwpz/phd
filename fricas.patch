@@ -1,0 +1,84 @@
+Index: src/interp/lisplib.boot
+===================================================================
+--- src/interp/lisplib.boot	(wersja 1935)
++++ src/interp/lisplib.boot	(kopia robocza)
+@@ -218,6 +218,10 @@
+ 
+ --% Compilation
+ 
++DEFVAR($PostCompileHookEnable, false)
++DEFVAR($PostCompileHookFunction, nil)
++DEFVAR($PostCompileHookDomain, nil)
++
+ compDefineLisplib(df:=["DEF",[op,:.],:.],m,e,prefix,fal,fn) ==
+   --fn= compDefineCategory OR compDefineFunctor
+   sayMSG fillerSpaces(72,'"-")
+@@ -254,6 +258,17 @@
+   lisplibDoRename(libName)
+   filearg := make_full_namestring([libName, $spadLibFT])
+   RPACKFILE filearg
++  if $PostCompileHookEnable then
++    FORMAT(true, '"~%~A~%~%", '">>>> POST-COMPILE HOOK BEGIN <<<<")
++    fn := getFunctionFromDomain($PostCompileHookFunction,
++                                $PostCompileHookDomain, [])
++    if null(fn) then
++      SAY("Post-compile hook not found!")
++    else
++      libPath := CONCAT(libName, ".", $spadLibFT, "/", libName, ".lsp")
++      sexpList := readLispLib(make_full_namestring(libPath))
++      SPADCALL(sexpList, fn)
++    FORMAT(true, '"~%~A~%~%", '">>>> POST-COMPILE HOOK END <<<<")
+   FRESH_-LINE $algebraOutputStream
+   sayMSG fillerSpaces(72,'"-")
+   unloadOneConstructor(op,libName)
+Index: src/interp/ncomp.boot
+===================================================================
+--- src/interp/ncomp.boot	(wersja 1935)
++++ src/interp/ncomp.boot	(kopia robocza)
+@@ -325,6 +325,10 @@
+ DEFVAR($globalDefs, nil)
+ DEFVAR($MacroTable)
+ 
++DEFVAR($PostParseHookEnable, false)
++DEFVAR($PostParseHookFunction, nil)
++DEFVAR($PostParseHookDomain, nil)
++
+ S_process(x) ==
+     $Index : local := 0
+     $MACROASSOC : local := nil
+@@ -369,6 +373,21 @@
+     $PrintOnly =>
+         FORMAT(true, '"~S   =====>~%", $currentLine)
+         PRETTYPRINT(x)
++    if $PostParseHookEnable then
++        FORMAT(true, '"~%~A~%~%", '">>>> POST-PARSE HOOK BEGIN <<<<")
++        fn := getFunctionFromDomain($PostParseHookFunction,
++                                    $PostParseHookDomain, [])
++        if null(fn) then
++            SAY("Post-parse hook not found!")
++        else
++            PRETTYPRINT(x)
++            r := SPADCALL(x, fn)
++            PRETTYPRINT(r)
++            if r ~= '(1 . '"failed") then
++                x := r
++            else
++                x := []
++        FORMAT(true, '"~%~A~%~%", '">>>> POST-PARSE HOOK END <<<<")
+     u := compTopLevel(x, $EmptyMode, $InteractiveFrame)
+     if u then $InteractiveFrame := THIRD(u)
+     if $semanticErrorStack then displaySemanticErrors()
+Index: src/interp/nlib.lisp
+===================================================================
+--- src/interp/nlib.lisp	(wersja 1935)
++++ src/interp/nlib.lisp	(kopia robocza)
+@@ -491,3 +491,9 @@
+         (setq fn (|fnameMake| d (string (gensym n)) e))
+         (if (not (|fricas_probe_file| (namestring fn)))
+            (return-from |fnameNew| fn)) )))
++
++(defun |readLispLib| (f)
++  (with-open-file (s f)
++    (loop for sexp = (read s nil 'eof)
++          until (eq sexp 'eof)
++          collect sexp)))
