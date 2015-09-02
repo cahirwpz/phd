@@ -256,10 +256,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
       q : Queue(TN) := empty()
 
       for n in listPostOrder(na) repeat 
-        rewriteIfInferred!(ctx, n)
         enqueue!(n, q)
 
-      info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
       info ["Processing order:" :: PF, bracket [n.index :: PF for n in members q]]
 
       p := countProgress(ctx, na)
@@ -313,6 +311,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
       true
 
     walk ctx ==
+      for na in members ctx repeat
+        for n in members na repeat 
+          rewriteIfInferred!(ctx, n)
+          checkAndMarkIfDone!(ctx, n)
+
+      info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
+
       success := walk'(ctx, root(ctx))
 
       if success then -- Rewrite the tree if succeeded !

@@ -135,11 +135,15 @@ SpadTypeNode() : Exports == Implementation where
       nodeTypeVar(x.m_index.major :: PI, x.m_index.minor :: PI)
 
     coerce x ==
-      done := if done? x then green("(+)" :: PF) else red("(-)" :: PF)
-      prefix := hconcat [done, right(6, x.m_index:: PF)]
+      done := if done? x then green(" (+)" :: PF) else red(" (-)" :: PF)
+      prefix := hconcat [right(6, x.m_index:: PF), done]
+      t := bold (x.m_type :: PF)
+      if typeVar? x.m_type then
+        t := red t
+      t := indent(13, t)
       not empty? x.m_rules =>
         r := sepBy(" | " :: PF, [(r :: PF) for r in x.m_rules])
-        spaces([prefix, r, "is" :: PF, bold (x.m_type :: PF)])
+        spaces([prefix, r, "is" :: PF, t])
       import? x.m_node or typeDecl? x.m_node =>
         spaces [prefix, bold ("()" :: PF), white(x.m_node :: PF)]
       n := stripOriginIfCan x.m_node
@@ -152,7 +156,7 @@ SpadTypeNode() : Exports == Implementation where
         sequence? n =>
           bold("(...)" :: PF)
         bold yellow("?" :: PF)
-      spaces [prefix, pn, ":" :: PF, bold (x.m_type :: PF)]
+      spaces [prefix, pn, ":" :: PF, t]
 
 )abbrev category STTCAT SpadTypeTreeCategory
 SpadTypeTreeCategory() : Category == Definition where
@@ -286,6 +290,9 @@ SpadTypeTree() : Exports == Implementation where
     extendTypeOf! : (%, TN, List(N)) -> Void
     setTypeOf! : (%, TN, List(N)) -> Void
 
+    addSubTree! : % -> Void
+    leaveSubTree! : % -> Void
+
     killNode! : (%, TN) -> Void
 
     limitTypeVar! : (%, TV, List(N)) -> Boolean
@@ -305,14 +312,14 @@ SpadTypeTree() : Exports == Implementation where
     import SpadTypeNodeArray(%)
     import Printer
     import Logger('TTree)
+    import Stack(TNA)
 
     Rep := Record(m_nodes : FlexibleArray(TNA),
+                  m_current : Stack(TNA),
                   m_typevars : AssociationList(TV, List(N)))
 
     construct () ==
-      x := [flexibleArray [], [[]]]
-      insert!([x, 1 :: PI], x.m_nodes, 1)
-      x
+      [flexibleArray [], [[]], [[]]]
 
     coerce (x : %) : N ==
       root(root(x)).node
@@ -324,7 +331,7 @@ SpadTypeTree() : Exports == Implementation where
       members x.m_nodes
 
     node (x : %, nr : NR) : TN ==
-      node((x.m_nodes)(nr.major), nr.minor)
+      node((x.m_nodes)(nr.major), nr.minor :: PI)
 
     unknownType? (terms : List(N)) : Boolean ==
       #terms = 1 and emptyNode?(first terms)
@@ -333,10 +340,10 @@ SpadTypeTree() : Exports == Implementation where
       #terms = 1 and typeVar?(first terms)
 
     addNode! (x : %, tn : N) : TN ==
-      addNode! (x.m_nodes.1, tn)
+      addNode! (top x.m_current, tn)
 
     addNode! (x : %, tn : N, env : ENV) : TN ==
-      addNode! (x.m_nodes.1, tn, env)
+      addNode! (top x.m_current, tn, env)
 
     killNode! (x : %, tn : TN) : Void ==
       killNode!((x.m_nodes)(tn.index.major), tn)
@@ -375,6 +382,15 @@ SpadTypeTree() : Exports == Implementation where
            bold red("new:" :: PF), 
            indent(2, vconcat [t :: PF for t in terms])])
         error ""
+
+    addSubTree! x ==
+      subtree := [x, (#(x.m_nodes) + 1) :: PI]
+      concat!(x.m_nodes, subtree)
+      push!(subtree, x.m_current)
+
+    leaveSubTree! x ==
+      pop!(x.m_current)
+      void()
 
     rewriteTypeVars! (x : %, var : TV, term : N) : Void ==
       debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
@@ -516,18 +532,17 @@ SpadTypeTree() : Exports == Implementation where
       setTypeOf!(x, sn, removeDuplicates sl)
       true
 
+    coerceTV (e : Record(key : TV, entry : List(N))) : PF ==
+      t :=
+        #(e.entry) = 1 => (first e.entry) :: PF
+        bracket [t :: PF for t in e.entry]
+      spaces [bold red right(8, e.key :: PF), ":" :: PF, bold t]
+
     coerce (x : %) : PF ==
-      pns := pile concat("Nodes :" :: PF, [n :: PF for n in entries x.m_nodes])
-      ptvs :=
-        empty? x.m_typevars =>
-          "No type variables!" :: PF
-        pss : List(PF) := []
-        for e in entries x.m_typevars repeat
-          (var, types) := (e.key, e.entry)
-          pt :=
-            #types = 1 => (first types) :: PF
-            bracket [t :: PF for t in types]
-          ps := spaces [right(6, var :: PF), ":" :: PF, pt]
-          pss := [ps, :pss]
-        pile concat("Type variables :" :: PF, pss)
-      vconcat [pns, ptvs]
+      pfs : List(PF) := []
+      for ns in entries x.m_nodes for i in 1.. repeat
+        num := bold blue hconcat ["#" :: PF, i :: PF, ":" :: PF]
+        vars := [coerceTV e for e in reverse entries x.m_typevars | e.key.major = i]
+        s := (empty? vars => "" :: PF; " " :: PF)
+        pfs := concat(pfs, [num, ns :: PF, s, :vars, s])
+      pile ["Type tree representation:" :: PF, :pfs]

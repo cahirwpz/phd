@@ -272,20 +272,27 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkFun (fn : FN, ctx : CTX, env : ENV) : TN ==
       debug ["Processing function" :: PF, string(fn.name :: PF)]
 
-      fnType : MT := signature fn
+      fnNode := addNode!(ctx, [fn], env)
+      addSubTree!(ctx)
+      env' := createScope env
 
-)if 0
+      -- It's vitally important that result type is represented by "%1" type
+      -- variable (e.g. 'return' refers to "%1").
+      resNode := addNode!(ctx, ['return], env')
+      argNodeList := [addNode!(ctx, [(n :: NT).name], env) for n in fn.args]
+
       -- Take the type of function and replace those components, that were not
       -- specified, with type variables.
+      fnType : MT := signature fn
+
       typeList : List(N) :=
-        ([(emptyNode?(t) => typeVar(i, 1); t)
-          for i in 1.. for t in [fnType.result, :fnType.args]])
+        ([(emptyNode?(t) => n.type; t)
+          for n in [resNode, :argNodeList] for t in [fnType.result, :fnType.args]])
 
       fnType' := nodeMappingType(rest typeList, first typeList)
-)endif
 
-      debug(["Signature associated with function definition :" :: PF,
-             fnType :: PF])
+      debug(["Function" :: PF, string(bold (fn.name :: PF)), "has" :: PF,
+             bold(fnType' :: PF), "type based on definition." :: PF])
 
       -- Fetch signatures from the environment, including those defined by
       -- the domain / package / function. Filter out those that don't match
@@ -302,16 +309,16 @@ SpadTypeTreeCreator() : Exports == Implementation where
           candidate := n
 
         if not emptyNode? candidate then
-          --ures := unifyType(fnType', candidate)
-          --failed? ures => "iterate"
-          --candidate := substitute(fnType', ures :: SUBST)
+          ures := unifyType(fnType', candidate)
+          failed? ures => "iterate"
+          candidate := substitute(fnType', ures :: SUBST)
           candidateList := [candidate :: MT, :candidateList]
 
       -- TODO: Filter out function which have been already defined.
 
       if not empty? candidateList then
         info(["Environment contains" :: PF, string bold(fn.name :: PF),
-              "from" :: PF, bold("$" :: PF), "with signatures:" :: PF,
+              "from" :: PF, bold("$" :: PF), "with matching signatures:" :: PF,
               bold bracket [c :: PF for c in candidateList]])
       else
         info(["Considering" :: PF, string bold(fn.name :: PF),
@@ -319,85 +326,19 @@ SpadTypeTreeCreator() : Exports == Implementation where
               "to be a local function!" :: PF])
         candidateList := [fnType]
 
-      --debug(["Will perform type check for" :: PF, string bold(fn.name :: PF),
-      --       "function with following candidate signatures:" :: PF,
-      --       brace [c :: PF for c in candidateList]])
-
-      fnNode := addNode!(ctx, [fn], env)
       setTypeOf!(ctx, fnNode, [[c] for c in candidateList])
+      setTypeOf!(ctx, resNode, [c.result for c in candidateList])
+      for argNode in argNodeList for i in 1.. repeat
+        setTypeOf!(ctx, argNode, [c.args.i for c in candidateList])
+
+      for n in fn.args for argNode in argNodeList repeat
+        arg := n :: NT
+        env'(arg.name) := argNode.type
+
+      fnBody := walk(fn.body, ctx, env')
+
+      leaveSubTree!(ctx)
       return fnNode
-
-)if 0
-      -- Perform a type check for each candidate signature.
-      for candidate in candidateList repeat
-        info ["Assume" :: PF, fn.name :: PF, "has type :" :: PF, candidate :: PF]
-
-        ctx' : TT := []
-        env' := env
-
-        this := addNode!(ctx', [fn], env)
-
-        -- It's vitally important that result type is represented by "%1" type
-        -- variable (e.g. 'return' refers to "%1").
-        resType :=
-          emptyNode? candidate.result => addTypeVar!(ctx')
-          addTypeVar!(ctx', [candidate.result])
-
-        -- For each undefined argument type, add a node with type variable.
-        deps : List(N) := []
-        argList : List(N) := []
-        argTypeList : List(N) := []
-
-        for n in fn.args for t in candidate.args repeat
-          if not emptyNode? t then
-            env' := envAddType(t, env')
-          -- Augment the environment if argument type is known upfront.
-          argName := (n :: NT).name
-          argType :=
-            arg := addNode!(ctx', n, env)
-            arg.type :=
-              not emptyNode? t =>
-                addTypeVar!(ctx', [t])
-              addTypeVar!(ctx')
-            arg.node := [argName]
-            deps := [nodeRef(arg), :deps]
-            typeRef(arg)
-          argList := [nodeNamedType(argName, argType), :argList]
-          argTypeList := [t, :argTypeList]
-          -- Make the argument visible inside function body.
-          debug(["Function argument" :: PF, string bold(argName :: PF),
-                 "has type" :: PF, bold(t :: PF)])
-          env'(argName) := t
-
-        -- Add a node that represents the type of function body, always.
-        fnRes := addNode!(ctx', fn.result, env)
-        fnRes.type := resType
-        fnRes.node := typeRef(fnRes)
-
-        -- Augment the environment if result type is known upfront.
-        if not emptyNode? candidate.result then
-          env' := envAddType(candidate.result, env')
-        deps := [nodeRef(fnRes), :deps]
-
-        fnBody := walk(fn.body, ctx', env')
-
-        fnRes.rules := [ruleSubType(fnBody, fnRes)]
-
-        this.type := nodeMappingType(reverse argTypeList, fnRes.type)
-        solution := nodeFun(fn.name, reverse argList, typeRef(fnRes), nodeRef(fnBody))
-        this.rules := [[reverse deps, solution]]
-
-        if check ctx' then
-          this' := addNode!(ctx, [fn], env)
-          this'.type := this.type
-          this'.node := this.node
-          return this'
-
-      fail (["No matching type for function" :: PF, string bold(fn.name :: PF),
-             "found!" :: PF, pile(["Candidates were:" :: PF,
-                                   :[c :: PF for c in candidateList]])])
-      error ""
-)endif
 
     walkFtor (ft : FT, ctx : CTX, env : ENV) : TN ==
       sig := signature ft
@@ -406,6 +347,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       debug pile([spaces ["Processing functor" :: PF, bold(ftorApp :: PF), "with:" :: PF],
                  ft.type :: PF])
+
+      addSubTree!(ctx)
 
       this := addNode!(ctx, [ft.name], env)
 
@@ -438,8 +381,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
         env(nt.name :: Symbol) := nodeTypeExpr('_$, nt.type, ["$" :: Symbol])
 
       ftorBody := walk(ft.capsule, ctx, env)
-      extendType := if emptyNode? ft.extends then ['Type] else ft.extends
 
+      leaveSubTree!(ctx)
+
+      extendType := if emptyNode? ft.extends then ['Type] else ft.extends
       formulas := reverse [nodeSubType(nodeRef(ftorBody), nodeRef(ftorResNode)), nodeRef(ftorBody), :ftDeps]
       solution := nodeFtor(ft.name, ft.args, ft.type, extendType, nodeRef(ftorBody))
       this.rules := [[formulas, solution]]
@@ -634,6 +579,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
           if typeVar? ftorArg then
             origFtorArg := ftorArg
             ftorArgType := substitute(ftorArgType, ftorArgRenames)
+
+            warn [ftorArg :: PF, ":" :: PF, ftorArgType :: PF]
 
             ftorArgTypeNode := addNode!(ctx, ftorArgType, env)
             setTypeOf!(ctx, ftorArgTypeNode, [ftorArgType])

@@ -101,7 +101,9 @@ SpadEnvironment() : Exports == Implementation where
       [newenv]
 
     createScope env ==
-      cons([[]], env)
+      newtop := [[]]$SCOPE
+      newtop('_$DomainsInScope) := (first env)('_$DomainsInScope)
+      cons(newtop, env)
 
     discardScope env ==
       rest env
