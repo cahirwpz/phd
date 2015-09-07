@@ -299,8 +299,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       addSubTree!(ctx)
       env' := createScope env
 
-      -- It's vitally important that result type is represented by "%1" type
-      -- variable (e.g. 'return' refers to "%1").
+      -- It's vitally important that result type is represented by "%2" type
+      -- variable (e.g. 'return' refers to "%2").
       funDefNode := addNode!(ctx, [fn.name], env')
       resNode := addNode!(ctx, emptyNode(), env')
       argNodeList := [addNode!(ctx, emptyNode(), env) for n in fn.args]
@@ -597,9 +597,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
       if s = 'error then
         errorType := nodeMappingType([stringType], typeAny)
         types := [errorType, :types]
-      --if s = 'return then
-      --  returnType := nodeMappingType([integerType, root(ctx).type], typeAny)
-      --  types := [returnType, :types]
+      if s = 'return then
+        resType := node(ctx, 2).type
+        returnType := nodeMappingType([integerType, resType], typeAny)
+        types := [returnType, :types]
 
       -- handle a symbol which is a type constructor
       if inDatabase? s then

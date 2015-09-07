@@ -289,6 +289,7 @@ SpadTypeTree() : Exports == Implementation where
     members : % -> List(TNA)
     listPostOrder : (%, PI) -> List(TN)
 
+    node : (%, PI) -> TN
     node : (%, NR) -> TN
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
@@ -337,6 +338,9 @@ SpadTypeTree() : Exports == Implementation where
 
     members x ==
       members x.m_nodes
+
+    node (x : %, i : PI) : TN ==
+      node(top x.m_current, i)
 
     node (x : %, nr : NR) : TN ==
       node((x.m_nodes)(nr.major), nr.minor :: PI)

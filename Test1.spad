@@ -27,7 +27,6 @@ Test1() : Exports == Implementation where
     -- defined.
     -- foo a == a + 1
 
-    -- [BUG] Type error -- needs investigation!
     foo (a : F) == a + 1.0
 
     baz : (I, I) -> I

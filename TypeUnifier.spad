@@ -60,8 +60,7 @@ TypeUnifier() : Exports == Implementation where
       integer? n => false
       string? n => false
       symbol? n => false
-      typeAny? n => false
-      typeUndef? n => false
+      marker? n => false
 
       apply? n =>
         app := n :: APP
@@ -97,9 +96,8 @@ TypeUnifier() : Exports == Implementation where
       integer? n => false
       string? n => false
       symbol? n => false
-      typeAny? n => false
       typeVar? n => true
-      typeUndef? n => false
+      marker? n => true
 
       apply? n =>
         app := n :: APP
@@ -133,7 +131,7 @@ TypeUnifier() : Exports == Implementation where
       integer? n => false
       string? n => false
       symbol? n => false
-      typeAny? n => true
+      marker? n => true
       typeVar? n => false
 
       apply? n =>
@@ -220,8 +218,7 @@ TypeUnifier() : Exports == Implementation where
       integer? n => n
       string? n => n
       symbol? n => n
-      typeAny? n => n
-      typeUndef? n => n
+      marker? n => n
 
       apply? n =>
         app := n :: APP

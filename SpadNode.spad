@@ -109,29 +109,30 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
     construct : Union("%any", "%undef") -> %
 
   Implementation ==> add
-    Rep := Union("%any", "%undef")
+    Rep := Union(any : "%any", undef : "%undef")
 
     import ParserTools
 
-    construct(s) == [s]$Rep
+    construct s ==
+      s case "%any" => ["%any"]$Rep
+      s case "%undef" => ["%undef"]$Rep
 
     parse ex == 
-      symbol ex.2 = 'any => "%any"
-      symbol ex.2 = 'undef => "%undef"
-      error "BUG: cannot parse SpadMarker!"
+      symbol ex.2 = 'any => ["%any"]$Rep
+      symbol ex.2 = 'undef => ["%undef"]$Rep
 
     convert x ==
       s :=
-        x = "%any" => 'any
-        x = "%undef" => 'undef
+        x case any => 'any
+        x case undef => 'undef
       convert [convert("@Marker" :: Symbol), convert s]
 
     coerce (x : %) : PF ==
-      x = "%any" => "%any" :: PF 
-      x = "%undef" => "%undef" :: PF
+      x case any => "%any" :: PF 
+      x case undef => "%undef" :: PF
 
     n = m ==
-      (n = m)$Rep
+      EQUAL(n, m)$Lisp
 
 )abbrev domain SNODEREF SpadNodeRef
 SpadNodeRef(N : SpadNodeCategory) : Exports == Implementation where
@@ -1227,7 +1228,7 @@ SpadNode() : Exports == Implementation where
     nodeLoop : (Union("loop", "collect", "repeat"), List(%), List(%), %) -> %
     nodeMacro : (Symbol, List(Symbol), %) -> %
     nodeMappingType : (List(%), %) -> %
-    nodeMarker : Union("%", "%any", "%undef") -> %
+    nodeMarker : Union("%any", "%undef") -> %
     nodeNamedType : (Symbol, %) -> %
     nodeNodeRef : (PI, PI) -> %
     nodeRecordType : List(NT) -> %
