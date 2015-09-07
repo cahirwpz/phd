@@ -54,6 +54,8 @@ SpadNodeCategory() : Category == ParsableCategory with
   string? : % -> Boolean
   symbol? : % -> Boolean
   typeExpr? : % -> Boolean
+  typeDecl? : % -> Boolean
+  typeIs? : % -> Boolean
   typeOrigin? : % -> Boolean
   typeGuard? : % -> Boolean
   unionType? : % -> Boolean
@@ -1279,6 +1281,12 @@ SpadNode() : Exports == Implementation where
     string? n == n case str
     symbol? n == n case sym
     typeExpr? n == n case typeexpr
+    typeIs? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = 'is
+    typeDecl? n ==
+      not n case typeexpr => false
+      n.typeexpr.kind = '_:
     typeOrigin? n ==
       not n case typeexpr => false
       n.typeexpr.kind = '_$

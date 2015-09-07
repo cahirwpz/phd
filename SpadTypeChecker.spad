@@ -89,6 +89,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
     import SpadTypeTree
     import SpadTypeNodeArray(SpadTypeTree)
 
+    walk' : (TT, PI) -> Boolean
+
     evalApply(ctx : TT, r : APP, n : TN) : Boolean ==
       nfun := node(ctx, r.function :: NR) -- function node
       nargs := [node(ctx, arg :: NR) for arg in r.args] -- argument nodes
@@ -100,6 +102,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
         t' := stripOriginIfCan t
         not mappingType? t' => "iterate"
         sig := t' :: MT
+        if sig.args = [['constant]] then
+          sig := [[], sig.result]$MT
         #sig.args ~= #nargs => "iterate"
         debug ["Checking signature:" :: PF, bold(t :: PF)]
         -- 2) Check if arguments can be applied to function of given
@@ -137,7 +141,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         mappings := [t :: MT, :mappings]
       -- Propagate function arguments and return type down the tree.
       for i in 1..#nargs for narg in nargs repeat
-        limitNodeType!(ctx, narg, [(mt.args)(i) for mt in mappings])
+        nodeSubTypeOf!(ctx, narg, [(mt.args)(i) for mt in mappings])
       limitNodeType!(ctx, n, [mt.result for mt in mappings]) 
       true
 
@@ -177,6 +181,21 @@ SpadTypeTreeChecker() : Exports == Implementation where
       n2 := node(ctx, r.type :: NR)
       nodeSubType!(ctx, n1, n2)
 
+    evalTypeIs(ctx : TT, r : TE, n : TN) : Boolean ==
+      s := node(ctx, r.expr :: NR)
+      t := node(ctx, r.type :: NR)
+      -- a) {%s[?]} : {%t[t1, t2, ...] | T}
+      -- given a type information flows from nodes above during TT
+      -- construction and we don't know anything, let's accept types
+      -- from below
+      hasUnknownType?(ctx, s) => limitNodeType!(ctx, s, [t.type])
+      -- b) {%s[s1, s2, ...] | S} : {%t[?]}
+      -- we simply don't know, wait for types to flow from below
+      hasUnknownType?(ctx, t) => true
+      -- c) {%s[s1, s2, ...] | S} : {%t[t1, t2, ...] | T}
+      -- now it's easy...
+      nodesTypeMatch!(ctx, s, t)
+
     evalTypeOrigin(ctx : TT, r : TE, n : TN) : Boolean ==
       fun := node(ctx, r.expr :: NR)
       limitNodeType!(ctx, n, [fun.type])
@@ -195,7 +214,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
     -- even if no type error was detected (result "true" means yes or maybe)
     evalFormula(ctx : TT, f : N, n : TN) : Boolean ==
       emptyNode? f => true
-      nodeRef? f => true
+      nodeRef? f =>
+        nr := f :: NR
+        n.index.major ~= nr.major =>
+          walk'(ctx, nr.major)
+        true
 
       debug (["Running type inference for" :: PF, n.index :: PF,
               "of" :: PF, n.type :: PF, "type." :: PF])
@@ -204,6 +227,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       assign? f => evalAssign(ctx, f :: ASS, n)
       condExpr? f => evalCondExpr(ctx, f :: CE, n)
       subType? f => evalSubType(ctx, f :: TE, n)
+      typeIs? f => evalTypeIs(ctx, f :: TE, n)
       typeOrigin? f => evalTypeOrigin(ctx, f :: TE, n)
       capsule? f => evalCapsule(ctx, f :: SEQ, n)
 
@@ -215,7 +239,10 @@ SpadTypeTreeChecker() : Exports == Implementation where
       empty? rules => true
       while not empty? rules repeat
         fs := (first rules).formulas
-        "and"/[evalFormula(ctx, f, n) for f in fs] => break
+        while not empty? fs repeat
+          not evalFormula(ctx, first fs, n) => break
+          fs := rest fs
+        empty? fs => break
         rules := rest rules
       empty? rules => false
       -- Immediately remove rules that fail to apply.
@@ -240,10 +267,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
         n.node := rule.solution
       done! n; true
 
-    countProgress (ctx : TT, x : TNA) : Record(a : NNI, b : NNI) ==
+    countProgress (ctx : TT, i : PI) : Record(a : NNI, b : NNI) ==
       -- a = number of type variables and nodes to be processed
       --     (empty type variable counts twice)
       -- b = sum of types assigned to each type variable
+      x := members(ctx).i
       p := [#listTypeVars(x), 0]
       for n in members x | not done? n repeat
         p.a := p.a + 1
@@ -252,19 +280,19 @@ SpadTypeTreeChecker() : Exports == Implementation where
           else p.b := p.b + #typeOf(ctx, n)
       p
 
-    walk' (ctx : TT, na : TNA) : Boolean ==
+    walk' (ctx : TT, i : PI) : Boolean ==
       q : Queue(TN) := empty()
 
-      for n in listPostOrder(na) repeat 
+      for n in listPostOrder(ctx, i) | not done? n repeat 
         enqueue!(n, q)
 
-      info ["Processing order:" :: PF, bracket [n.index :: PF for n in members q]]
-
-      p := countProgress(ctx, na)
+      p := countProgress(ctx, i)
       s := 1 :: NNI
 
       while p.a > 0 or p.b > 0 repeat
         newQ : Queue(TN) := empty()
+
+        info ["Processing order:" :: PF, bracket [n.index :: PF for n in members q]]
 
         -- perform meta-step
         while not empty? q repeat
@@ -278,7 +306,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
           not evalAnyRule(ctx, n) =>
             fail pile([spaces ["Type error for node:" :: PF, n.index :: PF],
                        red(n.node :: PF)])
-            debug (ctx :: PF)
             return false
 
           -- Check if we're done with processing type variable tied to this node.
@@ -292,14 +319,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
         -- check if during meta-step the problem was reduced compared to
         -- previous meta-step
-        newP := countProgress(ctx, na)
+        newP := countProgress(ctx, i)
         correct :=
           newP.a < p.a => true
           newP.a = p.a and newP.b < p.b => true
           false
         not correct =>
           fail ("Type checker does not advance by applying known typing rules!" :: PF)
-          debug (ctx :: PF)
           return false
 
         -- setup new meta-step
@@ -307,7 +333,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
         q := newQ
         s := s + 1
 
-      info (ctx :: PF)
       true
 
     walk ctx ==
@@ -318,7 +343,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
 
-      success := walk'(ctx, root(ctx))
+      success := walk'(ctx, 1)
 
       if success then -- Rewrite the tree if succeeded !
         -- capture x in closure, so that we don't need to expose SpadTypeTree 
@@ -326,5 +351,12 @@ SpadTypeTreeChecker() : Exports == Implementation where
         for na in members ctx repeat
           findTypeNode := ((i : PI, j : PI) : TN +-> node(ctx, [i, j]$NR))
           root(na).node := rewrite(root(na).node)$SpadTreeRemoveReferences(findTypeNode)
+      else
+        for na in members ctx repeat
+          for n in members na repeat 
+            rewriteIfInferred!(ctx, n)
+            checkAndMarkIfDone!(ctx, n)
+
+      info (ctx :: PF)
 
       success

@@ -14,10 +14,9 @@ Test1() : Exports == Implementation where
     import PositiveInteger
     import NonNegativeInteger
 
-    -- [BUG] Signature below is not taken into account if uncommented.
-    -- foo : Integer -> Float
+    -- foo : I -> F
 
-    foo (a : Integer) ==
+    foo (a : I) ==
       a2 := a * a
       ma := - a
       if a >= 0
@@ -26,12 +25,12 @@ Test1() : Exports == Implementation where
 
     -- [BUG] Type checker should remember that {foo : I -> I} has been already
     -- defined.
-    ++ foo a == a + 1
+    -- foo a == a + 1
 
     -- [BUG] Type error -- needs investigation!
-    foo (a : Float) == a + 1.0
+    foo (a : F) == a + 1.0
 
-    baz : (Integer, Integer) -> Integer
+    baz : (I, I) -> I
 
     bar (x, y) ==
       -- [BUG] Cannot remove next line, because branch environment merging

@@ -11,10 +11,14 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
+    ruleFun : (Symbol, List(TN), TN, TN) -> TR
     ruleFtor : (FT, TN) -> TR
     ruleLoopIter : (TN, TN, TN) -> TR
     ruleLoop :
       (Union("loop", "collect", "repeat"), List(TN), List(TN), TN) -> TR
+    ruleRef : (List(TN), TN) -> TR
+    ruleTypeIs : (TN, TN) -> TR
+    ruleTypeIs : (TN, TN, List(TN)) -> TR
     ruleSeg : (TN, OTN, OTN) -> TR
     ruleSeq :
       (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), TN, List(TN)) -> TR
@@ -56,10 +60,29 @@ SpadTypeRuleFactory() : Exports == Implementation where
       [[:itorRefs, :guardRefs, bodyRef],
        nodeLoop(kind, itorRefs, guardRefs, bodyRef)]
 
+    ruleFun (sym, args, res, body) ==
+      argRefs := [nodeRef(arg) for arg in args]
+      (resRef, bodyRef) := (nodeRef(res), nodeRef(body))
+      [[resRef, :argRefs, bodyRef, nodeTypeExpr('is, resRef, bodyRef)],
+       nodeFun(sym, argRefs, resRef, bodyRef)]
+
     ruleFtor (ft, body) ==
       extendType := (emptyNode? ft.extends => ['Type]; ft.extends)
       bodyRef := nodeRef(body)
       [[bodyRef], nodeFtor(ft.name, ft.args, ft.type, extendType, bodyRef)]
+
+    ruleRef (deps, body) ==
+      depRefs := [nodeRef(dep) for dep in deps]
+      bodyRef := nodeRef(body)
+      [[:depRefs, bodyRef], bodyRef]
+
+    ruleTypeIs (typeDecl, typeDef) ==
+      ruleTypeIs (typeDecl, typeDef, [])
+
+    ruleTypeIs (typeDecl, typeDef, extraDeps) ==
+      (typeDefRef, typeDeclRef) := (nodeRef(typeDef), nodeRef(typeDecl))
+      extraDepRefs := [nodeRef(extraDep) for extraDep in extraDeps]
+      [[:extraDepRefs, typeDefRef, nodeTypeExpr('is, typeDeclRef, typeDefRef)], typeDefRef]
 
     ruleSeg (start, end, step) ==
       startRef := nodeRef(start)
@@ -80,7 +103,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
       (seqRef, exprRefs) := (nodeRef(seq), [nodeRef(expr) for expr in exprs])
       formula := 
         kind case "Capsule" => nodeSeq(kind, exprRefs)
-        nodeSubType(last exprRefs, seqRef)
+        nodeTypeExpr('is, seqRef, last exprRefs)
       [[:exprRefs, formula], nodeSeq(kind, exprRefs)]
 
     ruleTypeOrigin (expr, origin) ==
@@ -272,14 +295,19 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkFun (fn : FN, ctx : CTX, env : ENV) : TN ==
       debug ["Processing function" :: PF, string(fn.name :: PF)]
 
-      fnNode := addNode!(ctx, [fn], env)
+      funDeclNode := addNode!(ctx, [fn], env)
       addSubTree!(ctx)
       env' := createScope env
 
       -- It's vitally important that result type is represented by "%1" type
       -- variable (e.g. 'return' refers to "%1").
-      resNode := addNode!(ctx, ['return], env')
-      argNodeList := [addNode!(ctx, [(n :: NT).name], env) for n in fn.args]
+      funDefNode := addNode!(ctx, [fn.name], env')
+      resNode := addNode!(ctx, emptyNode(), env')
+      argNodeList := [addNode!(ctx, emptyNode(), env) for n in fn.args]
+
+      resNode.node := resNode.type
+      for argNode in argNodeList for n in fn.args repeat
+        argNode.node := nodeNamedType((n :: NT).name, argNode.type)
 
       -- Take the type of function and replace those components, that were not
       -- specified, with type variables.
@@ -290,6 +318,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
           for n in [resNode, :argNodeList] for t in [fnType.result, :fnType.args]])
 
       fnType' := nodeMappingType(rest typeList, first typeList)
+      setTypeOf!(ctx, funDefNode, [fnType'])
 
       debug(["Function" :: PF, string(bold (fn.name :: PF)), "has" :: PF,
              bold(fnType' :: PF), "type based on definition." :: PF])
@@ -314,6 +343,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
           candidate := substitute(fnType', ures :: SUBST)
           candidateList := [candidate :: MT, :candidateList]
 
+      for c in candidateList repeat 
+        for type in c.args | not unbound? type repeat
+          env' := envAddType(type, env')
+
       -- TODO: Filter out function which have been already defined.
 
       if not empty? candidateList then
@@ -326,7 +359,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
               "to be a local function!" :: PF])
         candidateList := [fnType]
 
-      setTypeOf!(ctx, fnNode, [[c] for c in candidateList])
+      setTypeOf!(ctx, funDeclNode, [[c] for c in candidateList])
       setTypeOf!(ctx, resNode, [c.result for c in candidateList])
       for argNode in argNodeList for i in 1.. repeat
         setTypeOf!(ctx, argNode, [c.args.i for c in candidateList])
@@ -335,10 +368,14 @@ SpadTypeTreeCreator() : Exports == Implementation where
         arg := n :: NT
         env'(arg.name) := argNode.type
 
-      fnBody := walk(fn.body, ctx, env')
+      bodyNode := walk(fn.body, ctx, env')
 
       leaveSubTree!(ctx)
-      return fnNode
+
+      funDeclNode.rules := [ruleTypeIs(funDeclNode, funDefNode)]
+      funDefNode.rules := [ruleFun(fn.name, argNodeList, resNode, bodyNode)]
+
+      return funDeclNode
 
     walkFtor (ft : FT, ctx : CTX, env : ENV) : TN ==
       sig := signature ft
@@ -618,15 +655,17 @@ SpadTypeTreeCreator() : Exports == Implementation where
           fail ["Type annotation works only for symbols!" :: PF]
           error ""
 
-        -- Type definition for a symbol:
-        -- add it to the environment or crash if already defined
+        -- Type definition for a symbol.
         s := te.expr :: Symbol
         ts := env(s)
 
-        (not empty? ts) and (first ts ~= te.type) =>
-          fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
-                "already defined as" :: PF, spaces[t :: PF for t in ts], "!" :: PF])
-          error ""
+        -- Add it to the environment or crash if already defined, unless it's
+        -- another function declaration (i.e. allow function type overloading).
+        if not mappingType? te.type then
+          (not empty? ts) and (first ts ~= te.type) =>
+            fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
+                  "already defined as" :: PF, bracket [t :: PF for t in ts], "!" :: PF])
+            error ""
 
         env(s) := te.type
         n := addNode!(ctx, [te], env)
@@ -700,8 +739,12 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkInt (i : Integer, ctx : CTX, env : ENV) : TN ==
       debug [i :: PF, "is" :: PF, integerType :: PF, ":)" :: PF]
+      type :=
+        i > 0 => nodeApp(['PositiveInteger], [])
+        i >= 0 => nodeApp(['NonNegativeInteger], [])
+        nodeApp(['NonNegativeInteger], [])
       this := addNode!(ctx, [i], env)
-      setTypeOf!(ctx, this, [integerType])
+      setTypeOf!(ctx, this, [type])
       this
 
     walkFlt (f : DoubleFloat, ctx : CTX, env : ENV) : TN ==

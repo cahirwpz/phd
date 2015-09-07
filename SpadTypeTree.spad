@@ -60,6 +60,7 @@ SpadTypeNode() : Exports == Implementation where
   TR ==> SpadTypeRule
   ENV ==> SpadEnvironment
   N ==> SpadNode
+  NT ==> SpadNamedType(N)
   NR ==> SpadNodeRef(N)
   TV ==> SpadTypeVar(N)
   FN ==> SpadFunction(N)
@@ -151,6 +152,8 @@ SpadTypeNode() : Exports == Implementation where
         value? n or typeVar? n =>
           symbol? n => bold cyan(n :: PF)
           bold(n :: PF)
+        namedType? n =>
+          bold cyan((n :: NT).name :: PF)
         function? n =>
           bold cyan((n :: FN).name :: PF)
         sequence? n =>
@@ -247,8 +250,11 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
       [n.type :: TV for n in entries x.m_nodes | typeVar? n.type]
 
     walkPostOrder(x : %, tn : TN) : List(TN) ==
-      lst := [walkPostOrder(x, (x.m_nodes)(nr.minor)) for nr in references(tn)]
-      "concat"/concat(lst, [tn])
+      lst : List(List(TN)) := [[tn]]
+      for nr in reverse references(tn) repeat
+        if nr.major = tn.index.major then
+          lst := [walkPostOrder(x, (x.m_nodes)(nr.minor)), :lst]
+      "concat"/lst
 
     listPostOrder x ==
       walkPostOrder(x, x.m_nodes.1)
@@ -281,6 +287,7 @@ SpadTypeTree() : Exports == Implementation where
 
     root : % -> TNA
     members : % -> List(TNA)
+    listPostOrder : (%, PI) -> List(TN)
 
     node : (%, NR) -> TN
     addNode! : (%, N) -> TN
@@ -300,6 +307,7 @@ SpadTypeTree() : Exports == Implementation where
     limitNodeType! : (%, TN, List(N)) -> Boolean
 
     nodeSubType! : (%, TN, TN) -> Boolean
+    nodeSubTypeOf! : (%, TN, List(N)) -> Boolean
     nodesTypeMatch! : (%, TN, TN) -> Boolean 
 
     rewriteIfInferred! : (%, TN) -> Boolean
@@ -333,17 +341,20 @@ SpadTypeTree() : Exports == Implementation where
     node (x : %, nr : NR) : TN ==
       node((x.m_nodes)(nr.major), nr.minor :: PI)
 
+    listPostOrder (x : %, i : PI) : List(TN) ==
+      listPostOrder (x.m_nodes.i)
+
     unknownType? (terms : List(N)) : Boolean ==
       #terms = 1 and emptyNode?(first terms)
 
     aliasType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeVar?(first terms)
 
-    addNode! (x : %, tn : N) : TN ==
-      addNode! (top x.m_current, tn)
+    addNode! (x : %, n : N) : TN ==
+      addNode! (top x.m_current, n)
 
-    addNode! (x : %, tn : N, env : ENV) : TN ==
-      addNode! (top x.m_current, tn, env)
+    addNode! (x : %, n : N, env : ENV) : TN ==
+      addNode! (top x.m_current, n, env)
 
     killNode! (x : %, tn : TN) : Void ==
       killNode!((x.m_nodes)(tn.index.major), tn)
@@ -417,6 +428,7 @@ SpadTypeTree() : Exports == Implementation where
       terms := (x.m_typevars)(tv)
       unknownType? terms or #terms > 1 => false
       term := first terms
+      unbound? term => false
       rewriteTypeVars!(x, tv, term)
       debug ["Removing" :: PF, bold(tv :: PF), "type variable." :: PF]
       remove!(tv, x.m_typevars)
@@ -519,7 +531,7 @@ SpadTypeTree() : Exports == Implementation where
       setTypeOf!(x, sn, removeDuplicates tl)
       true
 
-    nodeSubTypeOfList! (x : %, sn : TN, types : List(N)) : Boolean ==
+    nodeSubTypeOf!(x : %, sn : TN, types : List(N)) : Boolean ==
       -- {%s[?]} <: [t1, t2, ...]
       hasUnknownType?(x, sn) => false
       -- {%s[s1, s2, ...] | S} <: [t1, t2, ...]
@@ -529,7 +541,12 @@ SpadTypeTree() : Exports == Implementation where
           if isSubType(s, t) then
             sl := [s, :sl]
       empty? sl => false
-      setTypeOf!(x, sn, removeDuplicates sl)
+      sl := removeDuplicates sl
+      tl : List(N) := []
+      for s in sl repeat
+        if not "or"/[isSubType(s, t) for t in sl | s ~= t] then
+          tl := [s, :tl]
+      setTypeOf!(x, sn, tl)
       true
 
     coerceTV (e : Record(key : TV, entry : List(N))) : PF ==
