@@ -1,6 +1,7 @@
 )abbrev package STRFAC SpadTypeRuleFactory
 SpadTypeRuleFactory() : Exports == Implementation where
   N ==> SpadNode
+  FN ==> SpadFunction(N)
   FT ==> SpadFunctor(N)
   TR ==> SpadTypeRule
   TN ==> SpadTypeNode
@@ -11,26 +12,28 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
-    ruleFun : (Symbol, List(TN), TN, TN) -> TR
-    ruleFtor : (FT, TN) -> TR
+    ruleFun : (FN, List(TN), TN, TN) -> TR
+    ruleFtor : (FT, List(TN), TN, TN) -> TR
     ruleLoopIter : (TN, TN, TN) -> TR
-    ruleLoop :
-      (Union("loop", "collect", "repeat"), List(TN), List(TN), TN) -> TR
+    ruleLoop : (Union("loop", "collect", "repeat"), 
+                List(TN), List(TN), TN) -> TR
     ruleRef : (List(TN), TN) -> TR
     ruleTypeIs : (TN, TN) -> TR
-    ruleTypeIs : (TN, TN, List(TN)) -> TR
+    ruleTypeIs : (List(TN), TN, TN) -> TR
     ruleSeg : (TN, OTN, OTN) -> TR
-    ruleSeq :
-      (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), TN, List(TN)) -> TR
+    ruleSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
+                     "Tuple", "Body"), TN, List(TN)) -> TR
     ruleTypeOrigin : (TN, N) -> TR
     ruleSubType : (TN, TN) -> TR
+    ruleSubType : (List(TN), TN, TN) -> TR
     ruleSuperType : (TN, TN) -> TR
 
   Implementation ==> add
-    ruleAssign (left, right) ==
-      (leftRef, rightRef) := (nodeRef(left), nodeRef(right))
-      [[leftRef, rightRef, nodeAssign(leftRef, rightRef)],
-       nodeAssign(leftRef, rightRef)]
+    -- for assignment "L := R" do:
+    -- compute "L, R"; if "L := R" then solution is "L := R"
+    ruleAssign (L', R') ==
+      (L, R) := (nodeRef(L'), nodeRef(R'))
+      [[L, R, nodeAssign(L, R)], nodeAssign(L, R)]
 
     ruleApply (fun, args) ==
       (funRef, argRefs) := (nodeRef(fun), [nodeRef(arg) for arg in args])
@@ -43,15 +46,26 @@ SpadTypeRuleFactory() : Exports == Implementation where
       [[:extraRefs, funRef, :argRefs, nodeApp(funRef, argRefs)],
        nodeApp(funRef, argRefs)]
 
-    ruleCondExpr (cond, truebr, falsebr) ==
-      (condRef, trueRef, falseRef) := (nodeRef(cond), nodeRef(truebr), nodeRef(falsebr))
-      [[condRef, trueRef, falseRef, nodeCondExpr(condRef, trueRef, falseRef)],
-       nodeCondExpr(condRef, trueRef, falseRef)]
+    ruleCondExpr (C', T', F') ==
+      (C, T, F) := (nodeRef(C'), nodeRef(T'), nodeRef(F'))
+      [[C, T, F, nodeCondExpr(C, T, F)], nodeCondExpr(C, T, F)]
+
+    -- for function "fn (a1 : A1, ..., an : An) : T == B" do:
+    -- compute "A1, ..., An, T, B"; if "T is B" then solution is "fn"
+    ruleFun (fn, As', T', B') ==
+      (As, T, B) := ([nodeRef(a) for a in As'], nodeRef(T'), nodeRef(B'))
+      [[:As, T, B, nodeTypeExpr('is, T, B)], nodeFun(fn.name, As, T, B)]
+
+    -- for functor "ft (a1 : A1, ..., an : An) : T == E add B" do:
+    -- compute "A1, ..., An, T, B"; if "B <: T" then solution is "ft"
+    ruleFtor (ft, As', T', B') ==
+      (As, T, B) := ([nodeRef(a) for a in As'], nodeRef(T'), nodeRef(B'))
+      E := (emptyNode? ft.extends => ['Type]; ft.extends)
+      [[:As, T, B, nodeSubType(B, T)], nodeFtor(ft.name, ft.args, ft.type, E, B)]
 
     ruleLoopIter (var, seq, iter) == 
       (varRef, seqRef, iterRef) := (nodeRef(var), nodeRef(seq), nodeRef(iter))
-      [[varRef, seqRef, nodeSubType(seqRef, iterRef)],
-       nodeIterator(var.node :: Symbol, seqRef)]
+      [[varRef, seqRef], nodeIterator(var.node :: Symbol, seqRef)]
 
     ruleLoop (kind, itors, guards, body) ==
       itorRefs := [nodeRef(itor) for itor in itors]
@@ -60,29 +74,10 @@ SpadTypeRuleFactory() : Exports == Implementation where
       [[:itorRefs, :guardRefs, bodyRef],
        nodeLoop(kind, itorRefs, guardRefs, bodyRef)]
 
-    ruleFun (sym, args, res, body) ==
-      argRefs := [nodeRef(arg) for arg in args]
-      (resRef, bodyRef) := (nodeRef(res), nodeRef(body))
-      [[resRef, :argRefs, bodyRef, nodeTypeExpr('is, resRef, bodyRef)],
-       nodeFun(sym, argRefs, resRef, bodyRef)]
-
-    ruleFtor (ft, body) ==
-      extendType := (emptyNode? ft.extends => ['Type]; ft.extends)
-      bodyRef := nodeRef(body)
-      [[bodyRef], nodeFtor(ft.name, ft.args, ft.type, extendType, bodyRef)]
-
     ruleRef (deps, body) ==
       depRefs := [nodeRef(dep) for dep in deps]
       bodyRef := nodeRef(body)
       [[:depRefs, bodyRef], bodyRef]
-
-    ruleTypeIs (typeDecl, typeDef) ==
-      ruleTypeIs (typeDecl, typeDef, [])
-
-    ruleTypeIs (typeDecl, typeDef, extraDeps) ==
-      (typeDefRef, typeDeclRef) := (nodeRef(typeDef), nodeRef(typeDecl))
-      extraDepRefs := [nodeRef(extraDep) for extraDep in extraDeps]
-      [[:extraDepRefs, typeDefRef, nodeTypeExpr('is, typeDeclRef, typeDefRef)], typeDefRef]
 
     ruleSeg (start, end, step) ==
       startRef := nodeRef(start)
@@ -111,13 +106,27 @@ SpadTypeRuleFactory() : Exports == Implementation where
       [[exprRef, nodeTypeExpr('_$, exprRef, origin)],
        nodeTypeExpr('_$, exprRef, origin)]
 
-    ruleSubType (subType, type) ==
-      (subTypeRef, typeRef) := (nodeRef(subType), nodeRef(type))
-      [[subTypeRef, nodeSubType(subTypeRef, typeRef)], subTypeRef]
-
     ruleSuperType (superType, type) ==
       (superTypeRef, typeRef) := (nodeRef(superType), nodeRef(type))
       [[typeRef, nodeSubType(superTypeRef, typeRef)], nodeRef(type)]
+
+    -- compute "S"; if "S is T" then solution is "S"
+    ruleTypeIs (S', T') ==
+      ruleTypeIs ([], S', T')
+
+    -- compute "P1, ..., Pn, S"; if "S is T" then solution is "S"
+    ruleTypeIs (Ps', S', T') ==
+      (Ps, S, T) := ([nodeRef(p) for p in Ps'], nodeRef(S'), nodeRef(T'))
+      [[:Ps, S, nodeTypeExpr('is, S, T)], S]
+
+    -- compute "S"; if "S <: T" then solution is "S"
+    ruleSubType (S', T') ==
+      ruleSubType ([], S', T')
+
+    -- compute "P1, ..., Pn, S"; if "S <: T" then solution is "S"
+    ruleSubType (Ps', S', T') ==
+      (Ps, S, T) := ([nodeRef(p) for p in Ps'], nodeRef(S'), nodeRef(T'))
+      [[:Ps, S, nodeSubType(S, T)], S]
 
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
@@ -196,7 +205,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- rewrite QUOTE(symbol) to value 'symbol
       a.function = ['QUOTE] and #a.args = 1 =>
         this := addNode!(ctx, first a.args, env)
-        this.type := symbolType
+        setTypeOf!(ctx, this, [symbolType])
         this
 
       debug ["Processing function application." :: PF]
@@ -372,8 +381,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       leaveSubTree!(ctx)
 
-      funDeclNode.rules := [ruleTypeIs(funDeclNode, funDefNode)]
-      funDefNode.rules := [ruleFun(fn.name, argNodeList, resNode, bodyNode)]
+      funDeclNode.rules := [ruleTypeIs(funDefNode, funDeclNode)]
+      funDefNode.rules := [ruleFun(fn, argNodeList, resNode, bodyNode)]
 
       return funDeclNode
 
@@ -389,42 +398,38 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       this := addNode!(ctx, [ft.name], env)
 
+      resNode := addNode!(ctx, ft.type, env)
+      -- FIXME: Functor's return type is not of "Join" node!
+      resType := (sequence? ft.type => nodeSeq("Join", (ft.type :: SEQ).list); ft.type)
+      setTypeOf!(ctx, resNode, [resType])
+      resType := resNode.type
+
       argSub := [[]]$AssociationList(Symbol, N)
-      argLst : List(N) := []
-      ftDeps : List(N) := []
+      argNodeList : List(TN) := []
 
       -- process functor's arguments
       for arg in ft.args repeat
         argNode := addNode!(ctx, [arg.name], env)
         setTypeOf!(ctx, argNode, [arg.type])
-        ftDeps := [nodeRef(argNode), :ftDeps]
         env(arg.name :: Symbol) := argNode.type
         argSub(arg.name) := argNode.type
-        argLst := [argNode.type, :argLst]
+        argNodeList := [argNode, :argNodeList]
 
-      argLst := reverse argLst
-      -- FIXME: Functor's return type is not of "Join" node!
-      ftorResType := (sequence? ft.type => nodeSeq("Join", (ft.type :: SEQ).list); ft.type)
-      ftorResNode := addNode!(ctx, ft.type, env)
-      setTypeOf!(ctx, ftorResNode, [ftorResType])
-      setTypeOf!(ctx, this, [nodeMappingType(argLst, ftorResNode.type)])
-      ftDeps := [nodeRef(ftorResNode), :ftDeps]
-
-      env("$" :: Symbol) := nodeApp([ft.name], argLst)
+      argNodeList := reverse argNodeList
+      argTypeList := [argNode.type for argNode in argNodeList]
+      env("$" :: Symbol) := nodeApp([ft.name], argTypeList)
+      setTypeOf!(ctx, this, [nodeMappingType(argTypeList, resType)])
 
       -- process functor's body
       for n in (ft.type :: SEQ).list | namedType? n repeat
         nt := n :: NT
         env(nt.name :: Symbol) := nodeTypeExpr('_$, nt.type, ["$" :: Symbol])
 
-      ftorBody := walk(ft.capsule, ctx, env)
+      bodyNode := walk(ft.capsule, ctx, env)
 
       leaveSubTree!(ctx)
 
-      extendType := if emptyNode? ft.extends then ['Type] else ft.extends
-      formulas := reverse [nodeSubType(nodeRef(ftorBody), nodeRef(ftorResNode)), nodeRef(ftorBody), :ftDeps]
-      solution := nodeFtor(ft.name, ft.args, ft.type, extendType, nodeRef(ftorBody))
-      this.rules := [[formulas, solution]]
+      this.rules := [ruleFtor(ft, argNodeList, resNode, bodyNode)]
       this
 
     walkImport (im : IM, ctx : CTX, env : ENV) : TN ==
@@ -473,7 +478,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       deps := concat(reverse deps, nodeRef(lamBodyType))
 
       -- add a node with type of the lambda expression just for dependants
-      this.type := [lamType]
+      --setTypeOf!(ctx, this, [lamType])
       this.rules := [[deps, nodeLambda(argList, typeRef(lamBodyType), nodeRef(lamBody))]]
       this
 
@@ -496,27 +501,30 @@ SpadTypeTreeCreator() : Exports == Implementation where
       for n in lp.itors repeat
         itor := n :: IT
 
-        varType := emptyNode() -- addTypeVar!(ctx)
+        itorExpr := addNode!(ctx, n, env)
+        varExpr := addNode!(ctx, [itor.var], env)
+        seqType := addNode!(ctx, emptyNode(), env)
+        seqExpr := walk(itor.seq, ctx, env)
+
+        setTypeOf!(ctx, seqType,
+            [nodeApp(['List], [varExpr.type]),
+             nodeApp(['UniversalSegment], [varExpr.type])])
+        seqType.rules := [ruleTypeIs(seqExpr, seqType), ruleSubType(seqExpr, seqType)]
 
         -- Iterator variable is added to loop's body environment,
         -- but is also known to guards.
-        env'(itor.var) := varType
+        env'(itor.var) := varExpr.type
 
-        itorExpr := addNode!(ctx, n, env)
-        --itorExpr.type :=
-        --  addTypeVar!(ctx,
-        --    [nodeApp(['List], [varType]),
-        --     nodeApp(['UniversalSegment], [varType])])
-        varExpr := walk([itor.var], ctx, env')
-        seqExpr := walk(itor.seq, ctx, env)
-        itorExpr.rules := [ruleLoopIter(varExpr, seqExpr, itorExpr)]
+        setTypeOf!(ctx, itorExpr, [voidType])
+
+        itorExpr.rules := [ruleLoopIter(varExpr, seqType, itorExpr)]
         itorList := [itorExpr, :itorList]
 
       debug ["Processing" :: PF, #(lp.guards) :: PF, "guard(s)." :: PF]
       guardList : List(TN) := []
       for guard in lp.guards repeat
         guardType := addNode!(ctx, guard, env')
-        guardType.type := booleanType
+        setTypeOf!(ctx, guardType, [booleanType])
         guardExpr := walk(guard, ctx, env')
         guardType.rules := [ruleSubType(guardExpr, guardType)]
         guardList := [guardType, :guardList]
@@ -525,7 +533,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       body :=
         lp.kind case "collect" =>
           bodyType := addNode!(ctx, lp.body, env')
-          bodyType.type := type
+          setTypeOf!(ctx, bodyType, [type])
           bodyExpr := walk(lp.body, ctx, env')
           bodyType.rules := [ruleSubType(bodyExpr, bodyType)]
           bodyType
@@ -536,35 +544,26 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkSeg (seg : SEG, ctx : CTX, env : ENV) : TN ==
       debug ["Processing segment:" :: PF, string(seg :: PF)]
-      segType := emptyNode() --addTypeVar! ctx
-
       this := addNode!(ctx, [seg], env)
 
-      startType := addNode!(ctx, seg.start, env)
       startExpr := walk(seg.start, ctx, env)
-      startType.type := segType
-      startType.rules := [ruleSubType(startExpr, startType)]
 
-      endType' : Union(TN, "none") :=
+      endExpr' : Union(TN, "none") :=
         not emptyNode? seg.end =>
-          endType := addNode!(ctx, seg.end, env)
           endExpr := walk(seg.end, ctx, env)
-          endType.type := segType
-          endType.rules := [ruleSubType(endExpr, endType)]
-          endType
+          setTypeOf!(ctx, endExpr, [startExpr.type])
+          endExpr
         "none"
 
-      stepType' : Union(TN, "none") :=
+      stepExpr' : Union(TN, "none") :=
         not emptyNode? seg.step =>
-          stepType := addNode!(ctx, seg.step, env)
           stepExpr := walk(seg.step, ctx, env)
-          stepType.type := integerType
-          stepType.rules := [ruleSubType(stepExpr, stepType)]
-          stepType
+          setTypeOf!(ctx, stepExpr, [integerType])
+          stepExpr
         "none"
 
-      this.type := nodeApp(['UniversalSegment], [segType])
-      this.rules := [ruleSeg(startType, endType', stepType')]
+      setTypeOf!(ctx, this, [nodeApp(['UniversalSegment], [startExpr.type])])
+      this.rules := [ruleSeg(startExpr, endExpr', stepExpr')]
       this
 
     walkSeq (s : SEQ, ctx : CTX, env : ENV) : TN ==
@@ -751,7 +750,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkFlt (f : DoubleFloat, ctx : CTX, env : ENV) : TN ==
       debug [f :: PF, "is" :: PF, floatType :: PF, ":)" :: PF]
       this := addNode!(ctx, [f], env)
-      this.type := floatType
+      setTypeOf!(ctx, this, [floatType])
       this
 
     walkStr (s : String, ctx : CTX, env : ENV) : TN ==

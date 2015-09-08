@@ -237,6 +237,7 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
       info ["Killing" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
         unregisterNode!(x.m_tree, tn)
+      tn.type := typeUndef
       done! tn
 
     -- rewrite all nodes with type that contains given variable
@@ -390,13 +391,13 @@ SpadTypeTree() : Exports == Implementation where
       typeVar? tn.type =>
         (x.m_typevars)(tn.type :: TV) := terms
       #terms > 1 or tn.type ~= terms.1 =>
-        fail pile(
-          ["Cannot set the type of node! Types not equal:" :: PF,
+        warn ["Cannot set the type of" :: PF, tn.index :: PF, "node!" :: PF]
+        warn pile(
+          ["Types not equal:" :: PF,
            bold red("old:" :: PF),
            indent(2, tn.type :: PF),
            bold red("new:" :: PF), 
            indent(2, vconcat [t :: PF for t in terms])])
-        error ""
 
     addSubTree! x ==
       subtree := [x, (#(x.m_nodes) + 1) :: PI]

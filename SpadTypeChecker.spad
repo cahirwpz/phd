@@ -125,6 +125,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
         sigs := [t, :sigs]
       subst := mergeSubstitutions(substList)
 
+      debug ["Valid signatures:" :: PF, bold bracket [t :: PF for t in sigs]]
+
       empty? sigs => false
 
       if typeVar? nfun.type then
