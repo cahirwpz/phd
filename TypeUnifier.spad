@@ -10,7 +10,9 @@ TypeUnifier() : Exports == Implementation where
   SEQ ==> SpadSequence(N)
   RT ==> SpadRecordType(N)
   TD ==> SpadTypeDecl(N)
-  TE ==> SpadTypeExpr(N)
+  TG ==> SpadTypeGuard(N)
+  TEH ==> SpadTypeHas(N)
+  TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
   SEQ ==> SpadSequence(N)
@@ -83,9 +85,9 @@ TypeUnifier() : Exports == Implementation where
       typeDecl? n =>
         td := n :: TD
         occurs'? td.expr or occurs'? td.type
-      typeExpr? n =>
-        te := n :: TE
-        occurs'? te.expr or occurs'? te.type
+      typeOrigin? n =>
+        to := n :: TO
+        occurs'? to.expr or occurs'? to.type
       typeVar? n =>
         (n :: TV) = tvar
 
@@ -120,9 +122,9 @@ TypeUnifier() : Exports == Implementation where
       typeDecl? n =>
         td := n :: TD
         unbound? td.expr or unbound? td.type
-      typeExpr? n =>
-        te := n :: TE
-        unbound? te.expr or unbound? te.type
+      typeOrigin? n =>
+        to := n :: TO
+        unbound? to.expr or unbound? to.type
 
       fail ["unbound?: case not handled for" :: PF, n :: PF]
       error ""
@@ -156,8 +158,8 @@ TypeUnifier() : Exports == Implementation where
         td := n :: TD
         containsWildcard? td.expr or containsWildcard? td.type
       typeOrigin? n =>
-        te := n :: TE
-        containsWildcard? te.expr or containsWildcard? te.type
+        to := n :: TO
+        containsWildcard? to.expr or containsWildcard? to.type
 
       fail ["containsWildcard?: case not handled for" :: PF, n :: PF]
       error ""
@@ -186,9 +188,9 @@ TypeUnifier() : Exports == Implementation where
       typeDecl? n =>
         td := n :: TD
         removeDuplicates(concat(freeVars td.type, freeVars td.expr))
-      typeExpr? n =>
-        te := n :: TE
-        removeDuplicates(concat(freeVars te.type, freeVars te.expr))
+      typeOrigin? n =>
+        to := n :: TO
+        removeDuplicates(concat(freeVars to.type, freeVars to.expr))
 
       fail ["freeVars: case not handled for" :: PF, n :: PF]
       error ""
@@ -215,9 +217,9 @@ TypeUnifier() : Exports == Implementation where
       typeDecl? n =>
         td := n :: TD
         concat(refListRec td.type, refListRec td.expr)
-      typeExpr? n =>
-        te := n :: TE
-        concat(refListRec te.type, refListRec te.expr)
+      typeOrigin? n =>
+        to := n :: TO
+        concat(refListRec to.type, refListRec to.expr)
 
       fail ["refListRec: case not handled for" :: PF, n :: PF]
       error ""
@@ -267,11 +269,18 @@ TypeUnifier() : Exports == Implementation where
         td := n :: TD
         nodeTypeDecl(substitute(td.expr, var, term),
                      substitute(td.type, var, term))
-      typeExpr? n =>
-        te := n :: TE
-        nodeTypeExpr(te.kind, 
-                     substitute(te.expr, var, term),
-                     substitute(te.type, var, term))
+      typeGuard? n =>
+        tg := n :: TG
+        nodeTypeGuard(substitute(tg.expr, var, term),
+                      substitute(tg.type, var, term))
+      typeHas? n =>
+        te := n :: TEH
+        nodeTypeHas(substitute(te.expr, var, term),
+                    substitute(te.type, var, term))
+      typeOrigin? n =>
+        to := n :: TO
+        nodeTypeOrigin(substitute(to.expr, var, term),
+                       substitute(to.type, var, term))
       typeVar? n =>
         if (n :: TV) = var then term else n
 
@@ -369,15 +378,15 @@ TypeUnifier() : Exports == Implementation where
         td1.expr ~= td2.expr => "failed"
         unifyType'(td1.type, td2.type)
       typeOrigin? n1 and typeOrigin? n2 =>
-        te1 := n1 :: TE
-        te2 := n2 :: TE
-        unifyTypeList ([[te1.type, te2.type]$P, [te1.expr, te2.expr]$P])
+        to1 := n1 :: TO
+        to2 := n2 :: TO
+        unifyTypeList ([[to1.type, to2.type]$P, [to1.expr, to2.expr]$P])
       typeOrigin? n1 =>
-        te1 := n1 :: TE
-        unifyType'(te1.expr, n2)
+        to1 := n1 :: TO
+        unifyType'(to1.expr, n2)
       typeOrigin? n2 =>
-        te2 := n2 :: TE
-        unifyType'(n1, te2.expr)
+        to2 := n2 :: TO
+        unifyType'(n1, to2.expr)
 
       -- constants
       symbol? n1 and symbol? n2 and (n1 :: Symbol) = (n2 :: Symbol) => [[]]
@@ -476,17 +485,17 @@ TypeUnifier() : Exports == Implementation where
               return false
         true
       apply? n1 and apply? n2 =>
-        ++ {T0(T1, T2, ..., Tk)} <: {S0(S1, S2, ..., Sk)}
-        ++ AFAIK functors in SPAD are invariant (!) for the time being.
-        ++ Handle built-in subtyping relations.
+        -- {T0(T1, T2, ..., Tk)} <: {S0(S1, S2, ..., Sk)}
+        -- AFAIK functors in SPAD are invariant (!) for the time being.
+        -- Handle built-in subtyping relations.
         n1 = nodeApp(['PositiveInteger], []) =>
           isSubType'(nodeApp(['NonNegativeInteger], []), n2)
         n1 = nodeApp(['NonNegativeInteger], []) =>
           isSubType'(nodeApp(['Integer], []), n2)
         false
       recordType? n1 and recordType? n2 =>
-        ++ {Record(F1 : T1, F2 : T2, ..., Fn : Tn)}
-        ++   <: {Record(F1 : S1, F2 : S2, ..., Fn : Sn)}
+        -- {Record(F1 : T1, F2 : T2, ..., Fn : Tn)}
+        --   <: {Record(F1 : S1, F2 : S2, ..., Fn : Sn)}
         rt1 := n1 :: RT
         rt2 := n2 :: RT
         #(fields rt1) ~= #(fields rt2) => false
@@ -496,7 +505,7 @@ TypeUnifier() : Exports == Implementation where
         true
       unionType? n2 =>
         if unionType? n1 then
-          ++ {Union(T1, T2, ..., Tn)} <: {Union(S1, S2, ..., Sm)} and n <= m
+          -- {Union(T1, T2, ..., Tn)} <: {Union(S1, S2, ..., Sm)} and n <= m
           ut1 := n1 :: UT
           ut2 := n2 :: UT
           #(variants ut1) > #(variants ut2) => false
@@ -505,7 +514,7 @@ TypeUnifier() : Exports == Implementation where
               return false
           true
         else
-          ++ {Ti} <: {Union(T1, T2, ..., Ti, ...)}
+          -- {Ti} <: {Union(T1, T2, ..., Ti, ...)}
           for v in variants(n2 :: UT) repeat
             if isSubType'(n1, v) then
               return true
@@ -515,10 +524,10 @@ TypeUnifier() : Exports == Implementation where
         td2 := n2 :: TD
         td1.expr = td2.expr and isSubType'(td1.type, td2.type)
       typeOrigin? n1 and typeOrigin? n2 =>
-        te1 := n1 :: TE
-        te2 := n2 :: TE
-        te1.type = te2.type and isSubType'(te1.expr, te2.expr)
-      ++ Everything is subtype of wildcard type!
+        to1 := n1 :: TO
+        to2 := n2 :: TO
+        to1.type = to2.type and isSubType'(to1.expr, to2.expr)
+      -- Everything is subtype of wildcard type!
       typeAny? n2 => true
 
       sequence? n1 and sequence? n2 =>

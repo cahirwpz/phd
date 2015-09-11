@@ -2,6 +2,7 @@
 SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadApply(%) -> %
   construct : SpadAssign(%) -> %
+  construct : SpadCase(%) -> %
   construct : SpadCondExpr(%) -> %
   construct : SpadFunction(%) -> %
   construct : SpadFunctor(%) -> %
@@ -16,8 +17,15 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadRecordType(%) -> %
   construct : SpadSegment(%) -> %
   construct : SpadSequence(%) -> %
+  construct : SpadSubType(%) -> %
+  construct : SpadTypeCoerce(%) -> %
   construct : SpadTypeDecl(%) -> %
-  construct : SpadTypeExpr(%) -> %
+  construct : SpadTypeGuard(%) -> %
+  construct : SpadTypeHas(%) -> %
+  construct : SpadTypeIs(%) -> %
+  construct : SpadTypeOrigin(%) -> %
+  construct : SpadTypePretend(%) -> %
+  construct : SpadTypeSelect(%) -> %
   construct : SpadTypeVar(%) -> %
   construct : SpadUnionType(%) -> %
   construct : SpadWhere(%) -> %
@@ -32,6 +40,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   apply? : % -> Boolean
   assign? : % -> Boolean
   capsule? : % -> Boolean
+  case? : % -> Boolean
   condExpr? : % -> Boolean
   emptyNode? : % -> Boolean
   float? : % -> Boolean
@@ -43,29 +52,30 @@ SpadNodeCategory() : Category == ParsableCategory with
   lambda? : % -> Boolean
   loop? : % -> Boolean
   macro? : % -> Boolean
-  marker? : % -> Boolean
   mappingType? : % -> Boolean
+  marker? : % -> Boolean
   nodeRef? : % -> Boolean
   recordType? : % -> Boolean
   segment? : % -> Boolean
   sequence? : % -> Boolean
   signatureList? : % -> Boolean
   string? : % -> Boolean
+  subType? : % -> Boolean
   symbol? : % -> Boolean
-  typeExpr? : % -> Boolean
+  typeAny? : % -> Boolean
+  typeCoerce? : % -> Boolean
   typeDecl? : % -> Boolean
+  typeExpr? : % -> Boolean
+  typeGuard? : % -> Boolean
   typeHas? : % -> Boolean
   typeIs? : % -> Boolean
+  typePretend? : % -> Boolean
   typeOrigin? : % -> Boolean
-  typeGuard? : % -> Boolean
+  typeSelect? : % -> Boolean
+  typeUndef?: % -> Boolean
+  typeVar? : % -> Boolean
   unionType? : % -> Boolean
   where? : % -> Boolean
-  typeAny? : % -> Boolean
-  typeVar? : % -> Boolean
-  typeUndef?: % -> Boolean
-  subType? : % -> Boolean
-  caseExpr? : % -> Boolean
-  typeDecl? : % -> Boolean
 
   value? : % -> Boolean
   true? : % -> Boolean
@@ -73,8 +83,12 @@ SpadNodeCategory() : Category == ParsableCategory with
 
   coerce : % -> DoubleFloat
   coerce : % -> Integer
+  coerce : % -> String
+  coerce : % -> Symbol
+
   coerce : % -> SpadApply(%)
   coerce : % -> SpadAssign(%)
+  coerce : % -> SpadCase(%)
   coerce : % -> SpadCondExpr(%)
   coerce : % -> SpadFunction(%)
   coerce : % -> SpadFunctor(%)
@@ -89,19 +103,33 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadRecordType(%)
   coerce : % -> SpadSegment(%)
   coerce : % -> SpadSequence(%)
+  coerce : % -> SpadSubType(%)
+  coerce : % -> SpadTypeCoerce(%)
   coerce : % -> SpadTypeDecl(%)
-  coerce : % -> SpadTypeExpr(%)
+  coerce : % -> SpadTypeGuard(%)
+  coerce : % -> SpadTypeHas(%)
+  coerce : % -> SpadTypeIs(%)
+  coerce : % -> SpadTypeOrigin(%)
+  coerce : % -> SpadTypePretend(%)
+  coerce : % -> SpadTypeSelect(%)
   coerce : % -> SpadTypeVar(%)
   coerce : % -> SpadUnionType(%)
   coerce : % -> SpadWhere(%)
-  coerce : % -> String
-  coerce : % -> Symbol
 
   convert : % -> SExpression
 
   constructor? : Symbol -> Boolean
 
   parseNonNull : SExpression -> %
+
+)abbrev category STECAT SpadTypeExprCategory
+SpadTypeExprCategory(N : SpadNodeCategory) : Category == ParsableCategory with
+    construct : (N, N) -> %
+    elt : (%, "expr") -> N
+    elt : (%, "type") -> N
+  add
+    parse ex == [parse ex.2, parse ex.3]
+    n = m == n.expr = m.expr and n.type = m.type
 
 )abbrev domain SMARKER SpadMarker
 SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
@@ -251,15 +279,12 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
 
 )abbrev domain STDECL SpadTypeDecl
 SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
-  PF ==> PrintableForm
   MT ==> SpadMappingType(N)
+  PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
-    elt : (%, "expr") -> N
-    elt : (%, "type") -> N
+  Exports ==> SpadTypeExprCategory(N) with
     construct : Symbol -> %
     construct : (Symbol, N) -> %
-    construct : (N, N) -> %
 
   Implementation ==> add
     Rep := Record(n_expr : N, n_type : N)
@@ -303,9 +328,6 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
     coerce n ==
       typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
       spaces [n.expr :: PF, ":" :: PF, typeName]
-
-    n = m ==
-      n.expr = m.expr and n.type = m.type 
 
 )abbrev domain SRTYPE SpadRecordType
 SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
@@ -639,48 +661,122 @@ SpadIterator(N : SpadNodeCategory) : Exports == Implementation where
     coerce itor ==
       spaces ["for" :: PF, itor.var :: PF, "in" :: PF, itor.seq :: PF]
 
-)abbrev domain STEXPR SpadTypeExpr
-SpadTypeExpr(N : SpadNodeCategory) : Exports == Implementation where
+)abbrev domain STSEL SpadTypeSelect
+SpadTypeSelect(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
-    elt : (%, "kind") -> Symbol
-    elt : (%, "expr") -> N
-    elt : (%, "type") -> N
-    construct : (Symbol, N, N) -> %
+  Rep := Record(t_expr : N, t_type : N)
 
-  Implementation ==> add
-    Rep := Record(t_kind : Symbol, t_expr : N, t_type : N)
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
 
-    import ParserTools
-    import SExpression
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_@, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_@ :: PF, ex.type :: PF]
+
+)abbrev domain SSUBTYPE SpadSubType
+SpadSubType(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
 
-    elt(x,"kind") == x.t_kind
-    elt(x,"expr") == x.t_expr
-    elt(x,"type") == x.t_type
+  Rep := Record(t_expr : N, t_type : N)
 
-    construct(k, e, t) ==
-      operators : List Symbol :=
-        ['case, 'has, 'is, 'pretend, '::, '@, '_$, '_<_:, '_|]
-      not member?(k, operators) =>
-        error concat ["Not a type expression operator: '", string(k), "' !"]
-      [k, e, t]$Rep
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
 
-    parse ex ==
-      if domsel? ex
-        then ['_$, parse ex.3, parse ex.2]
-        else [symbol ex.1, parse ex.2, parse ex.3]
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_<_:, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_<_: :: PF, ex.type :: PF]
+
+)abbrev domain SPRETEND SpadTypePretend
+SpadTypePretend(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
 
-    convert x ==
-      x.kind = '_$ =>
-        convert [convert 'Sel, convert x.type, convert x.expr]
-      convert [convert x.kind, convert x.expr, convert x.type]
+  Rep := Record(t_expr : N, t_type : N)
 
-    coerce ex ==
-      spaces [ex.expr :: PF, ex.kind :: PF, ex.type :: PF]
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
 
-    n = m ==
-      n.kind = m.kind and n.expr = m.expr and n.type = m.type
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_pretend, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_pretend :: PF, ex.type :: PF]
+
+)abbrev domain STIS SpadTypeIs
+SpadTypeIs(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
+
+  Rep := Record(t_expr : N, t_type : N)
+
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
+
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_is, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_is :: PF, ex.type :: PF]
+
+)abbrev domain STHAS SpadTypeHas
+SpadTypeHas(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
+
+  Rep := Record(t_expr : N, t_type : N)
+
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
+
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_has, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_has :: PF, ex.type :: PF]
+
+)abbrev domain SCASE SpadCase
+SpadCase(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
+
+  Rep := Record(t_expr : N, t_type : N)
+
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
+
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_case, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_case :: PF, ex.type :: PF]
+
+)abbrev domain STCOERCE SpadTypeCoerce
+SpadTypeCoerce(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
+
+  Rep := Record(t_expr : N, t_type : N)
+
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
+
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_:_:, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF, '_:_: :: PF, ex.type :: PF]
+
+)abbrev domain STGUARD SpadTypeGuard
+SpadTypeGuard(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
+
+  Rep := Record(t_expr : N, t_type : N)
+
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
+
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert '_|, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF,  '_| :: PF, ex.type :: PF]
+
+)abbrev domain STORIGIN SpadTypeOrigin
+SpadTypeOrigin(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
+  PF ==> PrintableForm
+
+  Rep := Record(t_expr : N, t_type : N)
+
+  elt(x,"expr") == x.t_expr
+  elt(x,"type") == x.t_type
+
+  construct(e, t) == [e, t]$Rep
+  convert x == convert [convert 'Sel, convert x.expr, convert x.type]
+  coerce ex == spaces [ex.expr :: PF,  '_$ :: PF, ex.type :: PF]
 
 )abbrev domain SLOOP SpadLoop
 SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
@@ -1185,29 +1281,38 @@ SpadNode() : Exports == Implementation where
   APP ==> SpadApply(%)
   ASS ==> SpadAssign(%)
   CE ==> SpadCondExpr(%)
+  SC ==> SpadCase(%)
   FN ==> SpadFunction(%)
   FT ==> SpadFunctor(%)
   IM ==> SpadImport(%)
   IT ==> SpadIterator(%)
   LAM ==> SpadLambda(%)
   LP ==> SpadLoop(%)
-  M ==> SpadMacro(%)
   MP ==> SpadMarkerPath
   MR ==> SpadMarker(%)
   MT ==> SpadMappingType(%)
+  SM ==> SpadMacro(%)
   NR ==> SpadNodeRef(%)
   RT ==> SpadRecordType(%)
   SEG ==> SpadSegment(%)
   SEQ ==> SpadSequence(%)
+  ST ==> SpadSubType(%)
+  TC ==> SpadTypeCoerce(%)
   TD ==> SpadTypeDecl(%)
-  TE ==> SpadTypeExpr(%)
+  TEH ==> SpadTypeHas(%)
+  TEI ==> SpadTypeIs(%)
+  TEP ==> SpadTypePretend(%)
+  TG ==> SpadTypeGuard(%)
+  TO ==> SpadTypeOrigin(%)
+  TS ==> SpadTypeSelect(%)
   TV ==> SpadTypeVar(%)
   UT ==> SpadUnionType(%)
-  W ==> SpadWhere(%)
+  SW ==> SpadWhere(%)
   
   Exports ==> SpadNodeCategory with
     nodeApp : (%, List(%)) -> %
     nodeAssign : (%, %) -> %
+    nodeCase : (%, %) -> %
     nodeCondExpr : (%, %, %) -> %
     nodeFtor : (Symbol, List(TD), %, %, %) -> %
     nodeFun : (Symbol, List(%), %, %) -> %
@@ -1223,25 +1328,55 @@ SpadNode() : Exports == Implementation where
     nodeSeg : (%, %, %) -> %
     nodeSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), List(%)) -> %
     nodeSubType : (%, %) -> %
+    nodeTypeCoerce : (%, %) -> %
     nodeTypeDecl : (Symbol, %) -> %
     nodeTypeDecl : (%, %) -> %
-    nodeTypeExpr : (Symbol, %, %) -> %
-    nodeTypeGuard: (%, %) -> %
-    nodeTypeHas: (%, %) -> %
-    nodeTypeIs: (%, %) -> %
-    nodeTypeOrigin: (%, %) -> %
+    nodeTypeGuard : (%, %) -> %
+    nodeTypeHas : (%, %) -> %
+    nodeTypeIs : (%, %) -> %
+    nodeTypePretend : (%, %) -> %
+    nodeTypeOrigin : (%, %) -> %
+    nodeTypeSelect : (%, %) -> %
     nodeTypeVar : (NNI, NNI) -> %
     nodeUnionType : List(%) -> %
     nodeWhere : (%, %) -> %
 
   Implementation ==> add
-    Rep := Union(empty : "$EmptyNode",
-                 apply : APP, assign : ASS, cond : CE, lambda : LAM, loop : LP,
-                 mapping : MT, record : RT, itor : IT, seq : SEQ,
-                 segment : SEG, ftor : FT, func : FN, simport : IM, smacro : M,
-                 swhere : W, typedecl : TD, typeexpr : TE, union : UT,
-                 marker : MR, typevar : TV, noderef : NR,
-                 dfloat : DF, int : Integer, str : String, sym : Symbol)
+    Rep := Union(dfloat : DF,
+                 int : Integer,
+                 str : String,
+                 sym : Symbol,
+                 apply : APP,
+                 assign : ASS,
+                 cond : CE, 
+                 ftor : FT,
+                 func : FN,
+                 itor : IT,
+                 lambda : LAM,
+                 loop : LP,
+                 mapping : MT,
+                 marker : MR,
+                 noderef : NR,
+                 record : RT,
+                 s_case : SC,
+                 segment : SEG,
+                 seq : SEQ,
+                 s_import : IM,
+                 s_macro : SM,
+                 subtype : ST,
+                 s_where : SW,
+                 t_case : TC,
+                 t_coerce : TC,
+                 t_decl : TD,
+                 t_guard : TG,
+                 t_has : TEH,
+                 t_is : TEI,
+                 t_origin: TO,
+                 t_pretend : TEP,
+                 t_select : TS,
+                 typevar : TV,
+                 union : UT,
+                 empty : "$EmptyNode")
 
     import SExpression
     import Printer
@@ -1253,16 +1388,17 @@ SpadNode() : Exports == Implementation where
     capsule? n ==
       not n case seq => false
       n.seq.kind = "Capsule"
+    case? n == n case s_case
     condExpr? n == n case cond
     float? n == n case dfloat
     function? n == n case func
     functor? n == n case ftor
-    import? n == n case simport
+    import? n == n case s_import
     integer? n == n case int
     iterator? n == n case itor
     lambda? n == n case lambda
     loop? n == n case loop 
-    macro? n == n case smacro 
+    macro? n == n case s_macro 
     mappingType? n == n case mapping 
     marker? n == n case marker
     nodeRef? n == n case noderef
@@ -1274,22 +1410,17 @@ SpadNode() : Exports == Implementation where
       n.seq.kind ~= "Join"
     string? n == n case str
     symbol? n == n case sym
-    typeDecl? n == n case typedecl
-    typeExpr? n == n case typeexpr
-    typeHas? n ==
-      not n case typeexpr => false
-      n.typeexpr.kind = 'has
-    typeIs? n ==
-      not n case typeexpr => false
-      n.typeexpr.kind = 'is
-    typeOrigin? n ==
-      not n case typeexpr => false
-      n.typeexpr.kind = '_$
-    typeGuard? n ==
-      not n case typeexpr => false
-      n.typeexpr.kind = '_|
+    typeCoerce? n == n case t_coerce
+    typeDecl? n == n case t_decl
+    typeGuard? n == n case t_guard
+    typeHas? n == n case t_has
+    typeIs? n == n case t_is
+    typePretend? n == n case t_pretend
+    typeOrigin? n == n case t_origin
+    typeSelect? n == n case t_select
+    subType? n == n case subtype
     unionType? n == n case union
-    where? n == n case swhere
+    where? n == n case s_where
     typeAny? n ==
       not n case marker => false
       n :: MR = ["%any"]
@@ -1297,12 +1428,6 @@ SpadNode() : Exports == Implementation where
     typeUndef? n ==
       not n case marker => false
       n :: MR = ["%undef"]
-    subType? n ==
-      not n case typeexpr => false
-      n.typeexpr.kind = '_<_:
-    caseExpr? n ==
-      not n case typeexpr => false
-      n.typeexpr.kind = 'case
 
     value? n ==
       float? n or integer? n or string? n or symbol? n
@@ -1328,6 +1453,10 @@ SpadNode() : Exports == Implementation where
       condExpr? n => n.cond
       CoerceError("SpadCondExpr")
 
+    coerce (n : %) : SC ==
+      case? n => n.s_case
+      CoerceError("SpadCase")
+
     coerce (n : %) : FN ==
       function? n => n.func
       CoerceError("SpadFunction")
@@ -1337,7 +1466,7 @@ SpadNode() : Exports == Implementation where
       CoerceError("SpadFunctor")
 
     coerce (n : %) : IM ==
-      import? n => n.simport
+      import? n => n.s_import
       CoerceError("SpadImport")
 
     coerce (n : %) : LAM == 
@@ -1352,8 +1481,8 @@ SpadNode() : Exports == Implementation where
       loop? n => n.loop
       CoerceError("SpadLoop")
 
-    coerce (n : %) : M ==
-      macro? n => n.smacro
+    coerce (n : %) : SM ==
+      macro? n => n.s_macro
       CoerceError("SpadMacro")
 
     coerce (n : %) : MT == 
@@ -1380,13 +1509,41 @@ SpadNode() : Exports == Implementation where
       sequence? n => n.seq
       CoerceError("SpadSequence")
 
+    coerce (n : %) : ST ==
+      subType? n => n.subtype
+      CoerceError("SpadSubType")
+
+    coerce (n : %) : TC ==
+      typeCoerce? n => n.t_coerce
+      CoerceError("SpadTypeCoerce")
+
     coerce (n : %) : TD ==
-      typeDecl? n => n.typedecl
+      typeDecl? n => n.t_decl
       CoerceError("SpadTypeDecl")
 
-    coerce (n : %) : TE ==
-      typeExpr? n => n.typeexpr
-      CoerceError("SpadTypeExpr")
+    coerce (n : %) : TG ==
+      typeGuard? n => n.t_guard
+      CoerceError("SpadTypeGuard")
+
+    coerce (n : %) : TEH ==
+      typeHas? n => n.t_has
+      CoerceError("SpadTypeHas")
+
+    coerce (n : %) : TEI ==
+      typeIs? n => n.t_is
+      CoerceError("SpadTypeIs")
+
+    coerce (n : %) : TEP ==
+      typePretend? n => n.t_pretend
+      CoerceError("SpadTypePretend")
+
+    coerce (n : %) : TO ==
+      typeOrigin? n => n.t_origin
+      CoerceError("SpadTypeOrigin")
+
+    coerce (n : %) : TS ==
+      typeSelect? n => n.t_select
+      CoerceError("SpadTypeSelect")
 
     coerce (n : %) : TV == 
       typeVar? n => n.typevar
@@ -1396,8 +1553,8 @@ SpadNode() : Exports == Implementation where
       unionType? n => n.union
       CoerceError("SpadUnionType")
 
-    coerce (n : %) : W ==
-      where? n => n.swhere
+    coerce (n : %) : SW ==
+      where? n => n.s_where
       CoerceError("SpadWhere")
 
     coerce (n : %) : DF ==
@@ -1426,24 +1583,32 @@ SpadNode() : Exports == Implementation where
     construct (n : APP) : % == [n]$Rep
     construct (n : ASS) : % == [n]$Rep
     construct (n : CE) : % == [n]$Rep
+    construct (n : SC) : % == [n]$Rep
     construct (n : FN) : % == [n]$Rep
     construct (n : FT) : % == [n]$Rep
     construct (n : IM) : % == [n]$Rep
     construct (n : IT) : % == [n]$Rep
     construct (n : LAM) : % == [n]$Rep
     construct (n : LP) : % == [n]$Rep
-    construct (n : M) : % == [n]$Rep
+    construct (n : SM) : % == [n]$Rep
     construct (n : MT) : % == [n]$Rep
     construct (n : MR) : % == [n]$Rep
     construct (n : NR) : % == [n]$Rep
     construct (n : RT) : % == [n]$Rep
     construct (n : SEG) : % == [n]$Rep
     construct (n : SEQ) : % == [n]$Rep
+    construct (n : ST) : % == [n]$Rep
+    construct (n : TC) : % == [n]$Rep
     construct (n : TD) : % == [n]$Rep
-    construct (n : TE) : % == [n]$Rep
+    construct (n : TG) : % == [n]$Rep
+    construct (n : TEH) : % == [n]$Rep
+    construct (n : TEI) : % == [n]$Rep
+    construct (n : TEP) : % == [n]$Rep
+    construct (n : TO) : % == [n]$Rep
+    construct (n : TS) : % == [n]$Rep
     construct (n : TV) : % == [n]$Rep
     construct (n : UT) : % == [n]$Rep
-    construct (n : W) : % == [n]$Rep
+    construct (n : SW) : % == [n]$Rep
 
     construct (n : DF) : % == [n]$Rep
     construct (n : Integer) : % == [n]$Rep
@@ -1465,36 +1630,22 @@ SpadNode() : Exports == Implementation where
         [parse(ex)$SEQ]
 
       import? ex => [parse(ex)$IM]
-      where? ex => [parse(ex)$W]
+      where? ex => [parse(ex)$SW]
       lambda? ex => [parse(ex)$LAM]
       functor? ex => [parse(ex)$FT]
       function? ex => [parse(ex)$FN]
-      macro? ex => [parse(ex)$M]
+      macro? ex => [parse(ex)$SM]
       marker? ex => [parse(ex)$MR]
       noderef? ex => [parse(ex)$NR]
       typevar? ex => [parse(ex)$TV]
-      signature? ex or var? ex =>
-        [parse(ex)$TD]
-
-      (case? ex or has? ex or is? ex or pretend? ex or coerce? ex or
-       domsel? ex or retsel? ex) => 
-        -- {expression with type annotation}
-        -- (: expr Type) 
-        -- {expression with "case" operator}
-        -- (case expr Type)
-        -- {expression with "has" operator}
-        -- (has expr Type)
-        -- {expression with "is" operator}
-        -- (is expr Type)
-        -- {expression with "pretend" operator}
-        -- (pretend expr Type)
-        -- {expression with "::" coerce operator}
-        -- (:: expr Type)
-        -- {expression with "@" return type selection operator}
-        -- (@ expr Type)
-        -- {expression with "$" domain selection operator}
-        -- (Sel expr Type)
-        [parse(ex)$TE]
+      signature? ex or var? ex => [parse(ex)$TD]
+      case? ex => [parse(ex)$SC]
+      has? ex => [parse(ex)$TEH]
+      is? ex => [parse(ex)$TEI]
+      pretend? ex => [parse(ex)$TEP]
+      coerce? ex => [parse(ex)$TC]
+      domsel? ex => [parse(ex)$TS]
+      retsel? ex => [parse(ex)$TO]
 
       let? ex => [parse(ex)$ASS]
 
@@ -1528,6 +1679,7 @@ SpadNode() : Exports == Implementation where
     coerce (n : %) : PF ==
       apply? n => (n :: APP) :: PF
       assign? n => (n :: ASS) :: PF
+      case? n => (n :: SC) :: PF
       condExpr? n => (n :: CE) :: PF
       float? n => (n :: DF) :: PF
       function? n => (n :: FN) :: PF
@@ -1537,7 +1689,7 @@ SpadNode() : Exports == Implementation where
       iterator? n => (n :: IT) :: PF
       lambda? n => (n :: LAM) :: PF
       loop? n => (n :: LP) :: PF
-      macro? n => (n :: M) :: PF
+      macro? n => (n :: SM) :: PF
       mappingType? n => (n :: MT) :: PF
       marker? n => (n :: MR) :: PF
       nodeRef? n => (n :: NR) :: PF
@@ -1546,11 +1698,18 @@ SpadNode() : Exports == Implementation where
       sequence? n => (n :: SEQ) :: PF
       string? n => string((n :: String) :: PF)
       symbol? n => (n :: Symbol) :: PF
+      subType? n => (n :: ST) :: PF
+      typeCoerce? n => (n :: TC) :: PF
       typeDecl? n => (n :: TD) :: PF
-      typeExpr? n => (n :: TE) :: PF
+      typeGuard? n => (n :: TG) :: PF
+      typeHas? n => (n :: TEH) :: PF
+      typeIs? n => (n :: TEI) :: PF
+      typePretend? n => (n :: TEP) :: PF
+      typeOrigin? n => (n :: TO) :: PF
+      typeSelect? n => (n :: TS) :: PF
       typeVar? n => (n :: TV) :: PF
       unionType? n => (n :: UT) :: PF
-      where? n => (n :: W) :: PF
+      where? n => (n :: SW) :: PF
       emptyNode? n => "?" :: PF
 
       error "coerce $ SpadNode: variant not handled!"
@@ -1558,6 +1717,7 @@ SpadNode() : Exports == Implementation where
     convert n ==
       apply? n => convert(n :: APP)
       assign? n => convert(n :: ASS)
+      case? n => convert(n :: SC)
       condExpr? n => convert(n :: CE)
       float? n => convert(n :: DF)
       function? n => convert(n :: FN)
@@ -1567,7 +1727,7 @@ SpadNode() : Exports == Implementation where
       iterator? n => convert(n :: IT)
       lambda? n => convert(n :: LAM)
       loop? n => convert(n :: LP)
-      macro? n => convert(n :: M)
+      macro? n => convert(n :: SM)
       mappingType? n => convert(n :: MT)
       marker? n => convert(n :: MR)
       nodeRef? n => convert(n :: NR)
@@ -1576,11 +1736,18 @@ SpadNode() : Exports == Implementation where
       sequence? n => convert(n :: SEQ)
       string? n => convert(n :: String)
       symbol? n => convert(n :: Symbol)
+      -- subType is not recognized by original compiler
+      typeCoerce? n => convert(n :: TC)
       typeDecl? n => convert(n :: TD)
-      typeExpr? n => convert(n :: TE)
+      -- typeGuard is not recognized by original compiler
+      typeHas? n => convert(n :: TEH)
+      typeIs? n => convert(n :: TEI)
+      typePretend? n => convert(n :: TEP)
+      typeOrigin? n => convert(n :: TO)
+      typeSelect? n => convert(n :: TS)
       typeVar? n => convert(n :: TV)
       unionType? n => convert(n :: UT)
-      where? n => convert(n :: W)
+      where? n => convert(n :: SW)
       emptyNode? n => convert []
 
       error "convert $ SpadNode: variant not handled!"
@@ -1600,7 +1767,8 @@ SpadNode() : Exports == Implementation where
       symbol? n and symbol? m => (n :: Symbol) = (m :: Symbol)
       unionType? n and unionType? m => (n :: UT) = (m :: UT)
       typeDecl? n and typeDecl? m => (n :: TD) = (m :: TD)
-      typeExpr? n and typeExpr? m => (n :: TE) = (m :: TE)
+      typeOrigin? n and typeOrigin? m => (n :: TO) = (m :: TO)
+      typeSelect? n and typeSelect? m => (n :: TS) = (m :: TS)
       typeVar? n and typeVar? m => (n :: TV) = (m :: TV)
       marker? n and marker? m => (n :: MR) = (m :: MR)
       sequence? n and sequence? m => (n :: SEQ) = (m :: SEQ)
@@ -1609,6 +1777,7 @@ SpadNode() : Exports == Implementation where
 
     nodeApp (fun, args) == [[fun, args]$APP]
     nodeAssign (lval, rval) == [[lval, rval]$ASS]
+    nodeCase (expr, type) == [[expr, type]$SC]
     nodeCondExpr (cond, btrue, bfalse) == [[cond, btrue, bfalse]$CE]
     nodeFun (name, args, type, body) == [[name, args, type, body]$FN]
     nodeFtor (name, args, type, ext, caps) == [[name, args, type, ext, caps]$FT]
@@ -1616,7 +1785,7 @@ SpadNode() : Exports == Implementation where
     nodeIterator (var, seq) == [[var, seq]$IT]
     nodeLambda (args, type, body) == [[args, type, body]$LAM]
     nodeLoop (kind, itors, guards, body) == [[kind, itors, guards, body]$LP]
-    nodeMacro (name, args, body) == [[name, args, body]$M]
+    nodeMacro (name, args, body) == [[name, args, body]$SM]
     nodeMappingType (args, type) == [[args, type]$MT]
     nodeRecordType fields ==
       rt := [fields]$RT
@@ -1625,17 +1794,19 @@ SpadNode() : Exports == Implementation where
     nodeNodeRef (major, minor) == [[major, minor]$NR]
     nodeSeq (kind, list) == [[kind, list]$SEQ]
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
+    nodeTypeCoerce (expr : %, type : %) == [[expr, type]$TC]
     nodeTypeDecl (name : Symbol, type : %) == [[name, type]$TD]
     nodeTypeDecl (expr : %, type : %) == [[expr, type]$TD]
-    nodeTypeExpr (kind, expr, type) == [[kind, expr, type]$TE]
-    nodeTypeGuard (expr, type) == [['_|, expr, type]$TE]
-    nodeTypeHas (expr, type) == [['has, expr, type]$TE]
-    nodeTypeIs (expr, type) == [['is, expr, type]$TE]
-    nodeTypeOrigin (expr, type) == [['_$, expr, type]$TE]
+    nodeTypeGuard (expr, type) == [[expr, type]$TG]
+    nodeTypeOrigin (expr, type) == [[expr, type]$TO]
+    nodeTypeHas (expr, type) == [[expr, type]$TEH]
+    nodeTypeIs (expr, type) == [[expr, type]$TEI]
+    nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeVar (major, minor) == [[major, minor]$TV]
-    nodeSubType (type1, type2) == [['_<_:, type1, type2]$TE]
+    nodeTypeSelect (expr, type) == [[expr, type]$TS]
+    nodeSubType (type1, type2) == [[type1, type2]$ST]
     nodeUnionType variants ==
       ut := [variants]$UT
       ut case "failed" => emptyNode()
       [ut]
-    nodeWhere (body, env) == [[body, env]$W]
+    nodeWhere (body, env) == [[body, env]$SW]

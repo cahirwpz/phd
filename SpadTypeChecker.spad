@@ -5,43 +5,40 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
   N ==> SpadNode
   APP ==> SpadApply(N)
   NR ==> SpadNodeRef(N)
-  TE ==> SpadTypeExpr(N)
+  TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   TN ==> SpadTypeNode
 
   Implementation ==> add
     import Logger('Fill)
 
-    rewrite (te : TE) : N ==
-      te := [te.kind, rewrite te.expr, rewrite te.type]$TE
-      not te.kind = '_$ => [te]
-      symbol? te.type and (te.type :: Symbol) = ("$" :: Symbol) => te.expr
-      typeAny? te.type => te.expr
-      mappingType? te.type => te.expr
-      [te]
+    rewrite (to : TO) : N ==
+      (e, t) := (rewrite to.expr, rewrite to.type)
+      t = ['_$] => e
+      typeAny? t => e
+      mappingType? t => e
+      nodeTypeOrigin(e, t)
 
     rewrite (app : APP) : N ==
       -- WORKAROUND! Remove origin qualifier from first argument of implicit
       -- call to 'elt' added in walkApp $ SpadTypeChecker.
-      if typeExpr? app.function then
-        fun := app.function :: TE
-        if fun.expr = ['elt] and #app.args > 0 then
-          arg := app.args.1
-          typeExpr? arg and (arg :: TE).kind = '_$ =>
-            arg := (arg :: TE).expr
-            return nodeApp(rewrite app.function, 
-                           cons(rewrite arg, [rewrite a for a in rest app.args]))
-      nodeApp(rewrite app.function, [rewrite a for a in app.args])
+      to : TO
+      fun := rewrite app.function
+      args := [rewrite a for a in app.args]
+      if typeOrigin? fun then 
+        to := coerce(fun)
+        if to.expr = ['elt] and #args > 0 and typeOrigin? first args then
+          to := coerce(first args)
+          args := cons(to.expr, rest app.args)
+      nodeApp(fun, args)
 
     rewrite (tv : TV) : N ==
+      to : TO
       tn := find(tv.major :: PI, tv.minor :: PI)
       t := tn.type
-      typeOrigin? t =>
-        te := coerce(t)@TE
-        typeOrigin? te.type =>
-          te' := coerce(te.type)@TE
-          te'.type
-        te.type
+      while typeOrigin? t repeat
+        to := coerce(to.type)
+        t := to.type
       t
 
     rewrite (nr : NR) : N ==
@@ -66,7 +63,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
   MT ==> SpadMappingType(N)
   NR ==> SpadNodeRef(N)
   SEQ ==> SpadSequence(N)
-  TE ==> SpadTypeExpr(N)
+  ST ==> SpadSubType(N)
+  TEI ==> SpadTypeIs(N)
+  TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
 
@@ -178,12 +177,12 @@ SpadTypeTreeChecker() : Exports == Implementation where
         true
       false
 
-    evalSubType(ctx : TT, r : TE, n : TN) : Boolean ==
+    evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
       n1 := node(ctx, r.expr :: NR)
       n2 := node(ctx, r.type :: NR)
       nodeSubType!(ctx, n1, n2)
 
-    evalTypeIs(ctx : TT, r : TE, n : TN) : Boolean ==
+    evalTypeIs(ctx : TT, r : TEI, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
       t := node(ctx, r.type :: NR)
       -- a) {%s[?]} : {%t[t1, t2, ...] | T}
@@ -198,7 +197,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       -- now it's easy...
       nodesTypeMatch!(ctx, s, t)
 
-    evalTypeOrigin(ctx : TT, r : TE, n : TN) : Boolean ==
+    evalTypeOrigin(ctx : TT, r : TO, n : TN) : Boolean ==
       fun := node(ctx, r.expr :: NR)
       limitNodeType!(ctx, n, [fun.type])
 
@@ -228,9 +227,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
       apply? f => evalApply(ctx, f :: APP, n)
       assign? f => evalAssign(ctx, f :: ASS, n)
       condExpr? f => evalCondExpr(ctx, f :: CE, n)
-      subType? f => evalSubType(ctx, f :: TE, n)
-      typeIs? f => evalTypeIs(ctx, f :: TE, n)
-      typeOrigin? f => evalTypeOrigin(ctx, f :: TE, n)
+      subType? f => evalSubType(ctx, f :: ST, n)
+      typeIs? f => evalTypeIs(ctx, f :: TEI, n)
+      typeOrigin? f => evalTypeOrigin(ctx, f :: TO, n)
       capsule? f => evalCapsule(ctx, f :: SEQ, n)
 
       fail ["evalFormula: case not handled for" :: PF, f :: PF]

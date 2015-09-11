@@ -4,6 +4,7 @@ SpadTreeWalkerCategory() : Category == Definition where
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
   CE ==> SpadCondExpr(N)
+  SC ==> SpadCase(N)
   FN ==> SpadFunction(N)
   FT ==> SpadFunctor(N)
   IM ==> SpadImport(N)
@@ -17,8 +18,15 @@ SpadTreeWalkerCategory() : Category == Definition where
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
+  ST ==> SpadSubType(N)
+  TC ==> SpadTypeCoerce(N)
   TD ==> SpadTypeDecl(N)
-  TE ==> SpadTypeExpr(N)
+  TG ==> SpadTypeGuard(N)
+  TEH ==> SpadTypeHas(N)
+  TEI ==> SpadTypeIs(N)
+  TEP ==> SpadTypePretend(N)
+  TO ==> SpadTypeOrigin(N)
+  TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
   W ==> SpadWhere(N)
@@ -28,6 +36,7 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite : APP -> N
       rewrite : ASS -> N
+      rewrite : SC -> N
       rewrite : CE -> N
       rewrite : FN -> N
       rewrite : FT -> N
@@ -44,8 +53,15 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : SEQ -> N
       rewrite : String -> N
       rewrite : Symbol -> N
+      rewrite : ST -> N
+      rewrite : TC -> N
       rewrite : TD -> N
-      rewrite : TE -> N
+      rewrite : TG -> N
+      rewrite : TEH -> N
+      rewrite : TEI -> N
+      rewrite : TEP -> N
+      rewrite : TO -> N
+      rewrite : TS -> N
       rewrite : TV -> N
       rewrite : UT -> N
       rewrite : W -> N
@@ -68,7 +84,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeFun(fn.name, args', rewrite fn.type, rewrite fn.body)
 
       rewrite (ft : FT) : N ==
-        nodeFtor(ft.name, [(rewrite arg) :: TD for arg in ft.args],
+        nodeFtor(ft.name, [(rewrite [arg]) :: TD for arg in ft.args],
                  rewrite ft.type, rewrite ft.extends, rewrite ft.capsule)
 
       rewrite (im : IM) : N ==
@@ -78,7 +94,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeIterator(it.var, rewrite it.seq)
 
       rewrite (l : LAM) : N ==
-        nodeLambda([(rewrite arg) :: TD for arg in l.args],
+        nodeLambda([(rewrite [arg]) :: TD for arg in l.args],
                    rewrite l.type, rewrite l.body)
 
       rewrite (lp : LP) : N ==
@@ -98,7 +114,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.result)
 
       rewrite (rt : RT) : N ==
-        nodeRecordType [(rewrite f) :: TD for f in fields rt]
+        nodeRecordType [(rewrite [f]) :: TD for f in fields rt]
 
       rewrite (seg : SEG) : N ==
         nodeSeg(rewrite seg.start, rewrite seg.end, rewrite seg.step)
@@ -110,11 +126,35 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite (s : Symbol) : N == [s]
 
-      rewrite (td : TD) : N ==
-        nodeTypeDecl(rewrite td.expr, rewrite td.type)
+      rewrite (te : SC) : N ==
+        nodeCase(rewrite te.expr, rewrite te.type)
 
-      rewrite (te : TE) : N ==
-        nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
+      rewrite (te : ST) : N ==
+        nodeSubType(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TC) : N ==
+        nodeTypeCoerce(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TD) : N ==
+        nodeTypeDecl(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TG) : N ==
+        nodeTypeGuard(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TEH) : N ==
+        nodeTypeHas(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TEI) : N ==
+        nodeTypeIs(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TEP) : N ==
+        nodeTypePretend(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TO) : N ==
+        nodeTypeOrigin(rewrite te.expr, rewrite te.type)
+
+      rewrite (te : TS) : N ==
+        nodeTypeSelect(rewrite te.expr, rewrite te.type)
 
       rewrite (tv : TV) : N == [tv]
 
@@ -127,6 +167,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (n : N) : N ==
         apply? n => rewrite (n :: APP)
         assign? n => rewrite (n :: ASS)
+        case? n => rewrite (n :: SC)
         condExpr? n => rewrite (n :: CE)
         function? n => rewrite (n :: FN)
         functor? n => rewrite (n :: FT)
@@ -143,8 +184,15 @@ SpadTreeWalkerCategory() : Category == Definition where
         sequence? n => rewrite (n :: SEQ)
         string? n => rewrite (n :: String)
         symbol? n => rewrite (n :: Symbol)
+        subType? n => rewrite (n :: ST)
+        typeCoerce? n => rewrite (n :: TC)
         typeDecl? n => rewrite (n :: TD)
-        typeExpr? n => rewrite (n :: TE)
+        typeGuard? n => rewrite (n :: TG)
+        typeHas? n => rewrite (n :: TEH)
+        typeIs? n => rewrite (n :: TEI)
+        typePretend? n => rewrite (n :: TEP)
+        typeOrigin? n => rewrite (n :: TO)
+        typeSelect? n => rewrite (n :: TS)
         typeVar? n => rewrite (n :: TV)
         unionType? n => rewrite (n :: UT)
         where? n => rewrite (n :: W)

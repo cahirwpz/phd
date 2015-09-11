@@ -9,7 +9,7 @@ SpadNodeFactory() : Exports == Implementation where
   RT ==> SpadRecordType(N)
   UT ==> SpadUnionType(N)
   TD ==> SpadTypeDecl(N)
-  TE ==> SpadTypeExpr(N)
+  TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   mt ==> nodeMappingType
 
@@ -55,7 +55,7 @@ SpadNodeFactory() : Exports == Implementation where
     nodeRef(i, j) == [[i, j]$NR]
 
     stripOriginIfCan t ==
-      (typeOrigin? t => (t :: TE).expr; t)
+      (typeOrigin? t => (t :: TO).expr; t)
 
     makeRecordFunList n ==
       r := n :: RT

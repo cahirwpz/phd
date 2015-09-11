@@ -27,7 +27,7 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   CE ==> SpadCondExpr(N)
-  TE ==> SpadTypeExpr(N)
+  TG ==> SpadTypeGuard(N)
   SEQ ==> SpadSequence(N)
 
   Implementation ==> add
@@ -40,7 +40,7 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
 
     addTypeGuard(n : N, cond : N) : N ==
       typeGuard? n =>
-        tg : TE := coerce(n)
+        tg : TG := coerce(n)
         nodeTypeGuard(tg.expr, nodeApp(['and], [cond, tg.type]))
       nodeTypeGuard(n, cond)
 
@@ -81,7 +81,9 @@ SpadTypeInfo() : Exports == Implementation where
   MT ==> SpadMappingType(N)
   SEQ ==> SpadSequence(N)
   TD ==> SpadTypeDecl(N)
-  TE ==> SpadTypeExpr(N)
+  TG ==> SpadTypeGuard(N)
+  TEH ==> SpadTypeHas(N)
+  TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   CACHE ==> AssociationList(APP, %)
   DAASE ==> AssociationList(Symbol, %)
@@ -288,7 +290,7 @@ SpadTypeInfo() : Exports == Implementation where
 
         cond := ['true]
         if typeGuard? n then 
-          tg := n :: TE
+          tg := n :: TG
           if apply? tg.expr then
             -- encountered a functor with constraints
             (n, cond) := (tg.expr, tg.type)
@@ -350,8 +352,8 @@ SpadTypeInfo() : Exports == Implementation where
                   e := nodeTypeOrigin(e, n)
                   nodeTypeGuard(e, cond)
                 typeGuard? e => -- add extra constraint to merged functor
-                  te := e :: TE
-                  nodeTypeGuard(te.expr, nodeApp(['and], [cond, te.type]))
+                  tg := e :: TG
+                  nodeTypeGuard(tg.expr, nodeApp(['and], [cond, tg.type]))
                 error "Not handled!"
               snippet := [e', :snippet]
 
@@ -409,7 +411,7 @@ SpadTypeInfo() : Exports == Implementation where
         seq := ti.body :: SEQ
         for n in seq.list repeat
           if typeOrigin? n then
-            n := (n :: TE).expr
+            n := (n :: TO).expr
           not typeDecl? n => "iterate"
           n := substitute(n, typeVar() :: TV, t0)
           if n = t1 then
@@ -422,7 +424,7 @@ SpadTypeInfo() : Exports == Implementation where
     evalGuard(n : N, ti : %) : N ==
       -- debug ["evalGuard" :: PF, bold(n :: PF)]
       typeHas? n =>
-        te := n :: TE
+        te := n :: TEH
         has?(te.expr, te.type, ti) => ['true]
         n
       apply? n =>
@@ -459,7 +461,7 @@ SpadTypeInfo() : Exports == Implementation where
 
       validate and not empty? constraints' =>
         fmtarg(n : N) : PF ==
-          te := n :: TE
+          te := n :: TEH
           has?(te.expr, te.type, ti) => te.expr :: PF
           bold(red(te.expr :: PF))
 
@@ -490,7 +492,7 @@ SpadTypeInfo() : Exports == Implementation where
         for n in ti.hasList repeat
           n' := 
             not typeGuard? n => n
-            tg := n :: TE
+            tg := n :: TG
             type' := evalGuard(tg.type, ti)
             type' = ['true] => (continue? := true; tg.expr)
             nodeTypeGuard(tg.expr, type')
@@ -500,7 +502,7 @@ SpadTypeInfo() : Exports == Implementation where
 
       eval(n : N) : N ==
         not typeGuard? n => n
-        tg := n :: TE
+        tg := n :: TG
         type' := evalGuard(tg.type, ti)
         type' = ['true] => tg.expr
         nodeTypeGuard(tg.expr, type')
@@ -531,7 +533,6 @@ TypeEvaluatorTest() : Exports == Implementation where
 
   Implementation ==> add
     import Printer
-    import SpadNode
     import SpadNodeFactory
     import SpadTypeInfo
     import MainLogger

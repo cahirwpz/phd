@@ -3,7 +3,8 @@ SpadEnvironment() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   TD ==> SpadTypeDecl(N)
-  TE ==> SpadTypeExpr(N)
+  TG ==> SpadTypeGuard(N)
+  TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   PF ==> PrintableForm
   SCOPE ==> AssociationList(Symbol, List(N))
@@ -55,12 +56,12 @@ SpadEnvironment() : Exports == Implementation where
         n' := substitute(n, typeVar() :: TV, [dom])
         guard := emptyNode()
         if typeGuard? n' then
-          te := n' :: TE
-          n' := te.expr
-          guard := te.type
+          tg := n' :: TG
+          n' := tg.expr
+          guard := tg.type
         if typeOrigin? n' then
-          te := n' :: TE
-          n' := te.expr
+          to := n' :: TO
+          n' := to.expr
         td := n' :: TD
         n' := nodeTypeOrigin(td.type, [dom])
         if not emptyNode? guard then

@@ -143,16 +143,20 @@ SpadTypeTreeCreator() : Exports == Implementation where
   LAM ==> SpadLambda(N)
   LP ==> SpadLoop(N)
   MT ==> SpadMappingType(N)
-  M ==> SpadMacro(N)
   NR ==> SpadNodeRef(N)
   RT ==> SpadRecordType(N)
+  SC ==> SpadCase(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
+  SM ==> SpadMacro(N)
+  TC ==> SpadTypeCoerce(N)
   TD ==> SpadTypeDecl(N)
-  TE ==> SpadTypeExpr(N)
+  TG ==> SpadTypeGuard(N)
+  TO ==> SpadTypeOrigin(N)
+  TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
-  W ==> SpadWhere(N)
+  SW ==> SpadWhere(N)
 
   SUBST ==> AssociationList(TV, List(N))
 
@@ -222,7 +226,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       eltFunList : List(N) := []
       if not unify?(a.function, ['elt]) then
         for n in env('elt) | typeOrigin? n repeat
-          eltFun := (n :: TE).expr :: MT
+          eltFun := (n :: TO).expr :: MT
           if #eltFun.args = #a.args + 1 then
             eltFunList := [n, :eltFunList]
 
@@ -284,7 +288,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       cond := walk(ce.cond, ctx, env)
       truebr := walk(ce.truebr, ctx, cond.env)
-      falsebr := walk(ce.falsebr, ctx, (caseExpr? ce.cond => env; cond.env))
+      falsebr := walk(ce.falsebr, ctx, (case? ce.cond => env; cond.env))
 
       setTypeOf!(ctx, this,
                  [truebr.type, falsebr.type,
@@ -342,9 +346,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
         candidate := emptyNode()
 
         if typeOrigin? n then
-          te := n :: TE
-          if te.type = ["$" :: Symbol] and mappingType? te.expr then
-            candidate := te.expr
+          to := n :: TO
+          if to.type = ["$" :: Symbol] and mappingType? to.expr then
+            candidate := to.expr
         if mappingType? n then
           candidate := n
 
@@ -673,71 +677,67 @@ SpadTypeTreeCreator() : Exports == Implementation where
       setTypeOf!(ctx, n, [td.type])
       done! n
 
-    walkTypeExpr (te : TE, ctx : CTX, env : ENV) : TN ==
-      te.kind = '@ =>
-        debug(["Expression" :: PF, te.expr :: PF,
-               "has to return type" :: PF, te.type :: PF])
+    walkTypeSelect (ts : TS, ctx : CTX, env : ENV) : TN ==
+      debug(["Expression" :: PF, ts.expr :: PF,
+             "has to return type" :: PF, ts.type :: PF])
 
-        not apply? te.expr =>
-          fail ["Type cut operator works only for function application!" :: PF]
-          error ""
+      not apply? ts.expr =>
+        fail ["Type cut operator works only for function application!" :: PF]
+        error ""
 
-        env := envAddType(te.type, env)
-        this := addNode!(ctx, [te], env)
-        expr := walk(te.expr, ctx, env)
-        setTypeOf!(ctx, this, [te.type])
-        this.rules := [ruleSubType(expr, this)]
-        this
+      env := envAddType(ts.type, env)
+      this := addNode!(ctx, [ts], env)
+      expr := walk(ts.expr, ctx, env)
+      setTypeOf!(ctx, this, [ts.type])
+      this.rules := [ruleSubType(expr, this)]
+      this
 
-      te.kind = ':: =>
-        debug ["Expression" :: PF, te.expr :: PF, "have to coerce to" :: PF, te.type :: PF]
-        env := envAddType(te.type, env)
+    walkTypeCoerce (tc : TC, ctx : CTX, env : ENV) : TN ==
+      debug ["Expression" :: PF, tc.expr :: PF, "have to coerce to" :: PF, tc.type :: PF]
+      env := envAddType(tc.type, env)
 
-        this := addNode!(ctx, [te], env)
-        setTypeOf!(ctx, this, [te.type])
+      this := addNode!(ctx, [tc], env)
+      setTypeOf!(ctx, this, [tc.type])
 
-        expr := walk(te.expr, ctx, env)
-        coerceFun := walk(['coerce], ctx, env)
-        this.rules := [ruleSubType(expr, this), ruleApply(coerceFun, [expr])]
-        this
+      expr := walk(tc.expr, ctx, env)
+      coerceFun := walk(['coerce], ctx, env)
+      this.rules := [ruleSubType(expr, this), ruleApply(coerceFun, [expr])]
+      this
     
-      te.kind = '_$ =>
-        not symbol? te.expr =>
-          fail ("Type origin selector works only for symbols!" :: PF)
-          error ""
+    walkTypeOrigin (to : TO, ctx : CTX, env : ENV) : TN ==
+      not symbol? to.expr =>
+        fail ("Type origin selector works only for symbols!" :: PF)
+        error ""
 
-        debug(["Symbol" :: PF, string(te.expr :: PF),
-               "must originate from" :: PF, bold(te.type :: PF),
-               "type!" :: PF])
+      debug(["Symbol" :: PF, string(to.expr :: PF),
+             "must originate from" :: PF, bold(to.type :: PF),
+             "type!" :: PF])
 
-        env := envAddType(te.type, env)
-        this := addNode!(ctx, [te], env)
+      env := envAddType(to.type, env)
+      this := addNode!(ctx, [to], env)
 
-        expr := walk(te.expr, ctx, env)
+      expr := walk(to.expr, ctx, env)
 
-        this.rules := [ruleTypeOrigin(expr, te.type)]
-        this
+      this.rules := [ruleTypeOrigin(expr, to.type)]
+      this
 
-      te.kind = 'case =>
-        env := envAddType(te.type, env)
+    walkCase (c : SC, ctx : CTX, env : ENV) : TN ==
+      env := envAddType(c.type, env)
 
-        this := addNode!(ctx, [te], env)
-        setTypeOf!(ctx, this, [booleanType])
+      this := addNode!(ctx, [c], env)
+      setTypeOf!(ctx, this, [booleanType])
 
-        if symbol? te.expr then
-          this.env := (env(te.expr :: Symbol) := te.type)
+      if symbol? c.expr then
+        this.env := (env(c.expr :: Symbol) := c.type)
 
-        exprType := addNode!(ctx, te.type, env)
-        setTypeOf!(ctx, exprType, [te.type])
+      exprType := addNode!(ctx, c.type, env)
+      setTypeOf!(ctx, exprType, [c.type])
 
-        expr := walk(te.expr, ctx, env)
-        exprType.rules := [ruleSuperType(exprType, expr)]
+      expr := walk(c.expr, ctx, env)
+      exprType.rules := [ruleSuperType(exprType, expr)]
 
-        this.rules := [[[nodeRef(exprType)], [te]]]
-        this
-
-      fail ["Type expression" :: PF, bold red paren(te :: PF), "not handled yet!" :: PF]
-      error ""
+      this.rules := [[[nodeRef(exprType)], [c]]]
+      this
 
     walkInt (i : Integer, ctx : CTX, env : ENV) : TN ==
       debug [i :: PF, "is" :: PF, integerType :: PF, ":)" :: PF]
@@ -769,6 +769,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walk (n, ctx, env) ==
       apply? n => walkApp(n :: APP, ctx, env)
       assign? n => walkAssign(n :: ASS, ctx, env)
+      case? n => walkCase(n :: SC, ctx, env)
       condExpr? n => walkCondExpr(n :: CE, ctx, env)
       float? n => walkFlt(n :: DoubleFloat, ctx, env)
       functor? n => walkFtor(n :: FT, ctx, env)
@@ -780,8 +781,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
       sequence? n => walkSeq(n :: SEQ, ctx, env)
       string? n => walkStr(n :: String, ctx, env)
       symbol? n => walkSym(n :: Symbol, ctx, env)
+      typeCoerce? n => walkTypeCoerce(n :: TC, ctx, env)
       typeDecl? n => walkTypeDecl(n :: TD, ctx, env)
-      typeExpr? n => walkTypeExpr(n :: TE, ctx, env)
+      typeOrigin? n => walkTypeOrigin(n :: TO, ctx, env)
+      typeSelect? n => walkTypeSelect(n :: TS, ctx, env)
       function? n => walkFun(n :: FN, ctx, env)
       emptyNode? n => walkEmpty(n, ctx, env)
       -- namedType, mappingType, recordType, sumType, unionType, macro, where
