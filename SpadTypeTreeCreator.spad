@@ -54,7 +54,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     -- compute "A1, ..., An, T, B"; if "T is B" then solution is "fn"
     ruleFun (fn, As', T', B') ==
       (As, T, B) := ([nodeRef(a) for a in As'], nodeRef(T'), nodeRef(B'))
-      [[:As, T, B, nodeTypeExpr('is, T, B)], nodeFun(fn.name, As, T, B)]
+      [[:As, T, B, nodeTypeIs(T, B)], nodeFun(fn.name, As, T, B)]
 
     -- for functor "ft (a1 : A1, ..., an : An) : T == E add B" do:
     -- compute "A1, ..., An, T, B"; if "B <: T" then solution is "ft"
@@ -98,13 +98,13 @@ SpadTypeRuleFactory() : Exports == Implementation where
       (seqRef, exprRefs) := (nodeRef(seq), [nodeRef(expr) for expr in exprs])
       formula := 
         kind case "Capsule" => nodeSeq(kind, exprRefs)
-        nodeTypeExpr('is, seqRef, last exprRefs)
+        nodeTypeIs(seqRef, last exprRefs)
       [[:exprRefs, formula], nodeSeq(kind, exprRefs)]
 
     ruleTypeOrigin (expr, origin) ==
       exprRef := nodeRef(expr)
-      [[exprRef, nodeTypeExpr('_$, exprRef, origin)],
-       nodeTypeExpr('_$, exprRef, origin)]
+      [[exprRef, nodeTypeOrigin(exprRef, origin)],
+       nodeTypeOrigin(exprRef, origin)]
 
     ruleSuperType (superType, type) ==
       (superTypeRef, typeRef) := (nodeRef(superType), nodeRef(type))
@@ -117,7 +117,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     -- compute "P1, ..., Pn, S"; if "S is T" then solution is "S"
     ruleTypeIs (Ps', S', T') ==
       (Ps, S, T) := ([nodeRef(p) for p in Ps'], nodeRef(S'), nodeRef(T'))
-      [[:Ps, S, nodeTypeExpr('is, S, T)], S]
+      [[:Ps, S, nodeTypeIs(S, T)], S]
 
     -- compute "S"; if "S <: T" then solution is "S"
     ruleSubType (S', T') ==
@@ -145,10 +145,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
   MT ==> SpadMappingType(N)
   M ==> SpadMacro(N)
   NR ==> SpadNodeRef(N)
-  NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
+  TD ==> SpadTypeDecl(N)
   TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
@@ -177,7 +177,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import Logger('Create)
 
     envAddType (t : N, env : ENV) : ENV ==
-      notice ["Adding type" :: PF, bold(t :: PF), "to the environment." :: PF]
       if apply? t then
         app := t :: APP
         env := addDomain(env, app)
@@ -188,17 +187,20 @@ SpadTypeTreeCreator() : Exports == Implementation where
         for k in [mt.result, :mt.args] repeat
           env := envAddType(k, env)
       if recordType? t then
-        r := t :: RT
-        for f in r.fields repeat
+        rt := t :: RT
+        for f in fields rt repeat
           env := envAddType(f.type, env)
         for f in makeRecordFunList t repeat
-          env(f.name) := nodeTypeExpr('_$, f.type, t)
+          env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
       if unionType? t then
         ut := t :: UT
-        for v in ut.variants repeat
+        for v in variants ut repeat
           env := envAddType(v, env)
         for f in makeUnionFunList t repeat
-          env(f.name) := nodeTypeExpr('_$, f.type, t)
+          env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
+      env
+
+    envAddTypeAs (t : N, alias : Symbol, env : ENV) : ENV ==
       env
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TN ==
@@ -219,7 +221,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- Second case: element indexing or record field access.
       eltFunList : List(N) := []
       if not unify?(a.function, ['elt]) then
-        for n in env('elt) repeat
+        for n in env('elt) | typeOrigin? n repeat
           eltFun := (n :: TE).expr :: MT
           if #eltFun.args = #a.args + 1 then
             eltFunList := [n, :eltFunList]
@@ -227,13 +229,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
       if not empty? eltFunList then
         argExprList' := [funExpr, :argExprList]
         eltFunExpr := addNode!(ctx, ['elt], env)
-        eltFunExpr.node := nodeTypeExpr('_$, eltFunExpr.node, typeRef(eltFunExpr))
+        eltFunExpr.node := nodeTypeOrigin(eltFunExpr.node, typeRef(eltFunExpr))
         setTypeOf!(ctx, eltFunExpr, eltFunList)
         this.rules := [ruleApply(eltFunExpr, argExprList'), :this.rules]
 
       -- Add origin to function expression.
       if not(funExpr.node = ['return] or funExpr.node = ['error]) then
-        funExpr.node := nodeTypeExpr('_$, funExpr.node, typeRef(funExpr))
+        funExpr.node := nodeTypeOrigin(funExpr.node, typeRef(funExpr))
 
       -- First case with a twist: arbitrary list construction.
       if unify?(a.function, ['construct]) then
@@ -269,7 +271,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       right := walk(a.rval, ctx, env)
 
       if introduced? then
-        left.node := nodeTypeExpr('_:, left.node, typeRef(left))
+        left.node := nodeTypeDecl(left.node, typeRef(left))
 
       -- Only left-value environment is propagated!
       this.env := left.env
@@ -316,7 +318,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       resNode.node := resNode.type
       for argNode in argNodeList for n in fn.args repeat
-        argNode.node := nodeNamedType((n :: NT).name, argNode.type)
+        argNode.node := nodeTypeDecl((n :: TD).expr, argNode.type)
 
       -- Take the type of function and replace those components, that were not
       -- specified, with type variables.
@@ -374,8 +376,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
         setTypeOf!(ctx, argNode, [c.args.i for c in candidateList])
 
       for n in fn.args for argNode in argNodeList repeat
-        arg := n :: NT
-        env'(arg.name) := argNode.type
+        arg := n :: TD
+        env'(arg.expr :: Symbol) := argNode.type
 
       bodyNode := walk(fn.body, ctx, env')
 
@@ -389,10 +391,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkFtor (ft : FT, ctx : CTX, env : ENV) : TN ==
       sig := signature ft
       -- sig is unchecked and may contain invalid types
-      ftorApp := nodeApp([ft.name], [[nt] for nt in ft.args])
+      ftorApp := nodeApp([ft.name], [[td] for td in ft.args])
 
       debug pile([spaces ["Processing functor" :: PF, bold(ftorApp :: PF), "with:" :: PF],
-                 ft.type :: PF])
+                  ft.type :: PF])
 
       addSubTree!(ctx)
 
@@ -409,21 +411,23 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- process functor's arguments
       for arg in ft.args repeat
-        argNode := addNode!(ctx, [arg.name], env)
+        name := arg.expr :: Symbol
+        argNode := addNode!(ctx, arg.expr, env)
         setTypeOf!(ctx, argNode, [arg.type])
-        env(arg.name :: Symbol) := argNode.type
-        argSub(arg.name) := argNode.type
+        env(name) := argNode.type
+        env := envAddTypeAs(arg.type, name, env)
+        argSub(name) := argNode.type
         argNodeList := [argNode, :argNodeList]
 
       argNodeList := reverse argNodeList
-      argTypeList := [argNode.type for argNode in argNodeList]
-      env("$" :: Symbol) := nodeApp([ft.name], argTypeList)
-      setTypeOf!(ctx, this, [nodeMappingType(argTypeList, resType)])
+      argList := [argNode.node for argNode in argNodeList]
+      env("$" :: Symbol) := nodeApp([ft.name], argList)
+      setTypeOf!(ctx, this, [nodeMappingType(argList, resType)])
 
       -- process functor's body
-      for n in (ft.type :: SEQ).list | namedType? n repeat
-        nt := n :: NT
-        env(nt.name :: Symbol) := nodeTypeExpr('_$, nt.type, ["$" :: Symbol])
+      for n in (ft.type :: SEQ).list | typeDecl? n repeat
+        td := n :: TD
+        env(td.expr :: Symbol) := nodeTypeOrigin(td.type, ["$" :: Symbol])
 
       bodyNode := walk(ft.capsule, ctx, env)
 
@@ -445,21 +449,21 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- Replace unknown types with type variables and add arguments to the
       -- environment. Rewrite those lambda arguments that miss the type.
       deps : List(N) := []
-      argList : List(NT) := []
+      argList : List(TD) := []
       argTypeList : List(N) := []
 
       for arg in lam.args repeat
+        name := arg.expr :: Symbol
         if emptyNode? arg.type then
-          lamArg := addNode!(ctx, [arg], env)
-          lamArg.node := [arg.name]
+          lamArg := addNode!(ctx, arg.expr, env)
           deps := [nodeRef(lamArg), :deps]
-          argList := [[arg.name, typeRef(lamArg)]$NT, :argList]
+          argList := [[arg.expr, typeRef(lamArg)]$TD, :argList]
           argTypeList := [lamArg.type, :argTypeList]
-          env(arg.name) := lamArg.type
+          env(name) := lamArg.type
         else
           argList := [arg, :argList]
           argTypeList := [arg.type, :argTypeList]
-          env(arg.name) := arg.type
+          env(name) := arg.type
 
       argList := reverse argList
       argTypeList := reverse argTypeList
@@ -617,8 +621,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
             origFtorArg := ftorArg
             ftorArgType := substitute(ftorArgType, ftorArgRenames)
 
-            warn [ftorArg :: PF, ":" :: PF, ftorArgType :: PF]
-
             ftorArgTypeNode := addNode!(ctx, ftorArgType, env)
             setTypeOf!(ctx, ftorArgTypeNode, [ftorArgType])
 
@@ -647,32 +649,32 @@ SpadTypeTreeCreator() : Exports == Implementation where
       setTypeOf!(ctx, this, types)
       this 
 
-    walkTypeExpr (te : TE, ctx : CTX, env : ENV) : TN ==
-      te.kind = '_: => 
-        debug(["Expression" :: PF, te.expr :: PF, "has type" :: PF, te.type :: PF])
+    walkTypeDecl (td : TD, ctx : CTX, env : ENV) : TN ==
+      debug(["Expression" :: PF, td.expr :: PF, "has type" :: PF, td.type :: PF])
 
-        not symbol? te.expr =>
-          fail ["Type annotation works only for symbols!" :: PF]
+      not symbol? td.expr =>
+        fail ["Type annotation works only for symbols!" :: PF]
+        error ""
+
+      -- Type definition for a symbol.
+      s := td.expr :: Symbol
+      ts := env(s)
+
+      -- Add it to the environment or crash if already defined, unless it's
+      -- another function declaration (i.e. allow function type overloading).
+      if not mappingType? td.type then
+        (not empty? ts) and (first ts ~= td.type) =>
+          fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
+                "already defined as" :: PF, bracket [t :: PF for t in ts], "!" :: PF])
           error ""
 
-        -- Type definition for a symbol.
-        s := te.expr :: Symbol
-        ts := env(s)
+      env(s) := td.type
+      n := addNode!(ctx, [td], env)
+      setTypeOf!(ctx, n, [td.type])
+      done! n
 
-        -- Add it to the environment or crash if already defined, unless it's
-        -- another function declaration (i.e. allow function type overloading).
-        if not mappingType? te.type then
-          (not empty? ts) and (first ts ~= te.type) =>
-            fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
-                  "already defined as" :: PF, bracket [t :: PF for t in ts], "!" :: PF])
-            error ""
-
-        env(s) := te.type
-        n := addNode!(ctx, [te], env)
-        setTypeOf!(ctx, n, [te.type])
-        done! n
-
-      te.kind = '_@ =>
+    walkTypeExpr (te : TE, ctx : CTX, env : ENV) : TN ==
+      te.kind = '@ =>
         debug(["Expression" :: PF, te.expr :: PF,
                "has to return type" :: PF, te.type :: PF])
 
@@ -687,7 +689,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         this.rules := [ruleSubType(expr, this)]
         this
 
-      te.kind = '_:_: =>
+      te.kind = ':: =>
         debug ["Expression" :: PF, te.expr :: PF, "have to coerce to" :: PF, te.type :: PF]
         env := envAddType(te.type, env)
 
@@ -778,6 +780,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       sequence? n => walkSeq(n :: SEQ, ctx, env)
       string? n => walkStr(n :: String, ctx, env)
       symbol? n => walkSym(n :: Symbol, ctx, env)
+      typeDecl? n => walkTypeDecl(n :: TD, ctx, env)
       typeExpr? n => walkTypeExpr(n :: TE, ctx, env)
       function? n => walkFun(n :: FN, ctx, env)
       emptyNode? n => walkEmpty(n, ctx, env)

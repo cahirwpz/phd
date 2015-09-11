@@ -6,10 +6,10 @@ TypeUnifier() : Exports == Implementation where
   ASS ==> SpadAssign(N)
   CE ==> SpadCondExpr(N)
   MT ==> SpadMappingType(N)
-  NT ==> SpadNamedType(N)
   NR ==> SpadNodeRef(N)
   SEQ ==> SpadSequence(N)
   RT ==> SpadRecordType(N)
+  TD ==> SpadTypeDecl(N)
   TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
@@ -62,27 +62,30 @@ TypeUnifier() : Exports == Implementation where
       symbol? n => false
       marker? n => false
 
+      occurs'? (m : N) : Boolean ==
+        occurs?(tvar, m)
+
       apply? n =>
         app := n :: APP
-        any?(m +-> occurs?(tvar, m), [app.function, :app.args])
+        any?(occurs'?, [app.function, :app.args])
       mappingType? n =>
         mt := n :: MT
-        any?(m +-> occurs?(tvar, m), [mt.result, :mt.args])
-      namedType? n =>
-        nt := n :: NT
-        occurs?(tvar, nt.type)
+        any?(occurs'?, [mt.result, :mt.args])
       recordType? n =>
         rt := n :: RT
-        any?(m +-> occurs?(tvar, m), [f.type for f in rt.fields])
+        any?(occurs'?, [[f] for f in fields(rt)])
       unionType? n =>
         ut := n :: UT
-        any?(m +-> occurs?(tvar, m), ut.variants)
+        any?(occurs'?, variants ut)
       sequence? n =>
         seq := n :: SEQ
-        any?(m +-> occurs?(tvar, m), seq.list)
+        any?(occurs'?, seq.list)
+      typeDecl? n =>
+        td := n :: TD
+        occurs'? td.expr or occurs'? td.type
       typeExpr? n =>
         te := n :: TE
-        occurs?(tvar, te.expr) or occurs?(tvar, te.type)
+        occurs'? te.expr or occurs'? te.type
       typeVar? n =>
         (n :: TV) = tvar
 
@@ -102,21 +105,21 @@ TypeUnifier() : Exports == Implementation where
       apply? n =>
         app := n :: APP
         unbound? app.function or any?(unbound?, app.args)
-      namedType? n =>
-        nt := n :: NT
-        unbound? nt.type
       recordType? n =>
         rt := n :: RT
-        any?(unbound?, [f.type for f in rt.fields])
+        any?(unbound?, [[f] for f in fields rt])
       unionType? n =>
         ut := n :: UT
-        any?(unbound?, ut.variants)
+        any?(unbound?, variants ut)
       mappingType? n =>
         mt := n :: MT
         any?(unbound?, [mt.result, :mt.args])
       sequence? n =>
         seq := n :: SEQ
         any?(unbound?, seq.list)
+      typeDecl? n =>
+        td := n :: TD
+        unbound? td.expr or unbound? td.type
       typeExpr? n =>
         te := n :: TE
         unbound? te.expr or unbound? te.type
@@ -137,21 +140,21 @@ TypeUnifier() : Exports == Implementation where
       apply? n =>
         app := n :: APP
         any?(containsWildcard?, [app.function, :app.args])
-      namedType? n =>
-        nt := n :: NT
-        containsWildcard? nt.type
       recordType? n =>
         rt := n :: RT
-        any?(containsWildcard?, [f.type for f in rt.fields])
+        any?(containsWildcard?, [[f] for f in fields rt])
       unionType? n =>
         ut := n :: UT
-        any?(containsWildcard?, ut.variants)
+        any?(containsWildcard?, variants ut)
       mappingType? n =>
         mt := n :: MT
         any?(containsWildcard?, [mt.result, :mt.args])
       sequence? n =>
         seq := n :: SEQ
         any?(containsWildcard?, seq.list)
+      typeDecl? n =>
+        td := n :: TD
+        containsWildcard? td.expr or containsWildcard? td.type
       typeOrigin? n =>
         te := n :: TE
         containsWildcard? te.expr or containsWildcard? te.type
@@ -173,10 +176,16 @@ TypeUnifier() : Exports == Implementation where
       mappingType? n =>
         mt := n :: MT
         removeDuplicates("concat"/[freeVars i for i in [mt.result, :mt.args]])
+      recordType? n =>
+        rt := n :: RT
+        removeDuplicates("concat"/[freeVars [i] for i in fields rt])
       unionType? n =>
         ut := n :: UT
-        removeDuplicates("concat"/[freeVars i for i in ut.variants])
+        removeDuplicates("concat"/[freeVars i for i in variants ut])
       typeVar? n => [n :: TV]
+      typeDecl? n =>
+        td := n :: TD
+        removeDuplicates(concat(freeVars td.type, freeVars td.expr))
       typeExpr? n =>
         te := n :: TE
         removeDuplicates(concat(freeVars te.type, freeVars te.expr))
@@ -203,6 +212,9 @@ TypeUnifier() : Exports == Implementation where
       sequence? n =>
         s := n :: SEQ
         "concat"/[refListRec n for n in s.list]
+      typeDecl? n =>
+        td := n :: TD
+        concat(refListRec td.type, refListRec td.expr)
       typeExpr? n =>
         te := n :: TE
         concat(refListRec te.type, refListRec te.expr)
@@ -224,30 +236,6 @@ TypeUnifier() : Exports == Implementation where
         app := n :: APP
         lst := [substitute(k, var, term) for k in [app.function, :app.args]]
         nodeApp(first lst, rest lst)
-      mappingType? n =>
-        mt := n :: MT
-        lst := [substitute(k, var, term) for k in [mt.result, :mt.args]]
-        nodeMappingType(rest lst, first lst)
-      namedType? n =>
-        nt := n :: NT
-        nodeNamedType(nt.name, substitute(nt.type, var, term))
-      recordType? n =>
-        rt := n :: RT
-        lst := [[f.name, substitute(f.type, var, term)]$NT for f in rt.fields]
-        nodeRecordType(lst)
-      unionType? n =>
-        ut := n :: UT
-        nodeUnionType [substitute(v, var, term) for v in ut.variants]
-      sequence? n =>
-        seq := n :: SEQ
-        nodeSeq(seq.kind, [substitute(t, var, term) for t in seq.list])
-      typeExpr? n =>
-        te := n :: TE
-        expr := substitute(te.expr, var, term)
-        type := substitute(te.type, var, term)
-        nodeTypeExpr(te.kind, expr, type)
-      typeVar? n =>
-        if (n :: TV) = var then term else n
       condExpr? n =>
         ce := n :: CE
         cond := substitute(ce.cond, var, term)
@@ -260,6 +248,32 @@ TypeUnifier() : Exports == Implementation where
         type := substitute(fn.type, var, term)
         body := substitute(fn.body, var, term)
         nodeFun(fn.name, args, type, body)
+      mappingType? n =>
+        mt := n :: MT
+        lst := [substitute(k, var, term) for k in [mt.result, :mt.args]]
+        nodeMappingType(rest lst, first lst)
+      recordType? n =>
+        rt := n :: RT
+        lst := [[substitute(f.expr, var, term), 
+                 substitute(f.type, var, term)]$TD for f in fields rt]
+        nodeRecordType(lst)
+      unionType? n =>
+        ut := n :: UT
+        nodeUnionType [substitute(v, var, term) for v in variants ut]
+      sequence? n =>
+        seq := n :: SEQ
+        nodeSeq(seq.kind, [substitute(t, var, term) for t in seq.list])
+      typeDecl? n =>
+        td := n :: TD
+        nodeTypeDecl(substitute(td.expr, var, term),
+                     substitute(td.type, var, term))
+      typeExpr? n =>
+        te := n :: TE
+        nodeTypeExpr(te.kind, 
+                     substitute(te.expr, var, term),
+                     substitute(te.type, var, term))
+      typeVar? n =>
+        if (n :: TV) = var then term else n
 
       fail ["substitute: case not handled for" :: PF, n :: PF]
       error ""
@@ -335,25 +349,25 @@ TypeUnifier() : Exports == Implementation where
         unifyTypeList ([[t1, t2]$P for t1 in [app1.function, :app1.args]
                                    for t2 in [app2.function, :app2.args]])
       recordType? n1 and recordType? n2 =>
-        r1 := n1 :: RT
-        r2 := n2 :: RT
-        #r1.fields ~= #r2.fields => "failed"
-        for f1 in r1.fields for f2 in r2.fields repeat
-          if f1.name ~= f2.name then
+        rt1 := n1 :: RT
+        rt2 := n2 :: RT
+        #(fields rt1) ~= #(fields rt2) => "failed"
+        for f1 in fields rt1 for f2 in fields rt2 repeat
+          if f1.expr ~= f2.expr then
             return "failed"
-        unifyTypeList ([[f1.type, f2.type]$P for f1 in r1.fields
-                                             for f2 in r2.fields])
+        unifyTypeList ([[f1.type, f2.type]$P
+                        for f1 in fields rt1 for f2 in fields rt2])
       unionType? n1 and unionType? n2 =>
-        u1 := n1 :: UT
-        u2 := n2 :: UT
-        #u1.variants ~= #u2.variants => "failed"
-        unifyTypeList ([[v1, v2]$P for v1 in u1.variants
-                                   for v2 in u2.variants])
-      namedType? n1 and namedType? n2 =>
-        nt1 := n1 :: NT
-        nt2 := n2 :: NT
-        nt1.name ~= nt2.name => "failed"
-        unifyType'(nt1.type, nt2.type)
+        ut1 := n1 :: UT
+        ut2 := n2 :: UT
+        #(variants ut1) ~= #(variants ut2) => "failed"
+        unifyTypeList ([[v1, v2]$P for v1 in variants ut1
+                                   for v2 in variants ut2])
+      typeDecl? n1 and typeDecl? n2 =>
+        td1 := n1 :: TD
+        td2 := n2 :: TD
+        td1.expr ~= td2.expr => "failed"
+        unifyType'(td1.type, td2.type)
       typeOrigin? n1 and typeOrigin? n2 =>
         te1 := n1 :: TE
         te2 := n2 :: TE
@@ -475,9 +489,9 @@ TypeUnifier() : Exports == Implementation where
         ++   <: {Record(F1 : S1, F2 : S2, ..., Fn : Sn)}
         rt1 := n1 :: RT
         rt2 := n2 :: RT
-        #rt1.fields ~= #rt2.fields => false
-        for f1 in rt1.fields for f2 in rt2.fields repeat
-          if f1.name ~= f2.name or not isSubType'(f1.type, f2.type) then
+        #(fields rt1) ~= #(fields rt2) => false
+        for f1 in fields rt1 for f2 in fields rt2 repeat
+          if f1.expr ~= f2.expr or not isSubType'(f1.type, f2.type) then
             return false
         true
       unionType? n2 =>
@@ -485,27 +499,25 @@ TypeUnifier() : Exports == Implementation where
           ++ {Union(T1, T2, ..., Tn)} <: {Union(S1, S2, ..., Sm)} and n <= m
           ut1 := n1 :: UT
           ut2 := n2 :: UT
-          #ut1.variants > #ut2.variants => false
-          for v1 in ut1.variants for v2 in ut2.variants repeat
+          #(variants ut1) > #(variants ut2) => false
+          for v1 in variants ut1 for v2 in variants ut2 repeat
             if not isSubType'(v1, v2) then
               return false
           true
         else
           ++ {Ti} <: {Union(T1, T2, ..., Ti, ...)}
-          for v in (n2 :: UT).variants repeat
+          for v in variants(n2 :: UT) repeat
             if isSubType'(n1, v) then
               return true
           false
-      namedType? n1 and namedType? n2 =>
-        nt1 := n1 :: NT
-        nt2 := n2 :: NT
-        nt1.name = nt2.name and isSubType'(nt1.type, nt2.type)
-      typeOrigin? n1 =>
+      typeDecl? n1 and typeDecl? n2 =>
+        td1 := n1 :: TD
+        td2 := n2 :: TD
+        td1.expr = td2.expr and isSubType'(td1.type, td2.type)
+      typeOrigin? n1 and typeOrigin? n2 =>
         te1 := n1 :: TE
-        isSubType'(te1.expr, n2)
-      typeOrigin? n2 =>
         te2 := n2 :: TE
-        isSubType'(n1, te2.expr)
+        te1.type = te2.type and isSubType'(te1.expr, te2.expr)
       ++ Everything is subtype of wildcard type!
       typeAny? n2 => true
 

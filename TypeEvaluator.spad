@@ -41,8 +41,8 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
     addTypeGuard(n : N, cond : N) : N ==
       typeGuard? n =>
         tg : TE := coerce(n)
-        nodeTypeExpr('_|, tg.expr, nodeApp(['and], [cond, tg.type]))
-      nodeTypeExpr('_|, n, cond)
+        nodeTypeGuard(tg.expr, nodeApp(['and], [cond, tg.type]))
+      nodeTypeGuard(n, cond)
 
     listOf(n : N) : List(N) ==
       emptyNode? n => []
@@ -79,8 +79,8 @@ SpadTypeInfo() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   MT ==> SpadMappingType(N)
-  NT ==> SpadNamedType(N)
   SEQ ==> SpadSequence(N)
+  TD ==> SpadTypeDecl(N)
   TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   CACHE ==> AssociationList(APP, %)
@@ -88,10 +88,10 @@ SpadTypeInfo() : Exports == Implementation where
   SUBST ==> AssociationList(TV, List(N))
 
   Exports ==> CoercibleTo(PF) with
-    typeInfo : (Symbol, List TE, List N, List N, SEQ) -> %
+    typeInfo : (Symbol, List TD, List N, List N, SEQ) -> %
 
     elt : (%, "name") -> Symbol
-    elt : (%, "args") -> List TE
+    elt : (%, "args") -> List TD
     elt : (%, "hasList") -> List N 
     elt : (%, "constraints") -> List N
     elt : (%, "body") -> SEQ
@@ -114,7 +114,7 @@ SpadTypeInfo() : Exports == Implementation where
     import Printer
 
     Rep := Record(ti_name : Symbol,
-                  ti_args : List TE,
+                  ti_args : List TD,
                   ti_hasList : List N,
                   ti_constraints : List N,
                   ti_body : SEQ)
@@ -191,12 +191,6 @@ SpadTypeInfo() : Exports == Implementation where
     mkvar(s1 : String, s2 : String) : Symbol ==
       concat(s1, s2)$String :: Symbol
 
-    true?(e : N) : Boolean ==
-      e = ['true]
-
-    false?(e : N) : Boolean ==
-      e = ['false]
-
     fromDatabase (t : Symbol) : Union(%, "failed") ==
       debug ["fromDatabase :" :: PF, bold(t :: PF)]
 
@@ -217,14 +211,14 @@ SpadTypeInfo() : Exports == Implementation where
         ctx(s) := v
       ++ "t#1" => "%1", "t#2" => "%2", ...
       for arg in cmm.args for i in 1.. repeat
-        s := mkvar("t", string arg.name)
+        s := mkvar("t", string(arg.expr :: Symbol))
         v := typeVar(i :: PI)
         ctx(s) := v
 
       ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
       ++ change name.
       types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
-      args := [[':, typeVar(i :: PI), typ]$TE for typ in types for i in 1..]
+      args := [[typeVar(i :: PI), typ]$TD for typ in types for i in 1..]
       body := (cat? => getCtorCategory(t); cmm.type)
 
       body := nodeSeq((cat? => "Join"; "Domain"),
@@ -261,14 +255,14 @@ SpadTypeInfo() : Exports == Implementation where
       -- solution for functor argument application problem
       subst := res :: SUBST
 
-      args' := [substitute([arg], subst) :: TE for arg in ti.args]
+      args' := [substitute([arg], subst) :: TD for arg in ti.args]
       body' := substitute([ti.body], subst)
       hasList' := [substitute(hasItem, subst) for hasItem in ti.hasList]
       constraints' :=
         concat(nodeApp([ti.name], [[arg] for arg in args']),
                [substitute(c, subst) for c in ti.constraints])
 
-      args' := [rewrite(arg)$DelVer :: TE for arg in args']
+      args' := [rewrite(arg)$DelVer :: TD for arg in args']
       body' := rewrite(body')$DelVer
       hasList' := [rewrite(hasItem)$DelVer for hasItem in hasList']
       constraints' := [rewrite(con)$DelVer for con in constraints']
@@ -317,7 +311,7 @@ SpadTypeInfo() : Exports == Implementation where
             member?(cond, condLst) => "iterate"
             hasLst(app) := nodeApp(['or], concat(cond, condLst))
 
-          debug(["Merge" :: PF, bold(true? cond => n :: PF; nodeTypeExpr('_|, n, cond) :: PF),
+          debug(["Merge" :: PF, bold(true? cond => n :: PF; nodeTypeGuard(n, cond) :: PF),
                  "with" :: PF, ti.self :: PF])
 
           hasLst(app) := cond
@@ -333,7 +327,7 @@ SpadTypeInfo() : Exports == Implementation where
             for e in ti'.body.list repeat
               e' :=
                 apply? e or typeGuard? e => e 
-                namedType? e => nodeTypeExpr('_$, e, n)
+                typeDecl? e => nodeTypeOrigin(e, n)
                 error "Not handled!"
               snippet := [e', :snippet]
           else
@@ -346,25 +340,25 @@ SpadTypeInfo() : Exports == Implementation where
             --
             -- This allows to add extra options to condition "% has A" in case
             -- we encounter some other (less restrictive) constraints later.
-            cond := nodeTypeExpr('has, typeVar(), [app])
+            cond := nodeTypeHas(typeVar(), [app])
 
             for e in ti'.body.list repeat
               e' :=
                 apply? e => -- add constraint to merged functor
-                  nodeTypeExpr('_|, e, cond)
-                namedType? e => -- add origin to function signature
-                  e := nodeTypeExpr('_$, e, n)
-                  nodeTypeExpr('_|, e, cond)
+                  nodeTypeGuard(e, cond)
+                typeDecl? e => -- add origin to function signature
+                  e := nodeTypeOrigin(e, n)
+                  nodeTypeGuard(e, cond)
                 typeGuard? e => -- add extra constraint to merged functor
                   te := e :: TE
-                  nodeTypeExpr('_|, te.expr, nodeApp(['and], [cond, te.type]))
+                  nodeTypeGuard(te.expr, nodeApp(['and], [cond, te.type]))
                 error "Not handled!"
               snippet := [e', :snippet]
 
           origBody := concat(reverse snippet, origBody)
 
         -- merge everything else
-        namedType? n or typeGuard? n or typeOrigin? n =>
+        typeDecl? n or typeGuard? n or typeOrigin? n =>
           debug ["Copy" :: PF, bold(n :: PF), "to" :: PF, ti.self :: PF]
           flatBody := [n, :flatBody]
 
@@ -375,16 +369,14 @@ SpadTypeInfo() : Exports == Implementation where
       for he in entries hasLst repeat
         h := 
           true? he.entry => [he.key]
-          nodeTypeExpr('_|, [he.key], he.entry)
+          nodeTypeGuard([he.key], he.entry)
         hasLst' := [h, :hasLst']
 
       typeInfo(ti.name, ti.args, hasLst',
                removeDuplicates constraints,
                [ti.body.kind, reverse flatBody])
 
-    has?(te : TE, ti : %) : Boolean ==
-      (t0, t1) := (te.expr, te.type)
-
+    has?(t0 : N, t1 : N, ti : %) : Boolean ==
       t1 = nodeApp(['Type], []) => true
 
       if symbol? t0 then t0 := symbolType()
@@ -400,7 +392,7 @@ SpadTypeInfo() : Exports == Implementation where
           getTypeInfo(app)
         t0 = typeVar() => ti
         typeVar? t0 => return false
-        fail [te :: PF]
+        fail [t0 :: PF, "has" :: PF, t1 :: PF]
         error "Not handled!"
 
       -- case "A has B"
@@ -410,28 +402,28 @@ SpadTypeInfo() : Exports == Implementation where
       -- case "A has Join(..)"
       sequence? t1 =>
         seq := t1 :: SEQ
-        "and"/[has?(['has, t0, typ]$TE, ti) for typ in seq.list]
+        "and"/[has?(t0, typ, ti) for typ in seq.list]
 
       -- case "A has { fn : (..) -> .. }"
-      namedType? t1 and not unbound? [te] =>
+      typeDecl? t1 and not(unbound? t0 or unbound? t1) =>
         seq := ti.body :: SEQ
         for n in seq.list repeat
           if typeOrigin? n then
             n := (n :: TE).expr
-          not namedType? n => "iterate"
+          not typeDecl? n => "iterate"
           n := substitute(n, typeVar() :: TV, t0)
           if n = t1 then
             return true
         false
 
-      fail [te :: PF]
+      fail [t0 :: PF, "has" :: PF, t1 :: PF]
       error "Not handled!"
 
     evalGuard(n : N, ti : %) : N ==
       -- debug ["evalGuard" :: PF, bold(n :: PF)]
-      typeExpr? n =>
+      typeHas? n =>
         te := n :: TE
-        te.kind = 'has and has?(te, ti) => ['true]
+        has?(te.expr, te.type, ti) => ['true]
         n
       apply? n =>
         app := n :: APP
@@ -461,26 +453,26 @@ SpadTypeInfo() : Exports == Implementation where
 
       appliesCleanly(n : N) : Boolean ==
         app := n :: APP
-        "and"/[has?(m :: TE, ti) for m in app.args]
+        "and"/[has?((m :: TD).expr, (m :: TD).type, ti) for m in app.args]
 
       constraints' := remove(appliesCleanly, ti.constraints)
 
       validate and not empty? constraints' =>
         fmtarg(n : N) : PF ==
           te := n :: TE
-          has?(te, ti) => te.expr :: PF
+          has?(te.expr, te.type, ti) => te.expr :: PF
           bold(red(te.expr :: PF))
 
         fmterr(n : N) : PF ==
-          te := n :: TE
-          spaces [bold(te.expr :: PF), "has no" :: PF, bold(te.type :: PF)]
+          td := n :: TD
+          spaces [bold(td.expr :: PF), "has no" :: PF, bold(td.type :: PF)]
 
         fail ["Could not construct type" :: PF, bold(ti.type :: PF), ":" :: PF]
 
         for c in constraints' for i in 1.. repeat
           app := c :: APP
           typ := hconcat [app.function :: PF, paren [fmtarg arg for arg in app.args]]
-          err := [fmterr arg for arg in app.args | not has?(arg :: TE, ti)]
+          err := [fmterr arg for arg in app.args | not has?((arg :: TD).expr, (arg :: TD).type, ti)]
           fail [paren(i :: PF), typ, ":" :: PF, sepBy(", " :: PF, err)]
         error ""
 
@@ -501,7 +493,7 @@ SpadTypeInfo() : Exports == Implementation where
             tg := n :: TE
             type' := evalGuard(tg.type, ti)
             type' = ['true] => (continue? := true; tg.expr)
-            nodeTypeExpr('_|, tg.expr, type')
+            nodeTypeGuard(tg.expr, type')
           newHasList := [n', :newHasList]
 
         ti := typeInfo(ti.name, ti.args, reverse newHasList, ti.constraints, ti.body)
@@ -511,7 +503,7 @@ SpadTypeInfo() : Exports == Implementation where
         tg := n :: TE
         type' := evalGuard(tg.type, ti)
         type' = ['true] => tg.expr
-        nodeTypeExpr('_|, tg.expr, type')
+        nodeTypeGuard(tg.expr, type')
 
       body := map(eval, ti.body.list)
 
@@ -522,7 +514,7 @@ TypeEvaluatorTest() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)
-  NT ==> SpadNamedType(N)
+  TD ==> SpadTypeDecl(N)
   TV ==> SpadTypeVar(N)
   FN ==> SpadFunction(N)
   TI ==> SpadTypeInfo

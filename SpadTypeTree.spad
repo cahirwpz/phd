@@ -3,6 +3,7 @@ SpadTypeRule() : Exports == Implementation where
   N ==> SpadNode
   CE ==> SpadCondExpr(N)
   NR ==> SpadNodeRef(N)
+  TD ==> SpadTypeDecl(N)
   TV ==> SpadTypeVar(N)
   SEQ ==> SpadSequence(N)
 
@@ -60,8 +61,8 @@ SpadTypeNode() : Exports == Implementation where
   TR ==> SpadTypeRule
   ENV ==> SpadEnvironment
   N ==> SpadNode
-  NT ==> SpadNamedType(N)
   NR ==> SpadNodeRef(N)
+  TD ==> SpadTypeDecl(N)
   TV ==> SpadTypeVar(N)
   FN ==> SpadFunction(N)
   SUBST ==> AssociationList(TV, List(N))
@@ -152,8 +153,8 @@ SpadTypeNode() : Exports == Implementation where
         value? n or typeVar? n =>
           symbol? n => bold cyan(n :: PF)
           bold(n :: PF)
-        namedType? n =>
-          bold cyan((n :: NT).name :: PF)
+        typeDecl? n =>
+          bold cyan((n :: TD).expr :: PF)
         function? n =>
           bold cyan((n :: FN).name :: PF)
         sequence? n =>

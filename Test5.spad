@@ -7,8 +7,6 @@ Test5(S : OrderedSet) : Exports == Implementation where
   Implementation ==> add
     B := List(Integer)
 
-    import List(S)
-
     merge(l1, l2, res) ==
       empty?(l1) =>
         empty?(l2) => res

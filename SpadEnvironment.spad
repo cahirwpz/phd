@@ -2,10 +2,10 @@
 SpadEnvironment() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
-  PF ==> PrintableForm
-  TV ==> SpadTypeVar(N)
+  TD ==> SpadTypeDecl(N)
   TE ==> SpadTypeExpr(N)
-  NT ==> SpadNamedType(N)
+  TV ==> SpadTypeVar(N)
+  PF ==> PrintableForm
   SCOPE ==> AssociationList(Symbol, List(N))
 
   Exports ==> CoercibleTo(PrintableForm) with
@@ -49,8 +49,7 @@ SpadEnvironment() : Exports == Implementation where
 
     addDomain(env, dom) ==
       domainInScope?(env, dom) => env
-
-      debug ["EnvAddDomain" :: PF, paren [dom :: PF]]
+      notice ["Adding type" :: PF, bold (dom :: PF), "to the environment!" :: PF]
       ti := getTypeInfo(dom)
       for n in ti.body.list repeat
         n' := substitute(n, typeVar() :: TV, [dom])
@@ -62,11 +61,11 @@ SpadEnvironment() : Exports == Implementation where
         if typeOrigin? n' then
           te := n' :: TE
           n' := te.expr
-        nt := n' :: NT
-        n' := nodeTypeExpr('_$, nt.type, [dom])
+        td := n' :: TD
+        n' := nodeTypeOrigin(td.type, [dom])
         if not emptyNode? guard then
-          n' := nodeTypeExpr('_|, n', guard)
-        env(nt.name) := n'
+          n' := nodeTypeGuard(n', guard)
+        env(td.expr :: Symbol) := n'
       env("$DomainsInScope" :: Symbol) := [dom]
 
     setelt!(env, name, value) ==

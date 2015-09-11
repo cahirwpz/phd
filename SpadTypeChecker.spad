@@ -130,7 +130,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       empty? sigs => false
 
       if typeVar? nfun.type then
-        limitTypeVar!(ctx, nfun.type :: TV, sigs)
+        nodeSubTypeOf!(ctx, nfun, sigs)
 
       for s in entries subst repeat
         limitTypeVar!(ctx, s.key, s.entry)
@@ -209,7 +209,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         tn := node(ctx, item :: NR)
         not done? tn => return true
         if function? tn.node then
-          types := [nodeNamedType((tn.node :: FN).name, tn.type), :types]
+          types := [nodeTypeDecl((tn.node :: FN).name, tn.type), :types]
       limitNodeType!(ctx, n, [nodeSeq("Join", reverse types)])
 
     -- evaluates single rule; note that it can happen that nothing was changed

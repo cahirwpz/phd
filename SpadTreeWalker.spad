@@ -14,10 +14,10 @@ SpadTreeWalkerCategory() : Category == Definition where
   MR ==> SpadMarker(N)
   NR ==> SpadNodeRef(N)
   MT ==> SpadMappingType(N)
-  NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
   SEQ ==> SpadSequence(N)
+  TD ==> SpadTypeDecl(N)
   TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
@@ -38,13 +38,13 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : M -> N
       rewrite : MR -> N
       rewrite : MT -> N
-      rewrite : NT -> N
       rewrite : NR -> N
       rewrite : RT -> N
       rewrite : SEG -> N
       rewrite : SEQ -> N
       rewrite : String -> N
       rewrite : Symbol -> N
+      rewrite : TD -> N
       rewrite : TE -> N
       rewrite : TV -> N
       rewrite : UT -> N
@@ -68,8 +68,8 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeFun(fn.name, args', rewrite fn.type, rewrite fn.body)
 
       rewrite (ft : FT) : N ==
-        args' := [rewrite(arg) :: NT for arg in ft.args]
-        nodeFtor(ft.name, args', rewrite ft.type, rewrite ft.extends, rewrite ft.capsule)
+        nodeFtor(ft.name, [(rewrite arg) :: TD for arg in ft.args],
+                 rewrite ft.type, rewrite ft.extends, rewrite ft.capsule)
 
       rewrite (im : IM) : N ==
         nodeImport(rewrite im.type)
@@ -78,14 +78,14 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeIterator(it.var, rewrite it.seq)
 
       rewrite (l : LAM) : N ==
-        nargs := [[arg.name, rewrite arg.type]$NT for arg in l.args]
-        nodeLambda(nargs, rewrite l.type, rewrite l.body)
+        nodeLambda([(rewrite arg) :: TD for arg in l.args],
+                   rewrite l.type, rewrite l.body)
 
       rewrite (lp : LP) : N ==
-        -- BUG: parser cannot accept a multi-line list constructor
-        nitors := [rewrite itor for itor in lp.itors]
-        nguards := [rewrite guard for guard in lp.guards]
-        nodeLoop(lp.kind, nitors, nguards, rewrite lp.body)
+        nodeLoop(lp.kind, 
+                 [rewrite itor for itor in lp.itors],
+                 [rewrite guard for guard in lp.guards],
+                 rewrite lp.body)
 
       rewrite (m : M) : N ==
         nodeMacro(m.name, m.args, rewrite m.body)
@@ -97,11 +97,8 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (mt : MT) : N ==
         nodeMappingType([rewrite arg for arg in mt.args], rewrite mt.result)
 
-      rewrite (nt : NT) : N ==
-        nodeNamedType(nt.name, rewrite nt.type)
-
       rewrite (rt : RT) : N ==
-        nodeRecordType([[f.name, rewrite f.type] for f in rt.fields])
+        nodeRecordType [(rewrite f) :: TD for f in fields rt]
 
       rewrite (seg : SEG) : N ==
         nodeSeg(rewrite seg.start, rewrite seg.end, rewrite seg.step)
@@ -113,13 +110,16 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite (s : Symbol) : N == [s]
 
+      rewrite (td : TD) : N ==
+        nodeTypeDecl(rewrite td.expr, rewrite td.type)
+
       rewrite (te : TE) : N ==
         nodeTypeExpr(te.kind, rewrite te.expr, rewrite te.type)
 
       rewrite (tv : TV) : N == [tv]
 
       rewrite (ut : UT) : N ==
-        nodeUnionType([rewrite v for v in ut.variants])
+        nodeUnionType [rewrite v for v in variants ut]
 
       rewrite (w : W) : N ==
         nodeWhere(rewrite w.body, rewrite w.env)
@@ -137,13 +137,13 @@ SpadTreeWalkerCategory() : Category == Definition where
         macro? n => rewrite (n :: M)
         mappingType? n => rewrite (n :: MT)
         marker? n => rewrite(n :: MR)
-        namedType? n => rewrite (n :: NT)
         nodeRef? n => rewrite (n :: NR)
         recordType? n => rewrite (n :: RT)
         segment? n => rewrite (n :: SEG)
         sequence? n => rewrite (n :: SEQ)
         string? n => rewrite (n :: String)
         symbol? n => rewrite (n :: Symbol)
+        typeDecl? n => rewrite (n :: TD)
         typeExpr? n => rewrite (n :: TE)
         typeVar? n => rewrite (n :: TV)
         unionType? n => rewrite (n :: UT)

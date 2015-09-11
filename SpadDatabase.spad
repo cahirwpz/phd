@@ -1,20 +1,20 @@
 )abbrev domain SPCMM SpadCtorModeMap
 SpadCtorModeMap() : Exports == Implementation where
   N ==> SpadNode
-  NT ==> SpadNamedType(N)
+  TD ==> SpadTypeDecl(N)
   PF ==> PrintableForm
+  SEX ==> SExpression
 
-  Exports ==> Join(CoercibleTo(SpadNode), CoercibleTo(PrintableForm)) with
-    convert : SExpression -> %
+  Exports ==> Join(CoercibleTo(N), CoercibleTo(PF)) with
+    convert : SEX -> %
 
     elt : (%, "name") -> Symbol
     elt : (%, "type") -> N
-    elt : (%, "args") -> List(NT)
+    elt : (%, "args") -> List(TD)
 
   Implementation ==> add
-    Rep := Record(ctor : List(SExpression), unused : SExpression)
+    Rep := Record(ctor : List(SEX), unused : SEX)
 
-    import SExpression
     import SpadNode
     import Printer
 
@@ -28,7 +28,7 @@ SpadCtorModeMap() : Exports == Implementation where
     elt (x, "args") ==
       ts := [parse t for t in rest(x.ctor, 2)]
       as := [symbol a for a in destruct cdr x.ctor.1]
-      [[a, t]$NT for a in as for t in ts]
+      [[a, t]$TD for a in as for t in ts]
 
     coerce x ==
       ftor := bold hconcat [x.name :: PF, paren [arg :: PF for arg in x.args]]
@@ -39,24 +39,24 @@ SpadOperation() : Exports == Implementation where
   N ==> SpadNode
   PF ==> PrintableForm
   MT ==> SpadMappingType(N)
-  NT ==> SpadNamedType(N)
+  TD ==> SpadTypeDecl(N)
+  SEX ==> SExpression
 
-  Exports ==> CoercibleTo(PrintableForm) with
-    convert : SExpression -> %
+  Exports ==> CoercibleTo(PF) with
+    convert : SEX -> %
 
     elt : (%, "name") -> Symbol
     elt : (%, "type") -> MT
-    elt : (%, "signature") -> NT
+    elt : (%, "signature") -> TD
     elt : (%, "condition") -> N
 
-    coerce : % -> SpadNode
+    coerce : % -> N
 
   Implementation ==> add
     import SpadNode
     import Printer
-    import SExpression
 
-    Rep := Record(op_name : Symbol, op_info : List(List(SExpression)))
+    Rep := Record(op_name : Symbol, op_info : List(List(SEX)))
 
     convert x == x pretend %
 
@@ -71,20 +71,20 @@ SpadOperation() : Exports == Implementation where
       [rest tl, first tl]$MT
 
     elt (x, "signature") ==
-      [x.name, [x.type]]$NT
+      [x.name, [x.type]]$TD
 
     elt (x, "condition") ==
       sig := x.op_info.1
       #sig < 3 or (symbol? sig.3 and symbol sig.3 = 'T) => emptyNode()
       parse sig.3
 
-    coerce (x : %) : SpadNode ==
+    coerce (x : %) : N ==
       c := x.condition
-      t := nodeNamedType(x.name, [x.type])
+      t := nodeTypeDecl(x.name, [x.type])
       emptyNode? c => t
       nodeCondExpr(c, t, emptyNode())
 
-    coerce (x : %) : PrintableForm ==
+    coerce (x : %) : PF ==
       cond := x.condition
       emptyNode? cond => x.signature :: PF 
       pile [x.signature :: PF, spaces [bold("when" :: PF), cond :: PF]]

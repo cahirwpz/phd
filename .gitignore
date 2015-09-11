@@ -3,6 +3,7 @@
 *.ll
 *.bc
 *.native
+*.erlib
 *.NRLIB
 *.fasl
 *.bak

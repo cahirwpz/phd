@@ -6,9 +6,9 @@ SpadNodeFactory() : Exports == Implementation where
   MR ==> SpadMarker(N)
   MT ==> SpadMappingType(N)
   NR ==> SpadNodeRef(N)
-  NT ==> SpadNamedType(N)
   RT ==> SpadRecordType(N)
   UT ==> SpadUnionType(N)
+  TD ==> SpadTypeDecl(N)
   TE ==> SpadTypeExpr(N)
   TV ==> SpadTypeVar(N)
   mt ==> nodeMappingType
@@ -33,8 +33,8 @@ SpadNodeFactory() : Exports == Implementation where
 
     stripOriginIfCan : N -> N
 
-    makeRecordFunList : N -> List(NT)
-    makeUnionFunList : N -> List(NT)
+    makeRecordFunList : N -> List(TD)
+    makeUnionFunList : N -> List(TD)
 
   Implementation ==> add
     booleanType () == nodeApp(['Boolean], [])
@@ -59,30 +59,30 @@ SpadNodeFactory() : Exports == Implementation where
 
     makeRecordFunList n ==
       r := n :: RT
-      funs : List(NT) :=
+      funs : List(TD) :=
        ([['=, mt([n, n], booleanType())],
          ['~=, mt([n, n], booleanType())],
          ['copy, mt([n], n)],
          ['coerce, mt([n], outputFormType())],
-         ['construct, mt([f.type for f in r.fields], n)]
+         ['construct, mt([f.type for f in fields r], n)]
         ])
-      for f in r.fields repeat
-        s : N := [f.name]
+      for f in fields r repeat
+        s : N := f.expr
         r : N := f.type
-        funs := ([[f.name, mt([['constant]$N], [f.name])],
+        funs := ([[f.expr :: Symbol, mt([['constant]$N], s)],
                   ['elt, mt([n, s], r)],
                   ['setelt!, mt([n, s, r], r)], :funs])
       funs
 
     makeUnionFunList n ==
       u := n :: UT
-      funs : List(NT) :=
+      funs : List(TD) :=
        ([['=, mt([n, n], booleanType())],
          ['~=, mt([n, n], booleanType())],
          ['coerce, mt([n], outputFormType())]
         ])
-      vs := u.variants
-      if not namedType? vs.1 then
+      vs := variants u
+      if not typeDecl? vs.1 then
         for v in vs repeat
           funs := [['construct, mt([v], n)], 
                    ['coerce, mt([n], v)], :funs]
