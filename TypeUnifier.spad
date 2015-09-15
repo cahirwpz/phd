@@ -12,6 +12,7 @@ TypeUnifier() : Exports == Implementation where
   TD ==> SpadTypeDecl(N)
   TG ==> SpadTypeGuard(N)
   TEH ==> SpadTypeHas(N)
+  TEI ==> SpadTypeIs(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
@@ -277,6 +278,10 @@ TypeUnifier() : Exports == Implementation where
         te := n :: TEH
         nodeTypeHas(substitute(te.expr, var, term),
                     substitute(te.type, var, term))
+      typeIs? n =>
+        te := n :: TEI
+        nodeTypeIs(substitute(te.expr, var, term),
+                   substitute(te.type, var, term))
       typeOrigin? n =>
         to := n :: TO
         nodeTypeOrigin(substitute(to.expr, var, term),

@@ -775,7 +775,8 @@ SpadTypeOrigin(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
   elt(x,"type") == x.t_type
 
   construct(e, t) == [e, t]$Rep
-  convert x == convert [convert 'Sel, convert x.expr, convert x.type]
+  parse ex == [parse ex.3, parse ex.2]
+  convert x == convert [convert 'Sel, convert x.type, convert x.expr]
   coerce ex == spaces [ex.expr :: PF,  '_$ :: PF, ex.type :: PF]
 
 )abbrev domain SLOOP SpadLoop
@@ -1644,8 +1645,8 @@ SpadNode() : Exports == Implementation where
       is? ex => [parse(ex)$TEI]
       pretend? ex => [parse(ex)$TEP]
       coerce? ex => [parse(ex)$TC]
-      domsel? ex => [parse(ex)$TS]
-      retsel? ex => [parse(ex)$TO]
+      origin? ex => [parse(ex)$TO]
+      select? ex => [parse(ex)$TS]
 
       let? ex => [parse(ex)$ASS]
 

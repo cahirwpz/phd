@@ -9,17 +9,16 @@ ParserTools() : with
     coerce? : SExpression -> Boolean
     collect? : SExpression -> Boolean
     domain? : SExpression -> Boolean
-    domsel? : SExpression -> Boolean
     exit? : SExpression -> Boolean
     function? : SExpression -> Boolean
     functor? : SExpression -> Boolean
-    itor? : SExpression -> Boolean
     guard? : SExpression -> Boolean
     has? : SExpression -> Boolean
-    if? : SExpression -> Boolean
     ifelse? : SExpression -> Boolean
+    if? : SExpression -> Boolean
     import? : SExpression -> Boolean
     is? : SExpression -> Boolean
+    itor? : SExpression -> Boolean
     join? : SExpression -> Boolean
     lambda? : SExpression -> Boolean
     let? : SExpression -> Boolean
@@ -30,14 +29,15 @@ ParserTools() : with
     marker? : SExpression -> Boolean
     nobranch? : SExpression -> Boolean
     noderef? : SExpression -> Boolean
+    origin? : SExpression -> Boolean
     package? : SExpression -> Boolean
     pretend? : SExpression -> Boolean
     progn? : SExpression -> Boolean
     quote? : SExpression -> Boolean
     record? : SExpression -> Boolean
     repeat? : SExpression -> Boolean
-    retsel? : SExpression -> Boolean
     segment? : SExpression -> Boolean
+    select? : SExpression -> Boolean
     seq? : SExpression -> Boolean
     signature? : SExpression -> Boolean
     step? : SExpression -> Boolean
@@ -88,7 +88,7 @@ ParserTools() : with
     coerce? ex == list_of_eq?(ex, '::, 3)
     collect? ex == list_of_ge?(ex, 'COLLECT, 3)
     domain? ex == list_of_ge?(ex, 'CATEGORY, 2) and symbol ex.2 = 'domain
-    domsel? ex == list_of_eq?(ex, 'Sel, 3)
+    origin? ex == list_of_eq?(ex, 'Sel, 3)
     exit? ex == list_of_eq?(ex, 'exit, 3)
     function? ex == list_of_eq?(ex, 'DEF, 5)
     guard? ex == list_of_eq?(ex, '|, 2)
@@ -112,7 +112,7 @@ ParserTools() : with
     quote? ex == list_of_eq?(ex, 'QUOTE, 2)
     record? ex == list_of_ge?(ex, 'Record, 3)
     repeat? ex == list_of_eq?(ex, 'REPEAT, 2)
-    retsel? ex == list_of_eq?(ex, '@, 3)
+    select? ex == list_of_eq?(ex, '@, 3)
     segment? ex == list_of_eq?(ex, 'SEGMENT, 3)
     seq? ex == list_of_ge?(ex, 'SEQ, 2)
     signature? ex == list_of_eq?(ex, 'SIGNATURE, 3) or list_of_eq?(ex, 'SIGNATURE, 4)

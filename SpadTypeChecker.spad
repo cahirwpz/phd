@@ -37,7 +37,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
       tn := find(tv.major :: PI, tv.minor :: PI)
       t := tn.type
       while typeOrigin? t repeat
-        to := coerce(to.type)
+        to := coerce(t)
         t := to.type
       t
 
@@ -207,8 +207,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
       for item in items repeat
         tn := node(ctx, item :: NR)
         not done? tn => return true
-        if function? tn.node then
-          types := [nodeTypeDecl((tn.node :: FN).name, tn.type), :types]
+        if mappingType? tn.type and nodeRef? tn.node then
+          fn := node(ctx, tn.node :: NR)
+          types := [nodeTypeDecl((fn.node :: FN).name, tn.type), :types]
       limitNodeType!(ctx, n, [nodeSeq("Join", reverse types)])
 
     -- evaluates single rule; note that it can happen that nothing was changed
