@@ -153,6 +153,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
   TD ==> SpadTypeDecl(N)
   TG ==> SpadTypeGuard(N)
   TO ==> SpadTypeOrigin(N)
+  TI ==> SpadTypeInfo(N)
   TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
@@ -173,7 +174,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadNodeFactory
     import SpadDatabase
     import SpadEnvironment
-    import SpadTypeInfo
+    import SpadTypeEvaluator
     import SpadTypeRuleFactory
     import SpadTypeNodeArray
     import TypeUnifier

@@ -29,7 +29,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
         to := coerce(fun)
         if to.expr = ['elt] and #args > 0 and typeOrigin? first args then
           to := coerce(first args)
-          args := cons(to.expr, rest app.args)
+          args := cons(to.expr, rest args)
       nodeApp(fun, args)
 
     rewrite (tv : TV) : N ==

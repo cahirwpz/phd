@@ -30,7 +30,7 @@ SpadEnvironment() : Exports == Implementation where
     import SExpression
     import SpadNode
     import SpadNodeFactory
-    import SpadTypeInfo
+    import SpadTypeEvaluator
     import TypeUnifier
     import Logger('Env)
     import Printer

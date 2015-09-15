@@ -25,6 +25,7 @@ SpadTreeWalkerCategory() : Category == Definition where
   TEH ==> SpadTypeHas(N)
   TEI ==> SpadTypeIs(N)
   TEP ==> SpadTypePretend(N)
+  TI ==> SpadTypeInfo(N)
   TO ==> SpadTypeOrigin(N)
   TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
@@ -60,6 +61,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : TEH -> N
       rewrite : TEI -> N
       rewrite : TEP -> N
+      rewrite : TI -> N
       rewrite : TO -> N
       rewrite : TS -> N
       rewrite : TV -> N
@@ -136,7 +138,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeTypeCoerce(rewrite te.expr, rewrite te.type)
 
       rewrite (te : TD) : N ==
-        nodeTypeDecl(rewrite te.expr, rewrite te.type)
+        nodeTypeDecl(rewrite te.expr, rewrite te.type, te.sig)
 
       rewrite (te : TG) : N ==
         nodeTypeGuard(rewrite te.expr, rewrite te.type)
@@ -149,6 +151,12 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite (te : TEP) : N ==
         nodeTypePretend(rewrite te.expr, rewrite te.type)
+
+      rewrite (ti : TI) : N ==
+        nodeTypeInfo(ti.name, [rewrite(arg) :: TD for arg in ti.args],
+                     [rewrite hasItem for hasItem in ti.hasList],
+                     [rewrite constraint for constraint in ti.constraints],
+                     rewrite(ti.body) :: SEQ)
 
       rewrite (te : TO) : N ==
         nodeTypeOrigin(rewrite te.expr, rewrite te.type)
@@ -190,6 +198,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         typeGuard? n => rewrite (n :: TG)
         typeHas? n => rewrite (n :: TEH)
         typeIs? n => rewrite (n :: TEI)
+        typeInfo? n => rewrite (n :: TI)
         typePretend? n => rewrite (n :: TEP)
         typeOrigin? n => rewrite (n :: TO)
         typeSelect? n => rewrite (n :: TS)

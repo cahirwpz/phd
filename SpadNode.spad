@@ -23,6 +23,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadTypeGuard(%) -> %
   construct : SpadTypeHas(%) -> %
   construct : SpadTypeIs(%) -> %
+  construct : SpadTypeInfo(%) -> %
   construct : SpadTypeOrigin(%) -> %
   construct : SpadTypePretend(%) -> %
   construct : SpadTypeSelect(%) -> %
@@ -68,6 +69,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   typeExpr? : % -> Boolean
   typeGuard? : % -> Boolean
   typeHas? : % -> Boolean
+  typeInfo? : % -> Boolean
   typeIs? : % -> Boolean
   typePretend? : % -> Boolean
   typeOrigin? : % -> Boolean
@@ -108,6 +110,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadTypeDecl(%)
   coerce : % -> SpadTypeGuard(%)
   coerce : % -> SpadTypeHas(%)
+  coerce : % -> SpadTypeInfo(%)
   coerce : % -> SpadTypeIs(%)
   coerce : % -> SpadTypeOrigin(%)
   coerce : % -> SpadTypePretend(%)
@@ -278,48 +281,55 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       n.result = m.result and n.args = m.args
 
 )abbrev domain STDECL SpadTypeDecl
-SpadTypeDecl(N : SpadNodeCategory) :SpadTypeExprCategory(N) == add
+SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
   MT ==> SpadMappingType(N)
   PF ==> PrintableForm
 
-  import ParserTools
+  Exports ==> SpadTypeExprCategory(N) with
+    construct : (N, N, Boolean) -> %
+    elt : (%, "sig") -> Boolean
 
-  Rep := Record(n_expr : N, n_type : N)
+  Implementation ==> add
+    import ParserTools
 
-  elt(x, "expr") == x.n_expr
-  elt(x, "type") == x.n_type
+    Rep := Record(n_expr : N, n_type : N, n_sig : Boolean)
 
-  construct(e : N, t : N) == [e, t]$Rep
+    elt(x, "expr") == x.n_expr
+    elt(x, "type") == x.n_type
+    elt(x, "sig") == x.n_sig
 
-  parse ex ==
-    var? ex =>
-      -- (: field Type)
-      [parse(ex.2)$N, parseNonNull ex.3]
-    symbol? ex =>
-      [[symbol ex], emptyNode()]
-    signature? ex =>
-      -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
-      -- (SIGNATURE name Type constant)
-      -- (SIGNATURE (name) Type constant) ???
-      name :=
-        list? ex.2 => symbol ex.2.1
-        symbol ex.2
-      res : N := parse car ex.3
-      targs : List(N) := if #ex = 3
-        then [parse e for e in destruct cdr ex.3]
-        else [parse ex.4]
-      [[name], [[targs, res]$MT]]
-    error "Cannot parse type declaration!"
+    construct(e, t) == [e, t, false]$Rep
+    construct(e, t, s) == [e, t, s]$Rep
 
-  convert x ==
-    if mappingType? x.type then
-      convert [convert ("SIGNATURE" :: Symbol), convert x.expr, cdr convert x.type]
-    else
-      convert [convert (":" :: Symbol), convert x.expr, convert x.type]
+    parse ex ==
+      var? ex =>
+        -- (: field Type)
+        [parse(ex.2)$N, parseNonNull ex.3]
+      symbol? ex =>
+        [[symbol ex], emptyNode()]
+      signature? ex =>
+        -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
+        -- (SIGNATURE name Type constant)
+        -- (SIGNATURE (name) Type constant) ???
+        name :=
+          list? ex.2 => symbol ex.2.1
+          symbol ex.2
+        res : N := parse car ex.3
+        targs : List(N) := if #ex = 3
+          then [parse e for e in destruct cdr ex.3]
+          else [parse ex.4]
+        [[name], [[targs, res]$MT], true]
+      error "Cannot parse type declaration!"
 
-  coerce n ==
-    typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
-    spaces [n.expr :: PF, ":" :: PF, typeName]
+    convert x ==
+      if x.sig then
+        convert [convert ("SIGNATURE" :: Symbol), convert x.expr, cdr convert x.type]
+      else
+        convert [convert (":" :: Symbol), convert x.expr, convert x.type]
+
+    coerce n ==
+      typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
+      spaces [n.expr :: PF, ":" :: PF, typeName]
 
 )abbrev domain SRTYPE SpadRecordType
 SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
@@ -1201,7 +1211,6 @@ SpadWhere(N : SpadNodeCategory) : Exports == Implementation where
       spaces [w.body :: PF, "where" :: PF, w.env :: PF]
 
 )abbrev package SFTOR SpadFunctor
-++ SPAD functor representation
 SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
   TD ==> SpadTypeDecl(N)
   MT ==> SpadMappingType(N)
@@ -1263,6 +1272,54 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     signature ft ==
       [[ft.name], [[[arg.type for arg in ft.args], ft.type]$MT]]
 
+)abbrev domain STINFO SpadTypeInfo
+SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
+  PF ==> PrintableForm
+  APP ==> SpadApply(N)
+  SEQ ==> SpadSequence(N)
+  TD ==> SpadTypeDecl(N)
+
+  Exports ==> ParsableCategory with
+    construct : (Symbol, List TD, List N, List N, SEQ) -> %
+
+    elt : (%, "name") -> Symbol
+    elt : (%, "args") -> List TD
+    elt : (%, "hasList") -> List N 
+    elt : (%, "constraints") -> List N
+    elt : (%, "body") -> SEQ
+    elt : (%, "self") -> APP
+    elt : (%, "type") -> N
+
+  Implementation ==> add
+    Rep := Record(ti_name : Symbol,
+                  ti_args : List TD,
+                  ti_hasList : List N,
+                  ti_constraints : List N,
+                  ti_body : SEQ)
+
+    construct(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
+
+    elt(x, "name") == x.ti_name
+    elt(x, "args") == x.ti_args
+    elt(x, "hasList") == x.ti_hasList
+    elt(x, "constraints") == x.ti_constraints
+    elt(x, "body") == x.ti_body
+    elt(x, "self") == [[x.ti_name], [[arg] for arg in x.ti_args]]$APP
+    elt(x, "type") == [[[x.ti_name], [arg.expr for arg in x.ti_args]]$APP]
+
+    coerce x ==
+      args := [arg :: PF for arg in x.ti_args]
+      app := hconcat [x.ti_name :: PF, paren args]
+      k : String :=
+        x.ti_body.kind case "Join" => "Category"
+        x.ti_body.kind case "Domain" => "Domain"
+        x.ti_body.kind case "Package" => "Package"
+        error "???"
+      pile([spaces [app, bold("is" :: PF), k :: PF],
+            pile [bold("defined as:" :: PF), x.ti_body :: PF],
+            pile [bold("has relation:" :: PF), :[h :: PF for h in x.ti_hasList]],
+            pile [bold("constraints:" :: PF), :[c :: PF for c in x.ti_constraints]]])
+
 )abbrev domain SNODE SpadNode
 ++ SPAD generic expression
 SpadNode() : Exports == Implementation where
@@ -1295,6 +1352,7 @@ SpadNode() : Exports == Implementation where
   TEH ==> SpadTypeHas(%)
   TEI ==> SpadTypeIs(%)
   TEP ==> SpadTypePretend(%)
+  TI ==> SpadTypeInfo(%)
   TG ==> SpadTypeGuard(%)
   TO ==> SpadTypeOrigin(%)
   TS ==> SpadTypeSelect(%)
@@ -1323,8 +1381,10 @@ SpadNode() : Exports == Implementation where
     nodeSubType : (%, %) -> %
     nodeTypeCoerce : (%, %) -> %
     nodeTypeDecl : (%, %) -> %
+    nodeTypeDecl : (%, %, Boolean) -> %
     nodeTypeGuard : (%, %) -> %
     nodeTypeHas : (%, %) -> %
+    nodeTypeInfo : (Symbol, List TD, List(%), List(%), SEQ) -> %
     nodeTypeIs : (%, %) -> %
     nodeTypePretend : (%, %) -> %
     nodeTypeOrigin : (%, %) -> %
@@ -1357,12 +1417,13 @@ SpadNode() : Exports == Implementation where
                  s_macro : SM,
                  subtype : ST,
                  s_where : SW,
-                 t_case : TC,
+                 t_case : SC,
                  t_coerce : TC,
                  t_decl : TD,
                  t_guard : TG,
                  t_has : TEH,
                  t_is : TEI,
+                 t_info : TI,
                  t_origin: TO,
                  t_pretend : TEP,
                  t_select : TS,
@@ -1406,6 +1467,7 @@ SpadNode() : Exports == Implementation where
     typeDecl? n == n case t_decl
     typeGuard? n == n case t_guard
     typeHas? n == n case t_has
+    typeInfo? n == n case t_info
     typeIs? n == n case t_is
     typePretend? n == n case t_pretend
     typeOrigin? n == n case t_origin
@@ -1528,6 +1590,10 @@ SpadNode() : Exports == Implementation where
     coerce (n : %) : TEP ==
       typePretend? n => n.t_pretend
       CoerceError("SpadTypePretend")
+  
+    coerce (n : %) : TI ==
+      typeInfo? n => n.t_info
+      CoerceError("SpadTypeInfo")
 
     coerce (n : %) : TO ==
       typeOrigin? n => n.t_origin
@@ -1596,6 +1662,7 @@ SpadNode() : Exports == Implementation where
     construct (n : TEH) : % == [n]$Rep
     construct (n : TEI) : % == [n]$Rep
     construct (n : TEP) : % == [n]$Rep
+    construct (n : TI) : % == [n]$Rep
     construct (n : TO) : % == [n]$Rep
     construct (n : TS) : % == [n]$Rep
     construct (n : TV) : % == [n]$Rep
@@ -1696,6 +1763,7 @@ SpadNode() : Exports == Implementation where
       typeGuard? n => (n :: TG) :: PF
       typeHas? n => (n :: TEH) :: PF
       typeIs? n => (n :: TEI) :: PF
+      typeInfo? n => (n :: TI) :: PF
       typePretend? n => (n :: TEP) :: PF
       typeOrigin? n => (n :: TO) :: PF
       typeSelect? n => (n :: TS) :: PF
@@ -1788,10 +1856,13 @@ SpadNode() : Exports == Implementation where
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeCoerce (expr : %, type : %) == [[expr, type]$TC]
     nodeTypeDecl (expr : %, type : %) == [[expr, type]$TD]
+    nodeTypeDecl (expr : %, type : %, sig : Boolean) == [[expr, type, sig]$TD]
     nodeTypeGuard (expr, type) == [[expr, type]$TG]
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeHas (expr, type) == [[expr, type]$TEH]
     nodeTypeIs (expr, type) == [[expr, type]$TEI]
+    nodeTypeInfo (name, args, hasList, constraints, body) ==
+      [[name, args, hasList, constraints, body]$TI]
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeVar (major, minor) == [[major, minor]$TV]
     nodeTypeSelect (expr, type) == [[expr, type]$TS]

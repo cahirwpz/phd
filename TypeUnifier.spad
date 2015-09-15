@@ -269,7 +269,8 @@ TypeUnifier() : Exports == Implementation where
       typeDecl? n =>
         td := n :: TD
         nodeTypeDecl(substitute(td.expr, var, term),
-                     substitute(td.type, var, term))
+                     substitute(td.type, var, term),
+                     td.sig)
       typeGuard? n =>
         tg := n :: TG
         nodeTypeGuard(substitute(tg.expr, var, term),
