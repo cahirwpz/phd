@@ -278,56 +278,48 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       n.result = m.result and n.args = m.args
 
 )abbrev domain STDECL SpadTypeDecl
-SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
+SpadTypeDecl(N : SpadNodeCategory) :SpadTypeExprCategory(N) == add
   MT ==> SpadMappingType(N)
   PF ==> PrintableForm
 
-  Exports ==> SpadTypeExprCategory(N) with
-    construct : Symbol -> %
-    construct : (Symbol, N) -> %
+  import ParserTools
 
-  Implementation ==> add
-    Rep := Record(n_expr : N, n_type : N)
+  Rep := Record(n_expr : N, n_type : N)
 
-    import ParserTools
-    import SExpression
+  elt(x, "expr") == x.n_expr
+  elt(x, "type") == x.n_type
 
-    elt(x, "expr") == x.n_expr
-    elt(x, "type") == x.n_type
+  construct(e : N, t : N) == [e, t]$Rep
 
-    construct(s) == [[s], emptyNode()]$Rep
-    construct(s : Symbol, t : N) == [[s], t]$Rep
-    construct(e : N, t : N) == [e, t]$Rep
+  parse ex ==
+    var? ex =>
+      -- (: field Type)
+      [parse(ex.2)$N, parseNonNull ex.3]
+    symbol? ex =>
+      [[symbol ex], emptyNode()]
+    signature? ex =>
+      -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
+      -- (SIGNATURE name Type constant)
+      -- (SIGNATURE (name) Type constant) ???
+      name :=
+        list? ex.2 => symbol ex.2.1
+        symbol ex.2
+      res : N := parse car ex.3
+      targs : List(N) := if #ex = 3
+        then [parse e for e in destruct cdr ex.3]
+        else [parse ex.4]
+      [[name], [[targs, res]$MT]]
+    error "Cannot parse type declaration!"
 
-    parse ex ==
-      var? ex =>
-        -- (: field Type)
-        [parse(ex.2)$N, parseNonNull ex.3]
-      symbol? ex =>
-        [symbol ex]
-      signature? ex =>
-        -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
-        -- (SIGNATURE name Type constant)
-        -- (SIGNATURE (name) Type constant) ???
-        name :=
-          list? ex.2 => symbol ex.2.1
-          symbol ex.2
-        res : N := parse car ex.3
-        targs : List(N) := if #ex = 3
-          then [parse e for e in destruct cdr ex.3]
-          else [parse ex.4]
-        [name, [[targs, res]$MT]]
-      error "Cannot parse type declaration!"
+  convert x ==
+    if mappingType? x.type then
+      convert [convert ("SIGNATURE" :: Symbol), convert x.expr, cdr convert x.type]
+    else
+      convert [convert (":" :: Symbol), convert x.expr, convert x.type]
 
-    convert x ==
-      if mappingType? x.type then
-        convert [convert ("SIGNATURE" :: Symbol), convert x.expr, cdr convert x.type]
-      else
-        convert [convert (":" :: Symbol), convert x.expr, convert x.type]
-
-    coerce n ==
-      typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
-      spaces [n.expr :: PF, ":" :: PF, typeName]
+  coerce n ==
+    typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
+    spaces [n.expr :: PF, ":" :: PF, typeName]
 
 )abbrev domain SRTYPE SpadRecordType
 SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
@@ -371,7 +363,7 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
         fail (["Cannot parse a record type" :: PF, bold convert(ex),
                "- malformed field" :: PF, bold convert(field), "!":: PF])
         error ""
-      [symbol field.2, parse field.3]
+      [[symbol field.2], parse field.3]
 
     parse ex ==
       -- (Record (: field1 Type1) (: field2 Type2) ...)
@@ -451,7 +443,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
       true
 
     parseVariant (s : SEX) : N ==
-      var? s => [[symbol s.2, parse s.3]$TD]
+      var? s => [[[symbol s.2], parse s.3]$TD]
       parse s
 
     parse ex ==
@@ -921,8 +913,8 @@ SpadLambda(N : SpadNodeCategory) : Exports == Implementation where
       largs : List(TD) := []
       for arg in l.args repeat
         var? arg =>
-          largs := [[symbol arg.2, parse arg.3], :largs]
-        largs := [[symbol arg, emptyNode()], :largs]
+          largs := [[[symbol arg.2], parse arg.3], :largs]
+        largs := [[[symbol arg], emptyNode()], :largs]
 
       [reverse largs, parse l.type, parse ex.3]
 
@@ -1111,7 +1103,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
 
     parseArg (s : SEX, t : SEX) : N ==
       string? s => [string s]
-      [[symbol s, parseNonNull t]$TD]
+      [[[symbol s], parseNonNull t]$TD]
 
     parse ex ==
       argNames := destruct cdr ex.2
@@ -1249,7 +1241,7 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
       argNames := destruct cdr ex.2
       argTypes := destruct cdr ex.3
       fbody := ex.5
-      fargs := [[symbol s, parse t]$TD for s in argNames for t in argTypes]
+      fargs := [[[symbol s], parse t]$TD for s in argNames for t in argTypes]
       fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
       fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
       [symbol car ex.2, fargs, parse car ex.3, parseNonNull fextends, parse fcapsule]
@@ -1330,7 +1322,6 @@ SpadNode() : Exports == Implementation where
     nodeSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), List(%)) -> %
     nodeSubType : (%, %) -> %
     nodeTypeCoerce : (%, %) -> %
-    nodeTypeDecl : (Symbol, %) -> %
     nodeTypeDecl : (%, %) -> %
     nodeTypeGuard : (%, %) -> %
     nodeTypeHas : (%, %) -> %
@@ -1796,7 +1787,6 @@ SpadNode() : Exports == Implementation where
     nodeSeq (kind, list) == [[kind, list]$SEQ]
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeCoerce (expr : %, type : %) == [[expr, type]$TC]
-    nodeTypeDecl (name : Symbol, type : %) == [[name, type]$TD]
     nodeTypeDecl (expr : %, type : %) == [[expr, type]$TD]
     nodeTypeGuard (expr, type) == [[expr, type]$TG]
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]

@@ -27,7 +27,7 @@ SpadCtorModeMap() : Exports == Implementation where
       parse x.ctor.2
     elt (x, "args") ==
       ts := [parse t for t in rest(x.ctor, 2)]
-      as := [symbol a for a in destruct cdr x.ctor.1]
+      as := [[symbol a] for a in destruct cdr x.ctor.1]
       [[a, t]$TD for a in as for t in ts]
 
     coerce x ==
@@ -71,7 +71,7 @@ SpadOperation() : Exports == Implementation where
       [rest tl, first tl]$MT
 
     elt (x, "signature") ==
-      [x.name, [x.type]]$TD
+      [[x.name], [x.type]]$TD
 
     elt (x, "condition") ==
       sig := x.op_info.1
@@ -80,7 +80,7 @@ SpadOperation() : Exports == Implementation where
 
     coerce (x : %) : N ==
       c := x.condition
-      t := nodeTypeDecl(x.name, [x.type])
+      t := nodeTypeDecl([x.name], [x.type])
       emptyNode? c => t
       nodeCondExpr(c, t, emptyNode())
 
