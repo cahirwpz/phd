@@ -1,6 +1,6 @@
 Index: src/interp/lisplib.boot
 ===================================================================
---- src/interp/lisplib.boot	(wersja 1935)
+--- src/interp/lisplib.boot	(wersja 1945)
 +++ src/interp/lisplib.boot	(kopia robocza)
 @@ -218,6 +218,10 @@
  
@@ -13,7 +13,7 @@ Index: src/interp/lisplib.boot
  compDefineLisplib(df:=["DEF",[op,:.],:.],m,e,prefix,fal,fn) ==
    --fn= compDefineCategory OR compDefineFunctor
    sayMSG fillerSpaces(72,'"-")
-@@ -254,6 +258,17 @@
+@@ -254,6 +258,18 @@
    lisplibDoRename(libName)
    filearg := make_full_namestring([libName, $spadLibFT])
    RPACKFILE filearg
@@ -26,6 +26,7 @@ Index: src/interp/lisplib.boot
 +    else
 +      libPath := CONCAT(libName, ".", $spadLibFT, "/", libName, ".lsp")
 +      sexpList := readLispLib(make_full_namestring(libPath))
++      PRETTYPRINT(sexpList)
 +      SPADCALL(sexpList, fn)
 +    FORMAT(true, '"~%~A~%~%", '">>>> POST-COMPILE HOOK END <<<<")
    FRESH_-LINE $algebraOutputStream
@@ -33,7 +34,7 @@ Index: src/interp/lisplib.boot
    unloadOneConstructor(op,libName)
 Index: src/interp/ncomp.boot
 ===================================================================
---- src/interp/ncomp.boot	(wersja 1935)
+--- src/interp/ncomp.boot	(wersja 1945)
 +++ src/interp/ncomp.boot	(kopia robocza)
 @@ -325,6 +325,10 @@
  DEFVAR($globalDefs, nil)
@@ -70,7 +71,7 @@ Index: src/interp/ncomp.boot
      if $semanticErrorStack then displaySemanticErrors()
 Index: src/interp/nlib.lisp
 ===================================================================
---- src/interp/nlib.lisp	(wersja 1935)
+--- src/interp/nlib.lisp	(wersja 1945)
 +++ src/interp/nlib.lisp	(kopia robocza)
 @@ -491,3 +491,9 @@
          (setq fn (|fnameMake| d (string (gensym n)) e))
