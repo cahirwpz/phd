@@ -9,7 +9,7 @@ Test10 : Exports == Implementation where
 
     baz : NonNegativeInteger -> Integer
     foo : PositiveInteger -> Float
-    --bar : Integer -> Float
+    bar : Integer -> Float
 
     triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 

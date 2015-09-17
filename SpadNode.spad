@@ -1391,7 +1391,6 @@ SpadNode() : Exports == Implementation where
                  s_macro : SM,
                  subtype : ST,
                  s_where : SW,
-                 t_case : SC,
                  t_coerce : TC,
                  t_decl : TD,
                  t_guard : TG,

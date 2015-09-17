@@ -327,7 +327,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- variable (e.g. 'return' refers to "%2").
       funDefNode := addNode!(ctx, [fn.name], env')
       resNode := addNode!(ctx, emptyNode(), env')
-      argNodeList := [addNode!(ctx, emptyNode(), env) for n in fn.args]
+      argNodeList := [addNode!(ctx, emptyNode(), env') for n in fn.args]
 
       resNode.node := resNode.type
       for argNode in argNodeList for n in fn.args repeat
@@ -351,7 +351,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- the domain / package / function. Filter out those that don't match
       -- the type calculated above.
       candidateList : List(MT) := []
-      for n in search(fn.name, env) repeat
+      for n in search(fn.name, env') repeat
         candidate := emptyNode()
 
         if typeOrigin? n then
@@ -370,6 +370,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       for c in candidateList repeat 
         for type in c.args | not unbound? type repeat
           env' := envAddType(type, env')
+        if not unbound? c.result then
+          env' := envAddType(c.result, env')
 
       -- TODO: Filter out function which have been already defined.
 
@@ -655,6 +657,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       empty? types =>
         fail ["Undefined symbol:" :: PF, bold red string (s :: PF), "!" :: PF]
+        debug (env :: PF)
         error ""
       
       info(["Found" :: PF, string bold(s :: PF), "with type :" :: PF,
