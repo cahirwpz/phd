@@ -182,31 +182,39 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import Logger('Create)
 
     envAddType (t : N, env : ENV) : ENV ==
-      if apply? t then
+      apply? t =>
         app := t :: APP
         env := addDomain(app, env)
         for k in app.args repeat
           env := envAddType(k, env)
-      if mappingType? t then
+        env
+
+      mappingType? t =>
         mt := t :: MT
         for k in [mt.result, :mt.args] repeat
           env := envAddType(k, env)
-      if recordType? t then
+        env
+
+      recordType? t =>
         rt := t :: RT
         for f in fields rt repeat
           env := envAddType(f.type, env)
         for f in makeRecordFunList t repeat
           env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
-      if unionType? t then
+        env
+
+      unionType? t =>
         ut := t :: UT
         for v in variants ut repeat
           env := envAddType(v, env)
         for f in makeUnionFunList t repeat
           env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
-      env
+        env
 
-    envAddTypeAs (t : N, alias : Symbol, env : ENV) : ENV ==
-      env
+      symbol? t => env -- BUG! this is not correct but will do for time being
+
+      fail ["Type" :: PF, bold(t :: PF), "not handled!" :: PF]
+      error "envAddType"
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TN ==
       -- rewrite QUOTE(symbol) to value 'symbol
@@ -420,7 +428,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         argNode := addNode!(ctx, arg.expr, env)
         setTypeOf!(ctx, argNode, [arg.type])
         env(name) := argNode.type
-        env := envAddTypeAs(arg.type, name, env)
+        env := addDomainAs(arg.type :: APP, name, env)
         argSub(name) := argNode.type
         argNodeList := [argNode, :argNodeList]
 

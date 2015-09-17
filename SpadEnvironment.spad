@@ -4,6 +4,7 @@ SpadEnvironment() : Exports == Implementation where
   APP ==> SpadApply(N)
   TD ==> SpadTypeDecl(N)
   TG ==> SpadTypeGuard(N)
+  TI ==> SpadTypeInfo(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   PF ==> PrintableForm
@@ -14,7 +15,10 @@ SpadEnvironment() : Exports == Implementation where
   Exports ==> CoercibleTo(PrintableForm) with
     new : () -> %
 
+    coerce : KEY -> PF
+
     addDomain : (APP, %) -> %
+    addDomainAs : (APP, KEY, %) -> %
 
     key? : (KEY, %) -> Boolean
 
@@ -39,17 +43,13 @@ SpadEnvironment() : Exports == Implementation where
     -- create empty environment
     new() == [empty()$SCOPE]
 
-    coerceKey (key : KEY) : PF ==
+    coerce (key : KEY) : PF ==
       key case APP => key :: APP :: PF
       key :: Symbol :: PF
 
-    addDomain (dom : APP, env : %) : % ==
-      key? (dom, env) => env
-      notice ["Adding type" :: PF, bold (dom :: PF), "to the environment!" :: PF]
-      ti := getTypeInfo(dom)
-      env(dom) := [ti]
+    importDomain (ti : TI, dom : N, env : %) : % ==
       for n in ti.body.list repeat
-        n' := substitute(n, typeVar() :: TV, [dom])
+        n' := substitute(n, typeVar() :: TV, dom)
         guard := emptyNode()
         if typeGuard? n' then
           tg := n' :: TG
@@ -59,11 +59,29 @@ SpadEnvironment() : Exports == Implementation where
           to := n' :: TO
           n' := to.expr
         td := n' :: TD
-        n' := nodeTypeOrigin(td.type, [dom])
+        n' := nodeTypeOrigin(td.type, dom)
         if not emptyNode? guard then
           n' := nodeTypeGuard(n', guard)
         env(td.expr :: Symbol) := n'
       env
+
+    addDomain (dom : APP, env : %) : % ==
+      key? (dom, env) => env
+      notice ["Adding type" :: PF, bold (dom :: PF), "to the environment!" :: PF]
+      ti := getTypeInfo(dom)
+      env(dom) := [ti]
+      importDomain(ti, [dom], env)
+
+    addDomainAs (dom : APP, key : KEY, env : %) : % ==
+      key? (dom, env) => env
+      notice(["Adding" :: PF, bold (dom :: PF), "as" :: PF, bold (key :: PF), 
+              "to the environment!" :: PF])
+      ti := getTypeInfo(dom)
+      env(key) := [ti]
+      n : N :=
+        key case APP => [key :: APP]
+        [key :: Symbol]
+      importDomain(ti, n, env)
 
     key? (key : KEY, env : %) : Boolean ==
       for level in env repeat
@@ -97,7 +115,7 @@ SpadEnvironment() : Exports == Implementation where
     elt (env : %, key : KEY) : List(N) ==
       result := search(key, env)
       empty? result =>
-        fail [string bold coerceKey key, "missing from environment!" :: PF]
+        fail [string bold(key :: PF), "missing from environment!" :: PF]
         error ""
       result
 
@@ -116,11 +134,11 @@ SpadEnvironment() : Exports == Implementation where
     discardScope env ==
       rest env
 
-    coerce env ==
+    coerce (env : %) : PF ==
       entries : List(PF) := []
       empty? env => "()" :: PF
       for e in members(first flatten env)@List(MEMBER) repeat
-        sym := hconcat [bold cyan coerceKey e.key, ":" :: PF]
+        sym := hconcat [bold cyan(e.key :: PF), ":" :: PF]
         mms := [mm :: PF for mm in e.entry]
         of :=
           empty? mms =>
