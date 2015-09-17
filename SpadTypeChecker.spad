@@ -69,8 +69,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
 
-  SUBST ==> AssociationList(TV, List(N))
-  URES ==> Union(SUBST, "failed")
+  SUBS ==> AssociationList(TV, List(N))
+  URES ==> Union(SUBS, "failed")
 
   TT ==> SpadTypeTree
   TNA ==> SpadTypeNodeArray(SpadTypeTree)
@@ -95,7 +95,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       nargs := [node(ctx, arg :: NR) for arg in r.args] -- argument nodes
 
       sigs : List(N) := []
-      substList : List(SUBST) := []
+      subsList : List(SUBS) := []
       for t in typeOf(ctx, nfun) repeat
         -- 1) Consider signature types with correct number of arguments.
         t' := stripOriginIfCan t
@@ -111,8 +111,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
         for arg in sig.args for narg in nargs | argsOk? repeat
           argTypes := typeOf(ctx, narg)
           ures := unifyType(arg, argTypes)
-          ures case SUBST =>
-            substList := [ures :: SUBST, :substList]
+          ures case SUBS =>
+            subsList := [ures :: SUBS, :subsList]
           "or"/[isSubType(argType, arg) for argType in argTypes] => "iterate"
           argsOk? := false
         not argsOk? => "iterate"
@@ -120,9 +120,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
         ures := unifyType(sig.result, typeOf(ctx, n))
         ures case "failed" => "iterate"
         -- 4) Collect variable substitutions and valid signature.
-        substList := [ures :: SUBST, :substList]
+        subsList := [ures :: SUBS, :subsList]
         sigs := [t, :sigs]
-      subst := mergeSubstitutions(substList)
+      subs := merge subsList
 
       debug ["Valid signatures:" :: PF, bold bracket [t :: PF for t in sigs]]
 
@@ -131,7 +131,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       if typeVar? nfun.type then
         nodeSubTypeOf!(ctx, nfun, sigs)
 
-      for s in entries subst repeat
+      for s in entries subs repeat
         limitTypeVar!(ctx, s.key, s.entry)
 
       -- Fetch all inferred mappings.

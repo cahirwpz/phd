@@ -7,28 +7,29 @@ SpadEnvironment() : Exports == Implementation where
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   PF ==> PrintableForm
-  SCOPE ==> AssociationList(Symbol, List(N))
+  KEY ==> Union(Symbol, APP)
+  MEMBER ==> Record(key : KEY, entry : List(N))
+  SCOPE ==> HashTable(KEY, List(N), "UEQUAL")
 
   Exports ==> CoercibleTo(PrintableForm) with
     new : () -> %
 
-    addDomain : (%, APP) -> %
+    addDomain : (APP, %) -> %
 
-    elt : (%, Symbol) -> List(N)
-    setelt! : (%, Symbol, N) -> %
+    key? : (KEY, %) -> Boolean
+
+    ++ returns empty list if nothing was found
+    search : (KEY, %) -> List(N)
+    ++ crashes if nothing was found
+    elt : (%, KEY) -> List(N)
+    setelt! : (%, KEY, N) -> %
 
     createScope : % -> %
     discardScope : % -> %
 
-    flatten : % -> %
-    definedSymbols : % -> List(Symbol)
-    domainInScope? : (%, APP) -> Boolean
-
   Implementation ==> add
     Rep := List SCOPE
 
-    import SExpression
-    import SpadNode
     import SpadNodeFactory
     import SpadTypeEvaluator
     import TypeUnifier
@@ -36,22 +37,17 @@ SpadEnvironment() : Exports == Implementation where
     import Printer
 
     -- create empty environment
-    new() ==
-      top : SCOPE := empty()
-      top("$DomainsInScope" :: Symbol) := []
-      [top]
+    new() == [empty()$SCOPE]
 
-    domainInScope?(env, dom) ==
-      for level in env repeat
-        for d in level("$DomainsInScope" :: Symbol) repeat
-          if (d :: APP) = dom then
-            return true
-      return false
+    coerceKey (key : KEY) : PF ==
+      key case APP => key :: APP :: PF
+      key :: Symbol :: PF
 
-    addDomain(env, dom) ==
-      domainInScope?(env, dom) => env
+    addDomain (dom : APP, env : %) : % ==
+      key? (dom, env) => env
       notice ["Adding type" :: PF, bold (dom :: PF), "to the environment!" :: PF]
       ti := getTypeInfo(dom)
+      env(dom) := [ti]
       for n in ti.body.list repeat
         n' := substitute(n, typeVar() :: TV, [dom])
         guard := emptyNode()
@@ -67,55 +63,64 @@ SpadEnvironment() : Exports == Implementation where
         if not emptyNode? guard then
           n' := nodeTypeGuard(n', guard)
         env(td.expr :: Symbol) := n'
-      env("$DomainsInScope" :: Symbol) := [dom]
-
-    setelt!(env, name, value) ==
-      lst := env(name)
-      top := first env
-      member?(value, lst) => env
-      top(name) := [value, :lst]
       env
 
-    elt(env, name) ==
+    key? (key : KEY, env : %) : Boolean ==
+      for level in env repeat
+        if key? (key, level) then
+          return true
+      false
+
+    search (key : KEY, env : %) : List(N) ==
+      empty? env => []
       top := first env
       -- 1) if the symbol is found at first level the return it
-      maybeEntries := assoc(name, top)
-      not maybeEntries case "failed" =>
-        maybeEntries.entry
+      result := search(key, top)
+      result case List(N) => result
       -- 2) if it is found deeper then (deep-)copy it to top level and return it
-      res : List(N) := []
+      value : List(N) := []
       for level in rest env repeat
-        maybeEntries := assoc(name, level)
-        if not maybeEntries case "failed" then
-          res := copy(maybeEntries.entry)
+        result := search(key, level)
+        result case List(N) =>
+          value := copy(result :: List(N))
+          top(key) := value
           break
-      top(name) := res
+      value
 
-    flatten env ==
+    setelt! (env : %, key : KEY, value : N) : % ==
+      values := search(key, env)
+      top := first env
+      member?(value, values) => env
+      top(key) := [value, :values]
+      env
+
+    elt (env : %, key : KEY) : List(N) ==
+      result := search(key, env)
+      empty? result =>
+        fail [string bold coerceKey key, "missing from environment!" :: PF]
+        error ""
+      result
+
+    flatten (env : %) : % ==
       empty? env => new()
-      newenv := [[]]$AssociationList(Symbol, List(N))
+      newenv : SCOPE := empty()
       for level in env repeat
-        for e in entries level repeat
+        for e in members(level)@List(MEMBER) repeat
           if not key?(e.key, newenv) then
             newenv(e.key) := e.entry
       [newenv]
 
     createScope env ==
-      newtop := [[]]$SCOPE
-      newtop('_$DomainsInScope) := (first env)('_$DomainsInScope)
-      cons(newtop, env)
+      cons(empty(), env)
 
     discardScope env ==
       rest env
 
-    definedSymbols(env) ==
-      keys first flatten env
-
     coerce env ==
       entries : List(PF) := []
       empty? env => "()" :: PF
-      for e in entries first flatten env repeat
-        sym := hconcat [bold cyan(e.key :: PF), ":" :: PF]
+      for e in members(first flatten env)@List(MEMBER) repeat
+        sym := hconcat [bold cyan coerceKey e.key, ":" :: PF]
         mms := [mm :: PF for mm in e.entry]
         of :=
           empty? mms =>
@@ -145,24 +150,26 @@ SpadEnvironmentTest() : Exports == Implementation where
 
     test1 () ==
       loggerDefaultLevel "info"
+      resetTime()
 
       env := new()
       dom1 := [['Integer], []] $ APP
       dom2 := [['List], [['Integer]]] $ APP
-      env := addDomain(env, dom1)
-      env := addDomain(env, dom2)
+      env := addDomain(dom1, env)
+      env := addDomain(dom2, env)
       println (env :: PF)
 
     test2 () ==
       loggerDefaultLevel "info"
+      resetTime()
 
       env := new()
       dom0 := [['Polynomial], [emptyNode()]] $ APP
       dom1 := [['Polynomial], [nodeApp(['Integer], [])]] $ APP
       dom2 := [['Integer], []] $ APP
-      env := addDomain(env, dom0)
-      env := addDomain(env, dom1)
-      env := addDomain(env, dom2)
+      env := addDomain(dom0, env)
+      env := addDomain(dom1, env)
+      env := addDomain(dom2, env)
       modemaps := env('*)
       println pile([hconcat [bold cyan ("*" :: PF), ":" :: PF],
                     :[(modemap :: PF) for modemap in modemaps]])

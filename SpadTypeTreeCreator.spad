@@ -159,7 +159,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
   UT ==> SpadUnionType(N)
   SW ==> SpadWhere(N)
 
-  SUBST ==> AssociationList(TV, List(N))
+  SUBS ==> AssociationList(TV, List(N))
 
   ENV ==> SpadEnvironment
   TN ==> SpadTypeNode
@@ -184,7 +184,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     envAddType (t : N, env : ENV) : ENV ==
       if apply? t then
         app := t :: APP
-        env := addDomain(env, app)
+        env := addDomain(app, env)
         for k in app.args repeat
           env := envAddType(k, env)
       if mappingType? t then
@@ -226,7 +226,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- Second case: element indexing or record field access.
       eltFunList : List(N) := []
       if not unify?(a.function, ['elt]) then
-        for n in env('elt) | typeOrigin? n repeat
+        for n in search('elt, env) | typeOrigin? n repeat
           eltFun := (n :: TO).expr :: MT
           if #eltFun.args = #a.args + 1 then
             eltFunList := [n, :eltFunList]
@@ -266,7 +266,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       introduced? := false
       if symbol? a.lval then
         s := a.lval :: Symbol
-        if empty? env(s) then
+        if empty? search(s, env) then
           debug ["Processing fresh assignment" :: PF, string(s :: PF)]
           env(s) := this.type
           introduced? := true
@@ -343,7 +343,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- the domain / package / function. Filter out those that don't match
       -- the type calculated above.
       candidateList : List(MT) := []
-      for n in env(fn.name) repeat
+      for n in search(fn.name, env) repeat
         candidate := emptyNode()
 
         if typeOrigin? n then
@@ -355,8 +355,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
         if not emptyNode? candidate then
           ures := unifyType(fnType', candidate)
-          failed? ures => "iterate"
-          candidate := substitute(fnType', ures :: SUBST)
+          ures case "failed" => "iterate"
+          candidate := substitute(fnType', ures :: SUBS)
           candidateList := [candidate :: MT, :candidateList]
 
       for c in candidateList repeat 
@@ -411,7 +411,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       setTypeOf!(ctx, resNode, [resType])
       resType := resNode.type
 
-      argSub := [[]]$AssociationList(Symbol, N)
+      argSub := [[]]$Table(Symbol, N)
       argNodeList : List(TN) := []
 
       -- process functor's arguments
@@ -592,7 +592,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       this := addNode!(ctx, [s], env)
 
-      types := env(s)
+      types := search(s, env)
       -- BUG: parseTran uses true and false as "Boolean" and not as "() -> Boolean"
       -- workaround for Boolean constants
       if s = 'true or s = 'false then
@@ -616,7 +616,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
         ftorArgList : List(N) := []
         ftorArgNodeList : List(TN) := []
-        ftorArgRenames : SUBST := empty()
+        ftorArgRenames : SUBS := empty()
 
         for arg in ti.args repeat
           ftorArg := arg.expr
@@ -663,7 +663,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- Type definition for a symbol.
       s := td.expr :: Symbol
-      ts := env(s)
+      ts := search(s, env)
 
       -- Add it to the environment or crash if already defined, unless it's
       -- another function declaration (i.e. allow function type overloading).

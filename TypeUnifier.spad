@@ -19,13 +19,12 @@ TypeUnifier() : Exports == Implementation where
   SEQ ==> SpadSequence(N)
   FT ==> SpadFunctor(N)
   FN ==> SpadFunction(N)
-  SUBST ==> AssociationList(TV, List(N))
+  SUB ==> Record(key : TV, entry : List(N))
+  SUBS ==> AssociationList(TV, List(N))
   P ==> Record(t1 : N, t2 : N)
-  URES ==> Union(SUBST, "failed")
+  URES ==> Union(SUBS, "failed")
 
   Exports ==> with
-    failed? : URES -> Boolean 
-
     occurs? : (TV, N) -> Boolean
     unbound? : N -> Boolean
     containsWildcard? : N -> Boolean
@@ -34,17 +33,17 @@ TypeUnifier() : Exports == Implementation where
     refList : N -> List(NR)
 
     substitute : (N, TV, N) -> N
-    substitute : (N, SUBST) -> N
+    substitute : (N, SUBS) -> N
 
-    coerce : SUBST -> PF
+    coerce : SUBS -> PF
 
-    mergeSubstitutions : List(SUBST) -> SUBST
+    merge : List(SUBS) -> SUBS
 
     unify? : (N, N) -> Boolean
     unifyType : (N, N) -> URES
     unifyType : (N, List(N)) -> URES
 
-    findMatches : (List(N), List(N)) -> Record(terms : List(N), subst : SUBST)
+    findMatches : (List(N), List(N)) -> Record(terms : List(N), subs : SUBS)
 
     isSubType : (N, N) -> Boolean
 
@@ -53,8 +52,6 @@ TypeUnifier() : Exports == Implementation where
     import Printer
     import SpadNodeFactory
     import Logger('Unify)
-
-    failed? t == t case "failed"
 
     occurs? (tvar, n) ==
       import List(N)
@@ -293,21 +290,22 @@ TypeUnifier() : Exports == Implementation where
       fail ["substitute: case not handled for" :: PF, n :: PF]
       error ""
 
-    substitute(n : N, subst : SUBST) : N ==
-      for s in entries subst repeat
+    substitute(n : N, subs : SUBS) : N ==
+      for s in entries subs repeat
         var := s.key
         for term in s.entry repeat
           n := substitute(n, var, term)
       n
 
-    coerce (subst : SUBST) : PF ==
-      bracket [spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]] for s in entries subst]
+    coerce (subs : SUBS) : PF ==
+      bracket([spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]]
+               for s in entries subs])
 
-    mergeSubstitutions substitutionsList ==
-      merged : SUBST := empty()
+    merge subsList ==
+      merged : SUBS := empty()
       -- merge list for each valid substitution
-      for substitutions in substitutionsList repeat
-        for s in entries substitutions repeat
+      for subs in subsList repeat
+        for s in entries subs repeat
           merged(s.key) := 
             key?(s.key, merged) =>
               concat(s.entry, merged(s.key))
@@ -320,14 +318,14 @@ TypeUnifier() : Exports == Implementation where
     unifyType' : (N, N) -> URES
 
     unifyTypeList(pairs : List(P)) : URES ==
-      subst : SUBST := empty()
+      subs : SUBS := empty()
       while not empty? pairs repeat
         pair := first pairs
         ures := unifyType'(pair.t1, pair.t2)
-        failed? ures => return "failed"
-        subst := concat (subst, ures :: SUBST)
-        pairs := [[substitute(pair.t1, subst), substitute(pair.t2, subst)]$P for pair in rest pairs]
-      subst
+        ures case "failed" => return "failed"
+        subs := concat (subs, ures :: SUBS)
+        pairs := [[substitute(pair.t1, subs), substitute(pair.t2, subs)]$P for pair in rest pairs]
+      subs
 
     unifyType'(n1 : N, n2 : N) : URES ==
       -- left or right node is a type variable => just generate a substitution
@@ -406,65 +404,64 @@ TypeUnifier() : Exports == Implementation where
       summary : PF :=
         ures case "failed" =>
           paren bold red("no" :: PF)
-        ures case SUBST =>
-          spaces [paren bold green("yes" :: PF), (ures :: SUBST) :: PF]
+        ures case SUBS =>
+          spaces [paren bold green("yes" :: PF), (ures :: SUBS) :: PF]
       debug([brace bold(n1 :: PF), bold yellow("~" :: PF),
              brace bold(n2 :: PF), summary])
       ures
 
     unifyType(type : N, terms : List(N)) : URES ==
       ures : URES :=
-        substList : List(SUBST) := []
+        subsList : List(SUBS) := []
         for term in terms repeat
           ures := unifyType'(term, type)
           ures case "failed" => "iterate"
-          substList := [ures :: SUBST, :substList]
-        empty? substList => "failed"
-        mergeSubstitutions(substList)
+          subsList := [ures :: SUBS, :subsList]
+        empty? subsList => "failed"
+        merge subsList
       summary : PF :=
         ures case "failed" =>
           paren bold red("no" :: PF)
-        ures case SUBST =>
-          spaces [paren bold green("yes" :: PF), (ures :: SUBST) :: PF]
+        ures case SUBS =>
+          spaces [paren bold green("yes" :: PF), (ures :: SUBS) :: PF]
       debug([brace bold(type :: PF), bold yellow("~" :: PF),
              bracket [bold(t :: PF) for t in terms], summary])
       ures
 
     unify?(n1, n2) ==
-      unifyType(n1, n2) case SUBST
+      unifyType(n1, n2) case SUBS
 
-    findMatches(terms1, terms2) ==
+    findMatches (terms1, terms2) ==
       terms : List(N) := []
-      substList : List(SUBST) := []
+      subsList : List(SUBS) := []
       for t1 in terms1 repeat
         for t2 in terms2 repeat
           ures := unifyType'(t1, t2)
-          failed? ures => "iterate"
+          ures case "failed" => "iterate"
           ++ prefer concrete type instead of wildcard
           t := if containsWildcard? t1 then t2 else t1
           ++ Avoid wildcard propagation by removing all substitutions with
           ++ wildcards in them.
-          subst : SUBST := [[]]
-          for s in entries(ures :: SUBST) repeat
+          ss : SUBS := [[]]
+          for s in entries(ures :: SUBS) repeat
             es := remove(containsWildcard?, s.entry)
             empty? es => "iterate"
-            subst(s.key) := es
-          t := substitute(t, subst)
+            ss(s.key) := es
+          t := substitute(t, ss)
           ++ Sometimes, by applying substitutions, unions will become
           ++ ill-formed (i.e. contain two fields of same type),
           ++ filter out such cases.
           emptyNode? t => "iterate"
           terms := [t, :terms]
-          substList := [subst, :substList]
+          subsList := [ss, :subsList]
       ++ Remove wildcard if we have more than one match.
       if #terms > 1 then
         terms := [t for t in removeDuplicates terms | not containsWildcard? t]
-      subst := mergeSubstitutions substList
       debug spaces(
         [bracket [bold(t1 :: PF) for t1 in terms1], bold yellow("~" :: PF),
          bracket [bold(t2 :: PF) for t2 in terms2],
          paren bold(empty? terms => red("no" :: PF); green("yes" :: PF))])
-      [terms, subst]
+      [terms, merge subsList]
 
     ++ INFO: Given a subtyping relation X <: Y, that reads as X is safe to use
     ++ in context where Y is used, we say that:

@@ -14,7 +14,7 @@ SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
 SpadMacroExpander() : Exports == Implementation where
   N ==> SpadNode
   M ==> SpadMacro(N)
-  AL ==> AssociationList(Symbol, M)
+  AL ==> Table(Symbol, M)
   PF ==> PrintableForm
 
   Exports ==> SpadTreeWalkerCategory with 

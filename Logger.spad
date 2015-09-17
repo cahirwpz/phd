@@ -23,7 +23,7 @@ MainLogger() : Exports == Implementation where
   LVL ==> Union("debug", "info", "notice", "warn", "fail")
   PF ==> PrintableForm
   NNI ==> NonNegativeInteger
-  CONF ==> AssociationList(Symbol, LVL)
+  CONF ==> Table(Symbol, LVL)
 
   Exports ==> with
     debug : (Symbol, PF) -> Void
@@ -66,9 +66,9 @@ MainLogger() : Exports == Implementation where
 
     log (component, level, form) ==
       l :=
-        lc := assoc(component, config)
+        lc := search(component, config)
         lc case "failed" => default
-        lc.entry
+        lc :: LVL
       if num l <= num level then
         time := (getTime() - timeBegin) :: Float / 1000
         println spaces [paren float(time, 3), form]

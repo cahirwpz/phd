@@ -65,7 +65,6 @@ SpadTypeNode() : Exports == Implementation where
   TD ==> SpadTypeDecl(N)
   TV ==> SpadTypeVar(N)
   FN ==> SpadFunction(N)
-  SUBST ==> AssociationList(TV, List(N))
 
   Exports ==> CoercibleTo(PF) with
     construct : (PI, PI, N) -> %
@@ -275,12 +274,13 @@ SpadTypeTree() : Exports == Implementation where
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
 
-  SUBST ==> AssociationList(TV, List(N))
+  SUBS ==> AssociationList(TV, List(N))
 
   ENV ==> SpadEnvironment
   TN ==> SpadTypeNode
   TNA ==> SpadTypeNodeArray(%)
   TR ==> SpadTypeRule
+  TVS ==> List(Record(key : TV, entry : List(N)))
 
   Exports ==> SpadTypeTreeCategory with
     construct : () -> %
@@ -306,7 +306,7 @@ SpadTypeTree() : Exports == Implementation where
     killNode! : (%, TN) -> Void
 
     limitTypeVar! : (%, TV, List(N)) -> Boolean
-    limitTypeVar! : (%, SUBST) -> Boolean
+    limitTypeVar! : (%, SUBS) -> Boolean
     limitNodeType! : (%, TN, List(N)) -> Boolean
 
     nodeSubType! : (%, TN, TN) -> Boolean
@@ -412,7 +412,7 @@ SpadTypeTree() : Exports == Implementation where
     rewriteTypeVars! (x : %, var : TV, term : N) : Void ==
       debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
              "in all type variables." :: PF])
-      for tv in entries x.m_typevars | not unknownType? tv.entry repeat
+      for tv in members(x.m_typevars)@TVS | not unknownType? tv.entry repeat
         ts : List(N) := []
         for t in tv.entry repeat
           t := substitute(t, var, term)
@@ -476,16 +476,16 @@ SpadTypeTree() : Exports == Implementation where
       (x.m_typevars)(tv) := terms
       true
 
-    limitTypeVar! (x : %, substitutions : SUBST) : Boolean ==
-      empty? substitutions => true
-      "and"/[limitTypeVar!(x, s.key, s.entry) for s in entries substitutions]
+    limitTypeVar! (x : %, subs : SUBS) : Boolean ==
+      empty? subs => true
+      "and"/[limitTypeVar!(x, s.key, s.entry) for s in entries subs]
 
     nodesTypeMatch! (x : %, ln : TN, rn : TN) : Boolean ==
       -- %a[?] ~ %b[?]
       hasUnknownType?(x, ln) and hasUnknownType?(x, rn) =>
         ures := unifyType(ln.type, rn.type)
-        failed? ures => false
-        limitTypeVar!(x, ures :: SUBST)
+        ures case "failed" => false
+        limitTypeVar!(x, ures :: SUBS)
       -- %a[?] ~ (%b[t1, t2, ...] | T)
       hasUnknownType?(x, ln) and not hasUnknownType?(x, rn) =>
         limitTypeVar!(x, ln.type :: TV, [rn.type])
@@ -498,7 +498,7 @@ SpadTypeTree() : Exports == Implementation where
       if not aliasType? ms.terms then
         setTypeOf!(x, ln, ms.terms)
         setTypeOf!(x, rn, ms.terms)
-      limitTypeVar!(x, ms.subst)
+      limitTypeVar!(x, ms.subs)
 
     limitNodeType! (x : %, n : TN, types : List(N)) : Boolean ==
       -- %a[?] ~ [s1, s2, ...]
@@ -509,7 +509,7 @@ SpadTypeTree() : Exports == Implementation where
       empty? ms.terms => false
       if not aliasType? ms.terms then
         setTypeOf!(x, n, ms.terms)
-      limitTypeVar!(x, ms.subst)
+      limitTypeVar!(x, ms.subs)
 
     -- With limited knowledge this routine tries to constraint types in given
     -- nodes to pairs which are (possibly) in subtyping relation.
@@ -565,7 +565,7 @@ SpadTypeTree() : Exports == Implementation where
       pfs : List(PF) := []
       for ns in entries x.m_nodes for i in 1.. repeat
         num := bold blue hconcat ["#" :: PF, i :: PF, ":" :: PF]
-        vars := [coerceTV e for e in reverse entries x.m_typevars | e.key.major = i]
+        vars := [coerceTV e for e in members(x.m_typevars)@TVS | e.key.major = i]
         s := (empty? vars => "" :: PF; " " :: PF)
-        pfs := concat(pfs, [num, ns :: PF, s, :vars, s])
+        pfs := concat(pfs, [num, ns :: PF, s, :(reverse vars), s])
       pile ["Type tree representation:" :: PF, :pfs]

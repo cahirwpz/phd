@@ -1,14 +1,14 @@
 )abbrev package STSYMRPL SpadTreeSymbolReplace
 SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
   N ==> SpadNode
-  CTX ==> AssociationList(Symbol, N)
+  CTX ==> Table(Symbol, N)
   WALKER ==> SpadTreeWalkerCategory 
 
   Implementation ==> add
     rewrite (s : Symbol) : N ==
-      r := assoc(s, ctx)
+      r := search(s, ctx)
       r case "failed" => [s]
-      r.entry
+      r
 
 )abbrev package STTVSM SpadTreeTypeVarSetMajor
 SpadTreeTypeVarSetMajor(major : NNI) : WALKER == Implementation where
@@ -86,8 +86,8 @@ SpadTypeEvaluator() : Exports == Implementation where
   TI ==> SpadTypeInfo(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
-  CACHE ==> AssociationList(APP, TI)
-  DAASE ==> AssociationList(Symbol, TI)
+  CACHE ==> Table(APP, TI)
+  DAASE ==> Table(Symbol, TI)
   SUBST ==> AssociationList(TV, List(N))
 
   Exports ==> CoercibleTo(PF) with
@@ -165,7 +165,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       cat? := (cmm.type = nodeApp(['Category], []))
 
       ++ Some symbols will be rewritten to type variables.
-      ctx := [[]]$AssociationList(Symbol, N)
+      ctx := [[]]$Table(Symbol, N)
       ++ "%" => "%0"
       ctx("%" :: Symbol) := typeVar()
       ++ "#1" => "%1", "#2" => "%2", ...
@@ -212,7 +212,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       n2 := nodeApp([ti.name], values)
 
       res := unifyType(n1, rewrite(n2)$AddVer)
-      failed? res =>
+      res case "failed" =>
         fail ("unification failed" :: PF)
         error ""
 
