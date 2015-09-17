@@ -126,6 +126,9 @@ ParserTools() : with
 
 )abbrev category PRSCAT ParsableCategory
 ParsableCategory() : Category == SetCategory with ++ BUG: cannot change to BasicType, because removeDuplicate is not visible in runtime for List(BasicType)
-  parse : SExpression -> %
-  coerce : % -> PrintableForm
-  convert : % -> SExpression
+    parse : SExpression -> %
+    coerce : % -> PrintableForm
+    convert : % -> SExpression
+  add
+    n = m ==
+      EQUAL(n, m)$Lisp

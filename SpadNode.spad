@@ -132,7 +132,6 @@ SpadTypeExprCategory(N : SpadNodeCategory) : Category == ParsableCategory with
     elt : (%, "type") -> N
   add
     parse ex == [parse ex.2, parse ex.3]
-    n = m == n.expr = m.expr and n.type = m.type
 
 )abbrev domain SMARKER SpadMarker
 SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
@@ -163,9 +162,6 @@ SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
     coerce (x : %) : PF ==
       x case any => "%any" :: PF 
       x case undef => "%undef" :: PF
-
-    n = m ==
-      EQUAL(n, m)$Lisp
 
 )abbrev domain SNODEREF SpadNodeRef
 SpadNodeRef(N : SpadNodeCategory) : Exports == Implementation where
@@ -196,9 +192,6 @@ SpadNodeRef(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce (x : %) : PF ==
       hconcat ["#" :: PF, x.m_major :: PF, "." :: PF, x.m_minor :: PF]
-
-    x = y ==
-      x.m_major = y.m_major and x.m_minor = y.m_minor
 
 )abbrev domain STYPEVAR SpadTypeVar
 SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
@@ -231,9 +224,6 @@ SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
       x.m_major = 0 and x.m_minor = 0 => "%" :: PF
       x.m_major = 0 => hconcat ["%" :: PF, x.m_minor :: PF]
       hconcat ["%" :: PF, x.m_major :: PF, "." :: PF, x.m_minor :: PF]
-
-    x = y ==
-      x.m_major = y.m_major and x.m_minor = y.m_minor
 
     x < y ==
       (x.m_major < y.m_major) or (x.m_major = y.m_major and x.m_minor < y.m_minor)
@@ -276,9 +266,6 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
       ts := [coerceType t for t in n.args]
       src := if #ts ~= 1 then paren ts else first ts
       spaces [src, "->" :: PF, coerceType n.result]
-
-    n = m ==
-      n.result = m.result and n.args = m.args
 
 )abbrev domain STDECL SpadTypeDecl
 SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
@@ -387,10 +374,6 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce x ==
       hconcat ["Record" :: PF, paren [f :: PF for f in fields x]]
-
-    n = m ==
-      #(fields n) ~= #(fields m) => false
-      "and"/[nf = mf for nf in fields n for mf in fields m]
 
 )abbrev domain SUTYPE SpadUnionType
 SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
@@ -469,10 +452,6 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce x ==
       hconcat ["Union" :: PF, paren [v :: PF for v in variants x]]
-
-    n = m ==
-      #(variants n) ~= #(variants m) => false
-      "and"/[nv = mv for nv in variants n for mv in variants m]
 
 )abbrev domain SIMPORT SpadImport
 ++ SPAD domain / category / package import declaration
@@ -594,11 +573,6 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
       -- finally, process the application
       (constructor? sym) and (empty? argl) => sym :: PF
       hconcat [sym :: PF, paren argl]
-
-    n = m ==
-      #n.args ~= #m.args => false
-      "and"/([f = g for f in [n.function, :n.args]
-                    for g in [m.function, :m.args]])
 
 )abbrev domain SSEGMENT SpadSegment
 SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
@@ -1811,29 +1785,6 @@ SpadNode() : Exports == Implementation where
       emptyNode? n => convert []
 
       error "convert $ SpadNode: variant not handled!"
-
-    n = m ==
-      -- defined only for nodes that can represent types
-      apply? n and apply? m => (n :: APP) = (m :: APP)
-      float? n and float? m => (n :: DF) = (m :: DF)
-      function? n and function? m => (n :: FN) = (m :: FN)
-      integer? n and integer? m => (n :: Integer) = (m :: Integer)
-      iterator? n and iterator? m => (n :: IT) = (m :: IT)
-      mappingType? n and mappingType? m => (n :: MT) = (m :: MT)
-      marker? n and marker? m => (n :: MR) = (m :: MR)
-      nodeRef? n and nodeRef? m => (n :: NR) = (m :: NR)
-      recordType? n and recordType? m => (n :: RT) = (m :: RT)
-      string? n and string? m => (n :: String) = (m :: String)
-      symbol? n and symbol? m => (n :: Symbol) = (m :: Symbol)
-      unionType? n and unionType? m => (n :: UT) = (m :: UT)
-      typeDecl? n and typeDecl? m => (n :: TD) = (m :: TD)
-      typeOrigin? n and typeOrigin? m => (n :: TO) = (m :: TO)
-      typeSelect? n and typeSelect? m => (n :: TS) = (m :: TS)
-      typeVar? n and typeVar? m => (n :: TV) = (m :: TV)
-      marker? n and marker? m => (n :: MR) = (m :: MR)
-      sequence? n and sequence? m => (n :: SEQ) = (m :: SEQ)
-      emptyNode? n and emptyNode? m => true
-      false
 
     nodeApp (fun, args) == [[fun, args]$APP]
     nodeAssign (lval, rval) == [[lval, rval]$ASS]
