@@ -165,10 +165,11 @@ SpadTypeNode() : Exports == Implementation where
 SpadTypeTreeCategory() : Category == Definition where
   PF ==> PrintableForm
   TN ==> SpadTypeNode
+  N ==> SpadNode
 
   Definition ==> CoercibleTo(PF) with
     registerNode! : (%, TN) -> Void
-    unregisterNode! : (%, TN) -> Void
+    unregisterNode! : (%, TN, N) -> Void
 
 )abbrev package STNARR SpadTypeNodeArray
 SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
@@ -191,6 +192,7 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
     members : % -> List(TN)
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
+    poisonNode! : (%, TN) -> Void
     killNode! : (%, TN) -> Void
     rewriteNodes! : (%, TV, N) -> Void
 
@@ -233,11 +235,15 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
       registerNode!(x.m_tree, tn)
       tn
 
+    poisonNode! (x : %, tn : TN) ==
+      info ["Poisoning" :: PF, tn.index :: PF, "node!" :: PF]
+      if typeVar? tn.type then
+        unregisterNode!(x.m_tree, tn, typeUndef)
+
     killNode! (x : %, tn : TN) ==
       info ["Killing" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
-        unregisterNode!(x.m_tree, tn)
-      tn.type := typeUndef
+        unregisterNode!(x.m_tree, tn, typeAny)
       done! tn
 
     -- rewrite all nodes with type that contains given variable
@@ -272,7 +278,6 @@ SpadTypeTree() : Exports == Implementation where
   N ==> SpadNode
   NR ==> SpadNodeRef(N)
   TV ==> SpadTypeVar(N)
-  UT ==> SpadUnionType(N)
 
   SUBS ==> AssociationList(TV, List(N))
 
@@ -303,6 +308,7 @@ SpadTypeTree() : Exports == Implementation where
     addSubTree! : % -> Void
     leaveSubTree! : % -> Void
 
+    poisonNode! : (%, TN) -> Void
     killNode! : (%, TN) -> Void
 
     limitTypeVar! : (%, TV, List(N)) -> Boolean
@@ -317,13 +323,16 @@ SpadTypeTree() : Exports == Implementation where
 
   Implementation ==> add
     import SpadNode
-    import TypeUnifier
     import SpadNodeFactory
+    import TypeUnifier
     import SpadTypeNode
     import SpadTypeNodeArray(%)
     import Printer
     import Logger('TTree)
     import Stack(TNA)
+
+    rewriteTypeVars! : (%, TV, N) -> Void
+    rewriteNodes! : (%, TV, N) -> Void
 
     Rep := Record(m_nodes : FlexibleArray(TNA),
                   m_current : Stack(TNA),
@@ -353,6 +362,12 @@ SpadTypeTree() : Exports == Implementation where
     unknownType? (terms : List(N)) : Boolean ==
       #terms = 1 and emptyNode?(first terms)
 
+    poisonType? (terms : List(N)) : Boolean ==
+      #terms = 1 and typeUndef?(first terms)
+
+    anyType? (terms : List(N)) : Boolean ==
+      #terms = 1 and typeAny?(first terms)
+
     aliasType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeVar?(first terms)
 
@@ -362,14 +377,20 @@ SpadTypeTree() : Exports == Implementation where
     addNode! (x : %, n : N, env : ENV) : TN ==
       addNode! (top x.m_current, n, env)
 
+    poisonNode! (x : %, tn : TN) : Void ==
+      poisonNode!((x.m_nodes)(tn.index.major), tn)
+
     killNode! (x : %, tn : TN) : Void ==
       killNode!((x.m_nodes)(tn.index.major), tn)
 
     registerNode! (x : %, tn : TN) : Void ==
       (x.m_typevars)(tn.type :: TV) := [emptyNode()]
 
-    unregisterNode! (x : %, tn : TN) : Void ==
-     remove!(tn.type :: TV, x.m_typevars)
+    unregisterNode! (x : %, tn : TN, final : N) : Void ==
+      tv := tn.type :: TV
+      rewriteTypeVars! (x, tv, final)
+      rewriteNodes!(x, tv, final)
+      remove!(tv, x.m_typevars)
 
     -- checks if type attached to the node has form "%a[?]"
     hasUnknownType? (x : %, tn : TN) : Boolean ==
@@ -391,7 +412,7 @@ SpadTypeTree() : Exports == Implementation where
     setTypeOf! (x : %, tn : TN, terms : List(N)) : Void ==
       typeVar? tn.type =>
         (x.m_typevars)(tn.type :: TV) := terms
-      #terms > 1 or tn.type ~= terms.1 =>
+      #terms ~= 1 or not isSubType(terms.1, tn.type) =>
         warn ["Cannot set the type of" :: PF, tn.index :: PF, "node!" :: PF]
         warn pile(
           ["Types not equal:" :: PF,
@@ -399,6 +420,7 @@ SpadTypeTree() : Exports == Implementation where
            indent(2, tn.type :: PF),
            bold red("new:" :: PF), 
            indent(2, vconcat [t :: PF for t in terms])])
+      tn.type := terms.1
 
     addSubTree! x ==
       subtree := [x, (#(x.m_nodes) + 1) :: PI]
@@ -412,7 +434,9 @@ SpadTypeTree() : Exports == Implementation where
     rewriteTypeVars! (x : %, var : TV, term : N) : Void ==
       debug(["Rewriting" :: PF, bold(var :: PF), "to" :: PF, bold(term :: PF),
              "in all type variables." :: PF])
-      for tv in members(x.m_typevars)@TVS | not unknownType? tv.entry repeat
+      for tv in members(x.m_typevars)@TVS repeat
+        unknownType? tv.entry => "iterate"
+        poisonType? tv.entry => "iterate"
         ts : List(N) := []
         for t in tv.entry repeat
           t := substitute(t, var, term)
@@ -432,7 +456,7 @@ SpadTypeTree() : Exports == Implementation where
       not typeVar? n.type => false
       tv := n.type :: TV
       terms := (x.m_typevars)(tv)
-      unknownType? terms or #terms > 1 => false
+      unknownType? terms or poisonType? terms or #terms > 1 => false
       term := first terms
       unbound? term => false
       rewriteTypeVars!(x, tv, term)
@@ -548,6 +572,11 @@ SpadTypeTree() : Exports == Implementation where
             sl := [s, :sl]
       empty? sl => false
       sl := removeDuplicates sl
+      -- {%s[s1, s2, ...] | S) <: %any
+      anyType? types =>
+        -- let's choose a type that is super type of [s1, s2, ...]
+        setTypeOf!(x, sn, [(#sl = 1 => first sl; nodeUnionType sl)])
+        true
       tl : List(N) := []
       for s in sl repeat
         if not "or"/[isSubType(s, t) for t in sl | s ~= t] then

@@ -1,14 +1,18 @@
 )abbrev package STCLEAN SpadTreeCleanUp
 SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
   N ==> SpadNode
+  APP ==> SpadApply(N)
 
   Implementation ==> add
-    rewrite (a : SpadApply(N)) : N ==
-      -- replace "exit(1, node)" with "node"
-      fn := a.function
-      symbol? fn and (fn :: Symbol) = 'exit and (a.args.1 :: Integer) = 1 =>
-        rewrite a.args.2
-      nodeApp(rewrite a.function, [rewrite arg for arg in a.args])
+    rewrite (a : APP) : N ==
+      fn := rewrite a.function
+      args := [rewrite arg for arg in a.args]
+      fn = ['exit] =>
+        -- replace "exit(1, node)" with "node"
+        args.1 = [1] => args.2
+        -- otherwise it's return statement
+        nodeApp(['return], args)
+      nodeApp(fn, args)
 
 )abbrev package SMEXP SpadMacroExpander
 SpadMacroExpander() : Exports == Implementation where

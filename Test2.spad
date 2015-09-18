@@ -14,12 +14,14 @@ Test2(A : Type) : Exports == Implementation where
       s := 0
       for i in reverse l | i > 0 repeat
         s := s + i
+        "bogus"
       s
 
     sumRange (l, i, j) ==
       s := 0
       for k in i..(j - 1) repeat
         s := s + l(k)
+        "bogus"
       s
 
     index(pred, l) ==
@@ -30,6 +32,7 @@ Test2(A : Type) : Exports == Implementation where
           return i
         i := i + 1
         l := rest l
+        "bogus"
       0
 
     countPositive l ==

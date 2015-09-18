@@ -426,7 +426,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
           warn ("Mixing tagged and untagged variants is not allowed." :: PF)
           return false
         not (recordType? t or unionType? t or mappingType? t or
-             apply? t or string? t or symbol? t or typeVar? t) =>
+             apply? t or string? t or symbol? t or typeVar? t or marker? t) =>
           warn ["Union has a variant with wrong type:" :: PF, t :: PF]
           return false
         member?(t, types) =>

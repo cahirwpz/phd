@@ -9,7 +9,6 @@ Test10 : Exports == Implementation where
 
     baz : NonNegativeInteger -> Integer
     foo : PositiveInteger -> Float
-    bar : Integer -> Float
 
     triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 
@@ -23,6 +22,8 @@ Test10 : Exports == Implementation where
     baz x ==
       y : Integer := x
       y - 1
+
+    bar : Integer -> Float
 
     -- [OK] Subtyping at function application time.
     foo x ==

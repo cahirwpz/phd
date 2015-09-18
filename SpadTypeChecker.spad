@@ -164,21 +164,25 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
     evalCondExpr(ctx : TT, r : CE, n : TN) : Boolean ==
       cn := node(ctx, r.cond :: NR) -- condition node
-      tn := node(ctx, r.truebr :: NR) -- true branch node
-      fn := node(ctx, r.falsebr :: NR) -- false branch node
       not limitNodeType!(ctx, cn, [booleanType]) => false
-      nodeSubType!(ctx, tn, n) and nodeSubType!(ctx, fn, n) => true
+
+      tn := node(ctx, r.truebr :: NR) -- true branch node
+      emptyNode? r.falsebr =>
+        nodeSubType!(ctx, tn, n) => true
+        nodesTypeMatch!(ctx, n, tn) => true
+        false
+
+      fn := node(ctx, r.falsebr :: NR) -- false branch node
+
+      -- This is clearly broken! Must rethink it!
       nodesTypeMatch!(ctx, n, tn) and nodesTypeMatch!(ctx, n, fn) => true
-      typeUndef? tn.type and limitNodeType!(ctx, fn, [typeAny]) =>
-        killNode!(ctx, n)
-        true
-      typeUndef? fn.type and limitNodeType!(ctx, tn, [typeAny]) =>
-        killNode!(ctx, n)
-        true
+      nodeSubType!(ctx, tn, n) and nodeSubType!(ctx, fn, n) => true
       false
 
     evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
       n1 := node(ctx, r.expr :: NR)
+      not nodeRef? r.type =>
+        nodeSubTypeOf!(ctx, n1, [r.type])
       n2 := node(ctx, r.type :: NR)
       nodeSubType!(ctx, n1, n2)
 
@@ -256,6 +260,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
     checkAndMarkIfDone! (ctx : TT, n : TN) : Boolean ==
       unbound? n.type => false
+      typeUndef? n.type => false
       if not empty? n.rules then
         -- We only care about first rule, because it produced actual solution.
         rule := first n.rules
@@ -307,8 +312,12 @@ SpadTypeTreeChecker() : Exports == Implementation where
           --       bracket [m.index :: PF for m in members q]])
 
           not evalAnyRule(ctx, n) =>
-            fail pile([spaces ["Type error for node:" :: PF, n.index :: PF],
-                       red(n.node :: PF)])
+            fail vconcat([
+              pile([spaces ["Type error for node:" :: PF, n.index :: PF],
+                    red (n.node :: PF)]),
+              pile(["of type:" :: PF,
+                    red bracket [x :: PF for x in typeOf(ctx, n)]])])
+            poisonNode!(ctx, n)
             return false
 
           -- Check if we're done with processing type variable tied to this node.
@@ -339,10 +348,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
       true
 
     walk ctx ==
-      for na in members ctx repeat
-        for n in members na repeat 
-          rewriteIfInferred!(ctx, n)
-          checkAndMarkIfDone!(ctx, n)
+      -- BUG: This may mark nodes as done without checking rules.
+      -- for na in members ctx repeat
+      --  for n in members na repeat 
+      --    rewriteIfInferred!(ctx, n)
+      --    checkAndMarkIfDone!(ctx, n)
 
       info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
 

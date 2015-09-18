@@ -12,6 +12,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
+    ruleIfThen : (TN, TN) -> TR
     ruleFun : (FN, List(TN), TN, TN) -> TR
     ruleFtor : (FT, List(TN), TN, TN) -> TR
     ruleLoopIter : (TN, TN, TN) -> TR
@@ -29,6 +30,8 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleSuperType : (TN, TN) -> TR
 
   Implementation ==> add
+    import SpadNodeFactory
+
     -- for assignment "L := R" do:
     -- compute "L, R"; if "L := R" then solution is "L := R"
     ruleAssign (L', R') ==
@@ -49,6 +52,10 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleCondExpr (C', T', F') ==
       (C, T, F) := (nodeRef(C'), nodeRef(T'), nodeRef(F'))
       [[C, T, F, nodeCondExpr(C, T, F)], nodeCondExpr(C, T, F)]
+
+    ruleIfThen (C', T') ==
+      (C, T) := (nodeRef(C'), nodeRef(T'))
+      [[C, T, nodeCondExpr(C, T, emptyNode)], nodeCondExpr(C, T, emptyNode)]
 
     -- for function "fn (a1 : A1, ..., an : An) : T == B" do:
     -- compute "A1, ..., An, T, B"; if "T is B" then solution is "fn"
@@ -71,7 +78,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
       itorRefs := [nodeRef(itor) for itor in itors]
       guardRefs := [nodeRef(guard) for guard in guards]
       bodyRef := nodeRef(body)
-      [[:itorRefs, :guardRefs, bodyRef],
+      [[:itorRefs, :guardRefs, bodyRef, nodeSubType(bodyRef, typeAny)],
        nodeLoop(kind, itorRefs, guardRefs, bodyRef)]
 
     ruleRef (deps, body) ==
@@ -212,6 +219,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         env
 
       symbol? t => env -- BUG! this is not correct but will do for time being
+      string? t => env
 
       fail ["Type" :: PF, bold(t :: PF), "not handled!" :: PF]
       error "envAddType"
@@ -233,7 +241,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- Second case: element indexing or record field access.
       eltFunList : List(N) := []
-      if not unify?(a.function, ['elt]) then
+      if a.function ~= ['elt] and a.function ~= ['return] then
         for n in search('elt, env) | typeOrigin? n repeat
           eltFun := (n :: TO).expr :: MT
           if #eltFun.args = #a.args + 1 then
@@ -297,6 +305,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       cond := walk(ce.cond, ctx, env)
       truebr := walk(ce.truebr, ctx, cond.env)
+
+      warn (ce.falsebr :: PF)
+
+      emptyNode? ce.falsebr =>
+        setTypeOf!(ctx, this, [nodeUnionType [truebr.type, typeUndef]])
+        this.env := env
+        this.rules := [ruleIfThen(cond, truebr)]
+        this
+
       falsebr := walk(ce.falsebr, ctx, (case? ce.cond => env; cond.env))
 
       setTypeOf!(ctx, this,
@@ -456,7 +473,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       env := envAddType(im.type, env)
       tn := addNode!(ctx, [im], env)
       setTypeOf!(ctx, tn, [voidType])
-      done! tn
+      tn
 
     walkLambda (lam : LAM, ctx : CTX, env : ENV) : TN ==
       this := addNode!(ctx, [lam], env)
@@ -685,9 +702,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
           error ""
 
       env(s) := td.type
-      n := addNode!(ctx, [td], env)
-      setTypeOf!(ctx, n, [td.type])
-      done! n
+      tn := addNode!(ctx, [td], env)
+      setTypeOf!(ctx, tn, [td.type])
+      tn
 
     walkTypeSelect (ts : TS, ctx : CTX, env : ENV) : TN ==
       debug(["Expression" :: PF, ts.expr :: PF,
