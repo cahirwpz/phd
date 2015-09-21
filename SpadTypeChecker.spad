@@ -272,6 +272,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         -- Remove leftovers from other alternative rules.
         for victim in setDifference(references n.rules, references rule) repeat
           killNode!(ctx, node(ctx, victim))
+        n.rules := [rule]
         n.node := rule.solution
       done! n; true
 
