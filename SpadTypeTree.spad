@@ -82,6 +82,8 @@ SpadTypeNode() : Exports == Implementation where
 
     done? : % -> Boolean
     done! : % -> %
+    killed? : % -> Boolean
+    kill! : % -> %
 
     references : % -> List(NR)
 
@@ -99,10 +101,10 @@ SpadTypeNode() : Exports == Implementation where
                   m_rules : List(TR),
                   m_type : N,
                   m_env : ENV,
-                  m_done : Boolean)
+                  m_state : Union("finished", "pending", "killed"))
 
     construct (i, j, n) ==
-      [[i, j]$NR, n, [], emptyNode(), new(), false]$Rep
+      [[i, j]$NR, n, [], emptyNode(), new(), "pending"]$Rep
 
     elt (x, "index") == x.m_index
     elt (x, "node") == x.m_node
@@ -119,12 +121,10 @@ SpadTypeNode() : Exports == Implementation where
     setelt! (x, "env", env) ==
       x.m_env := env
 
-    done? x ==
-      x.m_done
-
-    done! x ==
-      x.m_done := true
-      x
+    done? x == not x.m_state case "pending"
+    done! x == (x.m_state := "finished"; x)
+    killed? x == x.m_state case "killed"
+    kill! x == (x.m_state := "killed"; x)
 
     references x ==
       references x.m_rules
@@ -136,7 +136,10 @@ SpadTypeNode() : Exports == Implementation where
       nodeTypeVar(x.m_index.major :: PI, x.m_index.minor :: PI)
 
     coerce x ==
-      done := if done? x then green(" (+)" :: PF) else red(" (-)" :: PF)
+      done : PF :=
+        x.m_state case "finished" => green(" (+)" :: PF)
+        x.m_state case "pending" => red(" (-)" :: PF)
+        white(" (x)" :: PF)
       prefix := hconcat [right(6, x.m_index:: PF), done]
       t := bold (x.m_type :: PF)
       if typeVar? x.m_type then
@@ -243,8 +246,8 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
     killNode! (x : %, tn : TN) ==
       info ["Killing" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
-        unregisterNode!(x.m_tree, tn, typeAny)
-      done! tn
+        unregisterNode!(x.m_tree, tn, typeUndef)
+      kill! tn
 
     -- rewrite all nodes with type that contains given variable
     rewriteNodes! (x, tv, term) ==
@@ -267,7 +270,7 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
       walkPostOrder(x, x.m_nodes.1)
 
     coerce (x : %) : PF ==
-      indent(2, vconcat [n :: PF for n in members x.m_nodes])
+      indent(2, vconcat [n :: PF for n in members x.m_nodes | not killed? n])
 
 )abbrev package STTREE SpadTypeTree
 SpadTypeTree() : Exports == Implementation where
