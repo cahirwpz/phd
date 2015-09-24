@@ -244,7 +244,9 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "args") == x.m_args
     elt(x, "result") == x.m_result
 
-    construct(al, t) == [al, t]$Rep
+    construct(al, t) ==
+      al = [['constant]] => [[], t]$Rep
+      [al, t]$Rep
 
     parseFunType : SExpression -> N
     parseFunType s ==
