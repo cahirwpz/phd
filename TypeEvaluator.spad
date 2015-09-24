@@ -340,6 +340,8 @@ SpadTypeEvaluator() : Exports == Implementation where
        [ti.body.kind, reverse flatBody]]
 
     has?(t0 : N, t1 : N, ti : TI) : Boolean ==
+      -- debug [t0 :: PF, "has" :: PF, t1 :: PF, "?" :: PF]
+
       t1 = nodeApp(['Type], []) => true
 
       if symbol? t0 then t0 := symbolType()
@@ -350,9 +352,8 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       ti := 
         apply? t0 =>
-          app := t0 :: APP
-          app.function = [ti.name] => ti -- will have to investigate that
-          getTypeInfo(app)
+          unify?(t0, ti.type) => ti
+          getTypeInfo(t0 :: APP)
         t0 = typeVar() => ti
         typeVar? t0 => return false
         fail [t0 :: PF, "has" :: PF, t1 :: PF]
@@ -422,7 +423,7 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       validate and not empty? constraints' =>
         fmtarg(n : N) : PF ==
-          te := n :: TEH
+          te := n :: TD
           has?(te.expr, te.type, ti) => te.expr :: PF
           bold(red(te.expr :: PF))
 
@@ -437,6 +438,7 @@ SpadTypeEvaluator() : Exports == Implementation where
           typ := hconcat [app.function :: PF, paren [fmtarg arg for arg in app.args]]
           err := [fmterr arg for arg in app.args | not has?((arg :: TD).expr, (arg :: TD).type, ti)]
           fail [paren(i :: PF), typ, ":" :: PF, sepBy(", " :: PF, err)]
+
         error ""
 
       [ti.name, ti.args, ti.hasList, constraints', ti.body]
@@ -488,6 +490,7 @@ TypeEvaluatorTest() : Exports == Implementation where
     test3 : () -> Void
     test4 : () -> Void
     test5 : () -> Void
+    test6 : () -> Void
 
     fail1 : () -> Void
     fail2 : () -> Void
@@ -580,6 +583,13 @@ TypeEvaluatorTest() : Exports == Implementation where
     -- Should I consider following case:
     -- typeAny() "%any" passed as a parameter to a functor prevents contraint
     -- evaluation that involves the parameter
+
+    test6 ==
+      initTest()
+
+      LI := nodeApp(['List], [['Integer]$N])$N
+
+      println (getTypeInfo([['List], [LI]]) :: PF)
 
     fail1 ==
       initTest()

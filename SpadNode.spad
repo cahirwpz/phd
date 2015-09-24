@@ -300,7 +300,13 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
         -- (SIGNATURE (name) Type constant) ???
         name :=
           list? ex.2 => symbol ex.2.1
-          symbol ex.2
+          symbol? ex.2 => symbol ex.2
+          if integer? ex.2 then
+            i := integer ex.2
+            i = 0 => 'Zero
+            i = 1 => 'One
+          else
+            error "Invalid SIGNATURE name!"
         res : N := parse car ex.3
         targs : List(N) := if #ex = 3
           then [parse e for e in destruct cdr ex.3]
