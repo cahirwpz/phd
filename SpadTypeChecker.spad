@@ -214,7 +214,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         if mappingType? tn.type and nodeRef? tn.node then
           tn := node(ctx, tn.node :: NR)
           fn := tn.node :: FN
-          types := [nodeTypeDecl([fn.name], tn.type), :types]
+          types := [nodeTypeDecl([fn.name :: Symbol], tn.type), :types]
       limitNodeType!(ctx, n, [nodeSeq("Join", reverse types)])
 
     -- evaluates single rule; note that it can happen that nothing was changed
@@ -349,14 +349,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
       true
 
     walk ctx ==
-      -- BUG: This may mark nodes as done without checking rules.
-      -- for na in members ctx repeat
-      --  for n in members na repeat 
-      --    rewriteIfInferred!(ctx, n)
-      --    checkAndMarkIfDone!(ctx, n)
-
       info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
 
+      for na in members ctx repeat
+        for n in members na repeat 
+          rewriteIfInferred!(ctx, n)
+
+)if 0
       success := walk'(ctx, 1)
 
       if success then -- Rewrite the tree if succeeded !
@@ -370,6 +369,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
           for n in members na repeat 
             rewriteIfInferred!(ctx, n)
             checkAndMarkIfDone!(ctx, n)
+)endif
+      success := false
 
       info (ctx :: PF)
 

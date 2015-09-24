@@ -8,7 +8,6 @@ SpadNodeCategory() : Category == ParsableCategory with
   construct : SpadFunctor(%) -> %
   construct : SpadImport(%) -> %
   construct : SpadIterator(%) -> %
-  construct : SpadLambda(%) -> %
   construct : SpadLoop(%) -> %
   construct : SpadMacro(%) -> %
   construct : SpadMappingType(%) -> %
@@ -96,7 +95,6 @@ SpadNodeCategory() : Category == ParsableCategory with
   coerce : % -> SpadFunctor(%)
   coerce : % -> SpadImport(%)
   coerce : % -> SpadIterator(%)
-  coerce : % -> SpadLambda(%)
   coerce : % -> SpadLoop(%)
   coerce : % -> SpadMacro(%)
   coerce : % -> SpadMappingType(%)
@@ -567,7 +565,8 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
       sym = 'exit =>
         hconcat ["exit" :: PF, brace(first argl), paren(rest argl)]
       sym = 'return =>
-        hconcat ["return" :: PF, brace(first argl), paren(rest argl)]
+        -- hconcat ["return" :: PF, brace(first argl), paren(rest argl)]
+        hconcat ["return " :: PF, :(rest argl)]
       #argl = 0 and sym = 'Zero => "0" :: PF
       #argl = 0 and sym = 'One => "1" :: PF
       #argl = 2 and member?(sym, binop) =>
@@ -864,59 +863,6 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       n.kind case "repeat" =>
         spaces ["repeat" :: PF, loopBody]
 
-)abbrev domain SLAMBDA SpadLambda
-SpadLambda(N : SpadNodeCategory) : Exports == Implementation where
-  PF ==> PrintableForm
-  MT ==> SpadMappingType(N)
-  TD ==> SpadTypeDecl(N)
-
-  Exports ==> ParsableCategory with
-    elt : (%, "args") -> List(TD)
-    elt : (%, "type") -> N
-    elt : (%, "body") -> N
-    construct : (List(TD), N, N) -> %
-
-  Implementation ==> add
-    Rep := Record(l_args : List(TD), l_type : N, l_body : N)
-
-    import ParserTools
-
-    elt(x, "args") == x.l_args
-    elt(x, "type") == x.l_type
-    elt(x, "body") == x.l_body
-
-    construct(al, t, b) == [al, t, b]$Rep
-
-    parse ex ==
-      l : Record(args : List(SExpression), type : SExpression) :=
-        -- (+-> arg body)
-        not list? ex.2 =>
-          [[ex.2], convert []]
-        -- (+-> (@Tuple (: arg1 Type1) (: arg2 Type2)) body)
-        tuple? ex.2 =>
-          [destruct cdr ex.2, convert []]
-        -- (+-> (: (: arg Type) RetType) body) 
-        -- (+-> (: (@Tuple (: arg1 Type1) (: arg2 Type2)) RetType) body)
-        var? ex.2 =>
-          [(not tuple? ex.2.2 => [ex.2.2]; destruct cdr ex.2.2), ex.2.3]
-
-      largs : List(TD) := []
-      for arg in l.args repeat
-        var? arg =>
-          largs := [[[symbol arg.2], parse arg.3], :largs]
-        largs := [[[symbol arg], emptyNode()], :largs]
-
-      [reverse largs, parse l.type, parse ex.3]
-
-    convert x ==
-      args := [convert arg for arg in x.args]
-      type := [convert '_:, convert args, convert x.type]
-      convert [convert '_+_-_>, convert type, convert x.body]
-
-    coerce n ==
-      spaces([paren [arg :: PF for arg in n.args], ":" :: PF, n.type :: PF,
-             "+->" :: PF, n.body :: PF])
-
 )abbrev package SSEQ SpadSequence
 SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
   K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body")
@@ -1065,16 +1011,16 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
   SEX ==> SExpression
 
   Exports ==> ParsableCategory with
-    elt : (%, "name") -> Symbol
+    elt : (%, "name") -> Union(Symbol, "lambda")
     elt : (%, "args") -> List(N)
     elt : (%, "type") -> N
     elt : (%, "result") -> N
     elt : (%, "body") -> N
-    construct : (Symbol, List(N), N, N) -> %
+    construct : (Union(Symbol, "lambda"), List(N), N, N) -> %
     signature : % -> MT
 
   Implementation ==> add
-    Rep := Record(fn_name : Symbol,
+    Rep := Record(fn_name : Union(Symbol, "lambda"),
                   fn_args : List(N),
                   fn_type : N,
                   fn_body : N)
@@ -1096,21 +1042,42 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       [[[symbol s], parseNonNull t]$TD]
 
     parse ex ==
-      argNames := destruct cdr ex.2
-      argTypes := destruct cdr ex.3
-      fargs := [parseArg(s, t) for s in argNames for t in argTypes]
-      [symbol car ex.2, fargs, parseNonNull car ex.3, parse ex.5]
+      function? ex =>
+        argNames := destruct cdr ex.2
+        argTypes := destruct cdr ex.3
+        fargs := [parseArg(s, t) for s in argNames for t in argTypes]
+        [symbol car ex.2, fargs, parseNonNull car ex.3, parse ex.5]
+
+      lambda? ex =>
+        l : Record(args : List(SExpression), type : SExpression) :=
+          -- (+-> arg body)
+          not list? ex.2 =>
+            [[ex.2], convert []]
+          -- (+-> (@Tuple (: arg1 Type1) (: arg2 Type2)) body)
+          tuple? ex.2 =>
+            [destruct cdr ex.2, convert []]
+          -- (+-> (: (: arg Type) RetType) body) 
+          -- (+-> (: (@Tuple (: arg1 Type1) (: arg2 Type2)) RetType) body)
+          var? ex.2 =>
+            [(not tuple? ex.2.2 => [ex.2.2]; destruct cdr ex.2.2), ex.2.3]
+        fargs := [[parse(arg)$TD] for arg in l.args]
+        ["lambda", fargs, parse l.type, parse ex.3]
 
     convert x ==
-      argNames := [convert ((arg :: TD).expr :: Symbol) for arg in x.args]
-      types := [convert (arg :: TD).type for arg in x.args]
-      types' := [convert [] for i in 0..#x.args]
-      fbody := convert x.body
-      convert([convert ("DEF" :: Symbol),
-               convert [convert x.name, :argNames],
-               convert [convert x.type, :types],
-               convert types',
-               fbody])
+      x.name case "lambda" =>
+        args := [convert arg for arg in x.args]
+        type := [convert '_:, convert args, convert x.type]
+        convert [convert '_+_-_>, convert type, convert x.body]
+
+      x.name case Symbol =>
+        fname := x.name :: Symbol
+        argNames := [convert ((arg :: TD).expr :: Symbol) for arg in x.args]
+        types := [convert (arg :: TD).type for arg in x.args]
+        convert([convert ("DEF" :: Symbol),
+                 convert [convert fname, :argNames],
+                 convert [convert x.type, :types],
+                 convert [convert [] for i in 0..#x.args],
+                 convert x.body])
 
     signature fn ==
       types := [(typeDecl? arg => (arg :: TD).type; emptyNode())
@@ -1118,12 +1085,19 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       [types, fn.type]$MT
 
     coerce n ==
-      fargs := [arg :: PF for arg in n.args]
-      retType : List(PF) :=
-        emptyNode? n.type => []
-        [":" :: PF, n.type :: PF]
-      pile ([spaces [n.name :: PF, paren fargs, :retType, "==" :: PF],
-             n.body :: PF])
+      n.name case "lambda" =>
+        spaces([paren [arg :: PF for arg in n.args], ":" :: PF, n.type :: PF,
+               "+->" :: PF, n.body :: PF])
+
+      n.name case Symbol =>
+        fname := n.name :: Symbol
+        fargs := [arg :: PF for arg in n.args]
+        retType : List(PF) :=
+          emptyNode? n.type => []
+          [":" :: PF, n.type :: PF]
+        pile ([spaces [fname :: PF, paren fargs, :retType, "==" :: PF],
+               n.body :: PF])
+
 
 )abbrev package SMACRO SpadMacro
 ++ SPAD macro representation
@@ -1316,7 +1290,6 @@ SpadNode() : Exports == Implementation where
   FT ==> SpadFunctor(%)
   IM ==> SpadImport(%)
   IT ==> SpadIterator(%)
-  LAM ==> SpadLambda(%)
   LP ==> SpadLoop(%)
   MP ==> SpadMarkerPath
   MR ==> SpadMarker(%)
@@ -1346,10 +1319,10 @@ SpadNode() : Exports == Implementation where
     nodeCase : (%, %) -> %
     nodeCondExpr : (%, %, %) -> %
     nodeFtor : (Symbol, List(TD), %, %, %) -> %
-    nodeFun : (Symbol, List(%), %, %) -> %
+    nodeFun : (Union(Symbol, "lambda"), List(%), %, %) -> %
     nodeImport : % -> %
     nodeIterator : (Symbol, %) -> %
-    nodeLambda : (List(TD), %, %) -> %
+    nodeLambda : (List(%), %, %) -> %
     nodeLoop : (Union("loop", "collect", "repeat"), List(%), List(%), %) -> %
     nodeMacro : (Symbol, List(Symbol), %) -> %
     nodeMappingType : (List(%), %) -> %
@@ -1384,7 +1357,6 @@ SpadNode() : Exports == Implementation where
                  ftor : FT,
                  func : FN,
                  itor : IT,
-                 lambda : LAM,
                  loop : LP,
                  mapping : MT,
                  marker : MR,
@@ -1423,12 +1395,14 @@ SpadNode() : Exports == Implementation where
     case? n == n case s_case
     condExpr? n == n case cond
     float? n == n case dfloat
-    function? n == n case func
+    function? n ==
+      (n case func) and (n.func.name case Symbol)
     functor? n == n case ftor
     import? n == n case s_import
     integer? n == n case int
     iterator? n == n case itor
-    lambda? n == n case lambda
+    lambda? n == 
+      (n case func) and (n.func.name case "lambda")
     loop? n == n case loop 
     macro? n == n case s_macro 
     mappingType? n == n case mapping 
@@ -1491,7 +1465,7 @@ SpadNode() : Exports == Implementation where
       CoerceError("SpadCase")
 
     coerce (n : %) : FN ==
-      function? n => n.func
+      function? n or lambda? n => n.func
       CoerceError("SpadFunction")
 
     coerce (n : %) : FT ==
@@ -1501,10 +1475,6 @@ SpadNode() : Exports == Implementation where
     coerce (n : %) : IM ==
       import? n => n.s_import
       CoerceError("SpadImport")
-
-    coerce (n : %) : LAM == 
-      lambda? n => n.lambda
-      CoerceError("SpadLambda")
 
     coerce (n : %) : IT == 
       iterator? n => n.itor
@@ -1625,7 +1595,6 @@ SpadNode() : Exports == Implementation where
     construct (n : FT) : % == [n]$Rep
     construct (n : IM) : % == [n]$Rep
     construct (n : IT) : % == [n]$Rep
-    construct (n : LAM) : % == [n]$Rep
     construct (n : LP) : % == [n]$Rep
     construct (n : SM) : % == [n]$Rep
     construct (n : MT) : % == [n]$Rep
@@ -1669,9 +1638,8 @@ SpadNode() : Exports == Implementation where
 
       import? ex => [parse(ex)$IM]
       where? ex => [parse(ex)$SW]
-      lambda? ex => [parse(ex)$LAM]
       functor? ex => [parse(ex)$FT]
-      function? ex => [parse(ex)$FN]
+      lambda? ex or function? ex => [parse(ex)$FN]
       macro? ex => [parse(ex)$SM]
       marker? ex => [parse(ex)$MR]
       noderef? ex => [parse(ex)$NR]
@@ -1720,12 +1688,11 @@ SpadNode() : Exports == Implementation where
       case? n => (n :: SC) :: PF
       condExpr? n => (n :: CE) :: PF
       float? n => (n :: DF) :: PF
-      function? n => (n :: FN) :: PF
+      function? n or lambda? n => (n :: FN) :: PF
       functor? n => (n :: FT) :: PF
       import? n => (n :: IM) :: PF
       integer? n => (n :: Integer) :: PF
       iterator? n => (n :: IT) :: PF
-      lambda? n => (n :: LAM) :: PF
       loop? n => (n :: LP) :: PF
       macro? n => (n :: SM) :: PF
       mappingType? n => (n :: MT) :: PF
@@ -1759,12 +1726,11 @@ SpadNode() : Exports == Implementation where
       case? n => convert(n :: SC)
       condExpr? n => convert(n :: CE)
       float? n => convert(n :: DF)
-      function? n => convert(n :: FN)
+      function? n or lambda? n => convert(n :: FN)
       functor? n => convert(n :: FT)
       import? n => convert(n :: IM)
       integer? n => convert(n :: Integer)
       iterator? n => convert(n :: IT)
-      lambda? n => convert(n :: LAM)
       loop? n => convert(n :: LP)
       macro? n => convert(n :: SM)
       mappingType? n => convert(n :: MT)
@@ -1799,7 +1765,7 @@ SpadNode() : Exports == Implementation where
     nodeFtor (name, args, type, ext, caps) == [[name, args, type, ext, caps]$FT]
     nodeImport type == [[type]$IM]
     nodeIterator (var, seq) == [[var, seq]$IT]
-    nodeLambda (args, type, body) == [[args, type, body]$LAM]
+    nodeLambda (args, type, body) == [["lambda", args, type, body]$FN]
     nodeLoop (kind, itors, guards, body) == [[kind, itors, guards, body]$LP]
     nodeMacro (name, args, body) == [[name, args, body]$SM]
     nodeMappingType (args, type) == [[args, type]$MT]

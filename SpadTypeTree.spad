@@ -158,7 +158,9 @@ SpadTypeNode() : Exports == Implementation where
         typeDecl? n =>
           bold cyan((n :: TD).expr :: PF)
         function? n =>
-          bold cyan((n :: FN).name :: PF)
+          bold cyan(((n :: FN).name :: Symbol) :: PF)
+        lambda? n =>
+          bold cyan("+->" :: PF)
         sequence? n =>
           bold("(...)" :: PF)
         bold yellow("?" :: PF)
@@ -196,6 +198,7 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
     poisonNode! : (%, TN) -> Void
+    bindNode! : (%, TN, N) -> Void
     killNode! : (%, TN) -> Void
     rewriteNodes! : (%, TV, N) -> Void
 
@@ -242,11 +245,22 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
       info ["Poisoning" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
         unregisterNode!(x.m_tree, tn, typeUndef)
+      else
+        tn.type := typeUndef
+
+    bindNode! (x : %, tn : TN, t : N) ==
+      info ["Binding" :: PF, tn.index :: PF, "node type to" :: PF, t :: PF]
+      if typeVar? tn.type then
+        unregisterNode!(x.m_tree, tn, t)
+      else
+        tn.type := t
 
     killNode! (x : %, tn : TN) ==
       info ["Killing" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
         unregisterNode!(x.m_tree, tn, typeUndef)
+      else
+        tn.type := typeUndef
       kill! tn
 
     -- rewrite all nodes with type that contains given variable
@@ -312,6 +326,7 @@ SpadTypeTree() : Exports == Implementation where
     leaveSubTree! : % -> Void
 
     poisonNode! : (%, TN) -> Void
+    bindNode! : (%, TN, N) -> Void
     killNode! : (%, TN) -> Void
 
     limitTypeVar! : (%, TV, List(N)) -> Boolean
@@ -335,6 +350,7 @@ SpadTypeTree() : Exports == Implementation where
     import Stack(TNA)
 
     rewriteTypeVars! : (%, TV, N) -> Void
+    removeAlias! : (%, TV, N) -> Void
     rewriteNodes! : (%, TV, N) -> Void
 
     Rep := Record(m_nodes : FlexibleArray(TNA),
@@ -380,10 +396,13 @@ SpadTypeTree() : Exports == Implementation where
     addNode! (x : %, n : N, env : ENV) : TN ==
       addNode! (top x.m_current, n, env)
 
-    poisonNode! (x : %, tn : TN) : Void ==
+    poisonNode! (x : %, tn : TN) ==
       poisonNode!((x.m_nodes)(tn.index.major), tn)
 
-    killNode! (x : %, tn : TN) : Void ==
+    bindNode! (x : %, tn : TN, n : N) ==
+      bindNode!((x.m_nodes)(tn.index.major), tn, n)
+
+    killNode! (x : %, tn : TN) ==
       killNode!((x.m_nodes)(tn.index.major), tn)
 
     registerNode! (x : %, tn : TN) : Void ==
@@ -407,10 +426,11 @@ SpadTypeTree() : Exports == Implementation where
       tl
 
     extendTypeOf! (x : %, tn : TN, terms : List(N)) : Void ==
-      not typeVar? tn.type =>
-        error "addType!: no type variable associated with the node"
-      tv := tn.type :: TV
-      (x.m_typevars)(tv) := concat((x.m_typevars)(tv), terms)
+      if typeVar? tn.type then
+        tv := tn.type :: TV
+        unknownType? (x.m_typevars)(tv) =>
+          (x.m_typevars)(tv) := terms
+        (x.m_typevars)(tv) := removeDuplicates concat((x.m_typevars)(tv), terms)
 
     setTypeOf! (x : %, tn : TN, terms : List(N)) : Void ==
       typeVar? tn.type =>
@@ -461,6 +481,9 @@ SpadTypeTree() : Exports == Implementation where
       terms := (x.m_typevars)(tv)
       unknownType? terms or poisonType? terms or #terms > 1 => false
       term := first terms
+      typeVar? term =>
+        removeAlias!(x, tv, term)
+        true
       unbound? term => false
       rewriteTypeVars!(x, tv, term)
       debug ["Removing" :: PF, bold(tv :: PF), "type variable." :: PF]

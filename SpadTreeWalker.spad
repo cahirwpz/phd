@@ -9,7 +9,6 @@ SpadTreeWalkerCategory() : Category == Definition where
   FT ==> SpadFunctor(N)
   IM ==> SpadImport(N)
   IT ==> SpadIterator(N)
-  LAM ==> SpadLambda(N)
   LP ==> SpadLoop(N)
   M ==> SpadMacro(N)
   MR ==> SpadMarker(N)
@@ -43,7 +42,6 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : FT -> N
       rewrite : IM -> N
       rewrite : IT -> N
-      rewrite : LAM -> N
       rewrite : LP -> N
       rewrite : M -> N
       rewrite : MR -> N
@@ -94,10 +92,6 @@ SpadTreeWalkerCategory() : Category == Definition where
 
       rewrite (it : IT) : N ==
         nodeIterator(it.var, rewrite it.seq)
-
-      rewrite (l : LAM) : N ==
-        nodeLambda([(rewrite [arg]) :: TD for arg in l.args],
-                   rewrite l.type, rewrite l.body)
 
       rewrite (lp : LP) : N ==
         nodeLoop(lp.kind, 
@@ -177,11 +171,10 @@ SpadTreeWalkerCategory() : Category == Definition where
         assign? n => rewrite (n :: ASS)
         case? n => rewrite (n :: SC)
         condExpr? n => rewrite (n :: CE)
-        function? n => rewrite (n :: FN)
+        function? n or lambda? n => rewrite (n :: FN)
         functor? n => rewrite (n :: FT)
         import? n => rewrite (n :: IM)
         iterator? n => rewrite (n :: IT)
-        lambda? n => rewrite (n :: LAM)
         loop? n => rewrite (n :: LP)
         macro? n => rewrite (n :: M)
         mappingType? n => rewrite (n :: MT)
