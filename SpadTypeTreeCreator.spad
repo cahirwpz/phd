@@ -111,8 +111,8 @@ SpadTypeRuleFactory() : Exports == Implementation where
       [r1, r2]
 
     ruleCapsule exprList ==
-      exprRefList := [nodeRef(expr) for expr in exprList]
-      [[:exprRefList, nodeSeq("Join", exprRefList)], nodeSeq("Sequence", exprRefList)]
+      exprRefList := [nodeRef(expr) for expr in exprList | not done? expr]
+      [[:exprRefList, nodeSeq("Capsule", exprRefList)], nodeSeq("Capsule", exprRefList)]
 
     ruleTypeOrigin (expr, origin) ==
       exprRef := nodeRef(expr)
