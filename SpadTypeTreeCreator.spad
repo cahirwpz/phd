@@ -112,7 +112,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     ruleCapsule exprList ==
       exprRefList := [nodeRef(expr) for expr in exprList]
-      [exprRefList, nodeSeq("Sequence", exprRefList)]
+      [[:exprRefList, nodeSeq("Join", exprRefList)], nodeSeq("Sequence", exprRefList)]
 
     ruleTypeOrigin (expr, origin) ==
       exprRef := nodeRef(expr)
@@ -245,19 +245,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       funExpr := walk(a.function, ctx, env)
       argExprList := [walk(arg, ctx, env) for arg in a.args]
 
-      funExprType := map(stripOriginIfCan, typeOf(ctx, funExpr))
-      funTypeList := [t :: MT for t in funExprType | mappingType? t]
-      funTypeList := [mt for mt in funTypeList | #(mt.args) = #(a.args)]
-      setTypeOf!(ctx, this, removeDuplicates [mt.result for mt in funTypeList])
-      for i in 1..#(a.args) repeat
-        extendTypeOf!(ctx, argExprList.i,
-                      removeDuplicates [mt.args.i for mt in funTypeList])
-
-      funType := nodeMappingType([arg.type for arg in argExprList], this.type)
-      constFunType := nodeMappingType([['constant]], this.type)
-      extendTypeOf!(ctx, funExpr,
-                    (empty? argExprList => [constFunType, funType]; [funType]))
-
       -- Second case: element indexing or record field access.
       eltFunList : List(N) := []
       eltFunTypeList : List(MT) := []
@@ -319,10 +306,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       if introduced? then
         left.node := nodeTypeDecl(left.node, typeRef(left))
 
-      setTypeOf!(ctx, this, [left.type, right.type])
-      extendTypeOf!(ctx, left, [right.type, this.type])
-      extendTypeOf!(ctx, right, [left.type, this.type])
-
       -- Only left-value environment is propagated!
       this.env := left.env
       this.rules := ruleAssign(left, right)
@@ -336,17 +319,11 @@ SpadTypeTreeCreator() : Exports == Implementation where
       truebr := walk(ce.truebr, ctx, cond.env)
 
       emptyNode? ce.falsebr =>
-        setTypeOf!(ctx, this, [nodeUnionType [truebr.type, typeUndef]])
         this.env := env
         this.rules := [ruleIfThen(cond, truebr)]
         this
 
       falsebr := walk(ce.falsebr, ctx, (case? ce.cond => env; cond.env))
-
-      setTypeOf!(ctx, this,
-                 [truebr.type, falsebr.type,
-                  nodeUnionType [truebr.type, falsebr.type],
-                  nodeUnionType [falsebr.type, truebr.type]])
 
       -- TODO: "truebr.env" and "falsebr.env" should be merged and passed
       -- forward instead of just "env". Merging means that if the same variable
@@ -391,7 +368,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
           for n in [resNode, :argNodeList] for t in [fnType.result, :fnType.args]])
 
       fnType' := nodeMappingType(rest typeList, first typeList)
-      setTypeOf!(ctx, funDefNode, [funDeclNode.type, fnType'])
+      setTypeOf!(ctx, funDefNode, [fnType'])
 
       if fn.name case "lambda" then
         debug(["Lambda expression has" :: PF, bold(fnType' :: PF),
@@ -449,8 +426,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
         env'(arg.expr :: Symbol) := argNode.type
 
       bodyNode := walk(fn.body, ctx, env')
-
-      extendTypeOf!(ctx, bodyNode, [resNode.type])
 
       leaveSubTree!(ctx)
 
@@ -610,11 +585,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this := addNode!(ctx, [s])
 
       exprList : List(TN) := [(n := walk(e, ctx, env); env := n.env; n) for e in s.list]
-
-      t := 
-        s.kind ~= "Capsule" => (last exprList).type
-        nodeSeq("Join", [expr.type for expr in exprList | not typeUndef? expr.type])
-      setTypeOf!(ctx, this, [t])
 
       this.rules := 
         s.kind = "Capsule" => [ruleCapsule(exprList)]

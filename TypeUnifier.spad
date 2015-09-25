@@ -5,6 +5,7 @@ TypeUnifier() : Exports == Implementation where
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
   CE ==> SpadCondExpr(N)
+  IM ==> SpadImport(N)
   MT ==> SpadMappingType(N)
   NR ==> SpadNodeRef(N)
   SEQ ==> SpadSequence(N)
@@ -236,6 +237,10 @@ TypeUnifier() : Exports == Implementation where
         app := n :: APP
         lst := [substitute(k, var, term) for k in [app.function, :app.args]]
         nodeApp(first lst, rest lst)
+      assign? n =>
+        ass := n :: ASS
+        nodeAssign(substitute(ass.lval, var, term),
+                   substitute(ass.rval, var, term))
       condExpr? n =>
         ce := n :: CE
         cond := substitute(ce.cond, var, term)
@@ -248,6 +253,9 @@ TypeUnifier() : Exports == Implementation where
         type := substitute(fn.type, var, term)
         body := substitute(fn.body, var, term)
         nodeFun(fn.name, args, type, body)
+      import? n =>
+        im := n :: IM
+        nodeImport(substitute(im.type, var, term))
       mappingType? n =>
         mt := n :: MT
         lst := [substitute(k, var, term) for k in [mt.result, :mt.args]]

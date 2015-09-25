@@ -567,8 +567,7 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
       sym = 'exit =>
         hconcat ["exit" :: PF, brace(first argl), paren(rest argl)]
       sym = 'return =>
-        -- hconcat ["return" :: PF, brace(first argl), paren(rest argl)]
-        hconcat ["return " :: PF, :(rest argl)]
+        hconcat ["return" :: PF, brace(first argl), paren(rest argl)]
       #argl = 0 and sym = 'Zero => "0" :: PF
       #argl = 0 and sym = 'One => "1" :: PF
       #argl = 2 and member?(sym, binop) =>

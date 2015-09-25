@@ -355,7 +355,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
         for n in members na repeat 
           rewriteIfInferred!(ctx, n)
 
-)if 0
       success := walk'(ctx, 1)
 
       if success then -- Rewrite the tree if succeeded !
@@ -369,8 +368,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
           for n in members na repeat 
             rewriteIfInferred!(ctx, n)
             checkAndMarkIfDone!(ctx, n)
-)endif
-      success := false
 
       info (ctx :: PF)
 

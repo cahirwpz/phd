@@ -267,6 +267,8 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
     rewriteNodes! (x, tv, term) ==
       for n in entries x.m_nodes | occurs?(tv, n.type) repeat
         n.type := substitute(n.type, tv, term)
+        if typeDecl? n.node then
+          n.node := substitute(n.node, tv, term)
         debug (["Rewrote" :: PF, n.index :: PF, "with" :: PF,
                 brace spaces [tv :: PF, "=>" :: PF, term :: PF]])
 
