@@ -168,37 +168,30 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       tn := node(ctx, r.truebr :: NR) -- true branch node
       emptyNode? r.falsebr =>
-        nodeSubType!(ctx, tn, n) => true
-        nodesTypeMatch!(ctx, n, tn) => true
+        types := [tn.type, nodeUnionType [tn.type, typeUndef]]
+        limitNodeType!(ctx, n, types) => true
         false
 
       fn := node(ctx, r.falsebr :: NR) -- false branch node
 
-      -- This is clearly broken! Must rethink it!
-      nodesTypeMatch!(ctx, n, tn) and nodesTypeMatch!(ctx, n, fn) => true
-      nodeSubType!(ctx, tn, n) and nodeSubType!(ctx, fn, n) => true
-      false
+      t1 := tn.type
+      t2 := fn.type
+      u1 := (t1 ~= t2 => nodeUnionType [t1, t2]; t1)
+      u2 := (t1 ~= t2 => nodeUnionType [t2, t1]; t2)
+
+      not limitNodeType!(ctx, tn, removeDuplicates [t2, u1, u2]) => false
+      not limitNodeType!(ctx, fn, removeDuplicates [t1, u1, u2]) => false
+      not limitNodeType!(ctx, n, removeDuplicates [t1, t2, u1, u2]) => false
+      true
 
     evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
-      n1 := node(ctx, r.expr :: NR)
-      not nodeRef? r.type =>
-        nodeSubTypeOf!(ctx, n1, [r.type])
-      n2 := node(ctx, r.type :: NR)
-      nodeSubType!(ctx, n1, n2)
+      s := node(ctx, r.expr :: NR)
+      t := node(ctx, r.type :: NR)
+      nodeSubType!(ctx, s, t)
 
     evalTypeIs(ctx : TT, r : TEI, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
       t := node(ctx, r.type :: NR)
-      -- a) {%s[?]} : {%t[t1, t2, ...] | T}
-      -- given a type information flows from nodes above during TT
-      -- construction and we don't know anything, let's accept types
-      -- from below
-      hasUnknownType?(ctx, s) => limitNodeType!(ctx, s, [t.type])
-      -- b) {%s[s1, s2, ...] | S} : {%t[?]}
-      -- we simply don't know, wait for types to flow from below
-      hasUnknownType?(ctx, t) => true
-      -- c) {%s[s1, s2, ...] | S} : {%t[t1, t2, ...] | T}
-      -- now it's easy...
       nodesTypeMatch!(ctx, s, t)
 
     evalTypeOrigin(ctx : TT, r : TO, n : TN) : Boolean ==
@@ -260,7 +253,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
     checkAndMarkIfDone! (ctx : TT, n : TN) : Boolean ==
       unbound? n.type => false
-      typeUndef? n.type => false
+      typeUndef? n.type =>
+        empty? n.rules => false
+        for r in n.rules repeat
+          for f in r.formulas repeat
+            if not nodeRef? f then
+              return false
+        done! n; true
       if not empty? n.rules then
         -- We only care about first rule, because it produced actual solution.
         rule := first n.rules

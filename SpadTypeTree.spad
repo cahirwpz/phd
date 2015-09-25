@@ -571,22 +571,21 @@ SpadTypeTree() : Exports == Implementation where
       -- b) {%s[?]} <: {%t[t1, t2, ...] | T}
       hasUnknownType?(x, sn) or hasUnknownType?(x, tn) => true
       -- We're left with: {%s[s1, s2, ...] | S} <: {%t[t1, t2, ...] | T}
-      sl : List(N) := []
-      tl : List(N) := []
+      sl : List(N) := [s for s in typeOf(x, sn)]
+      tl : List(N) := [t for t in typeOf(x, tn)]
       -- In %s and %t there are usually some type variables. We could
       -- start normalizing terms to find out what's their exact structure, but
-      -- I consider it to be dangerous. Deal with them later...
-      sl := concat([s for s in typeOf(x, sn) | unbound? s], sl)
-      tl := concat([t for t in typeOf(x, tn) | unbound? t], tl)
+      -- I don't know how to deal with them yet. 
       -- With terms of known structure we can deal quite well.
-      for s in typeOf(x, sn) | not unbound? s repeat
-        for t in typeOf(x, tn) | not unbound? t repeat
+      for s in typeOf(x, sn) repeat
+        for t in typeOf(x, tn) repeat
           if isSubType(s, t) then
             sl := [s, :sl]
             tl := [t, :tl]
       empty? sl or empty? tl => false
       setTypeOf!(x, sn, removeDuplicates sl)
-      setTypeOf!(x, sn, removeDuplicates tl)
+      setTypeOf!(x, tn, removeDuplicates tl)
+      nodesTypeMatch!(x, sn, tn)
       true
 
     nodeSubTypeOf!(x : %, sn : TN, types : List(N)) : Boolean ==

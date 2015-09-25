@@ -8,7 +8,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
   OTN ==> Union(TN, "none")
 
   Exports ==> with
-    ruleAssign : (TN, TN) -> List(TR)
+    ruleAssign : (TN, TN) -> TR
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
@@ -23,7 +23,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleTypeIs : (List(TN), TN, TN) -> TR
     ruleSeg : (TN, OTN, OTN) -> TR
     ruleSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
-                     "Tuple", "Body"), TN, List(TN)) -> List(TR)
+                     "Tuple", "Body"), TN, List(TN)) -> TR
     ruleCapsule : List(TN) -> TR
     ruleTypeOrigin : (TN, N) -> TR
     ruleSubType : (TN, TN) -> TR
@@ -37,9 +37,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     -- compute "L, R"; if "L := R" then solution is "L := R"
     ruleAssign (L', R') ==
       (L, R) := (nodeRef(L'), nodeRef(R'))
-      r1 := [[L, R, nodeTypeIs(L, R)], nodeAssign(L, R)]
-      r2 := [[L, R, nodeSubType(R, L)], nodeAssign(L, R)]
-      [r1, r2]
+      [[L, R, nodeAssign(L, R)], nodeAssign(L, R)]
 
     ruleApply (fun, args) ==
       (funRef, argRefs) := (nodeRef(fun), [nodeRef(arg) for arg in args])
@@ -106,9 +104,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     ruleSeq (kind, seq, exprs) ==
       (seqRef, exprRefs) := (nodeRef(seq), [nodeRef(expr) for expr in exprs])
-      r1 := [[:exprRefs, nodeTypeIs(seqRef, last exprRefs)], nodeSeq(kind, exprRefs)]
-      r2 := [[:exprRefs, nodeSubType(last exprRefs, seqRef)], nodeSeq(kind, exprRefs)]
-      [r1, r2]
+      [[:exprRefs, nodeSubType(last exprRefs, seqRef)], nodeSeq(kind, exprRefs)]
 
     ruleCapsule exprList ==
       exprRefList := [nodeRef(expr) for expr in exprList | not done? expr]
@@ -259,8 +255,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
         argExprList' := [funExpr, :argExprList]
         eltFunExpr := addNode!(ctx, ['elt], env)
         eltFunExpr.node := nodeTypeOrigin(eltFunExpr.node, typeRef(eltFunExpr))
-        extendTypeOf!(ctx, this, removeDuplicates
-                      [mt.result for mt in eltFunTypeList])
         setTypeOf!(ctx, eltFunExpr, eltFunList)
         this.rules := [ruleApply(eltFunExpr, argExprList'), :this.rules]
 
@@ -269,17 +263,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
         funExpr.node := nodeTypeOrigin(funExpr.node, typeRef(funExpr))
 
       -- First case with a twist: arbitrary list construction.
-      if unify?(a.function, ['construct]) then
+      if a.function = ['construct] then
         item := addNode!(ctx, ['construct], env)
         setTypeOf!(ctx, item, [argExpr.type for argExpr in argExprList])
         constructArgs := [item.type for i in 1..#a.args]
         constructRes := nodeApp(['List], [item.type])
         extendTypeOf!(ctx, funExpr, [nodeMappingType(constructArgs, constructRes)])
-        extendTypeOf!(ctx, this, [constructRes])
         this.rules := [ruleApply(funExpr, argExprList, [item]), :this.rules]
-      else
-        this.rules := [ruleApply(funExpr, argExprList), :this.rules]
 
+      this.rules := [ruleApply(funExpr, argExprList), :this.rules]
       this
 
     walkAssign (a : ASS, ctx : CTX, env : ENV) : TN ==
@@ -308,7 +300,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- Only left-value environment is propagated!
       this.env := left.env
-      this.rules := ruleAssign(left, right)
+      this.rules := [ruleAssign(left, right)]
       this
 
     walkCondExpr (ce : CE, ctx : CTX, env : ENV) : TN ==
@@ -535,21 +527,21 @@ SpadTypeTreeCreator() : Exports == Implementation where
       debug ["Processing" :: PF, #(lp.guards) :: PF, "guard(s)." :: PF]
       guardList : List(TN) := []
       for guard in lp.guards repeat
-        guardType := addNode!(ctx, guard, env')
-        setTypeOf!(ctx, guardType, [booleanType])
         guardExpr := walk(guard, ctx, env')
-        guardType.rules := [ruleSubType(guardExpr, guardType)]
-        guardList := [guardType, :guardList]
+        bindNode!(ctx, guardExpr, booleanType)
+        guardList := [guardExpr, :guardList]
 
       debug ["Processing loop body." :: PF]
-      body :=
-        lp.kind case "collect" =>
-          bodyType := addNode!(ctx, lp.body, env')
-          setTypeOf!(ctx, bodyType, [this.type])
-          bodyExpr := walk(lp.body, ctx, env')
-          bodyType.rules := [ruleSubType(bodyExpr, bodyType)]
-          bodyType
-        walk(lp.body, ctx, env')
+      body : TN
+      if lp.kind case "collect" then
+        body := addNode!(ctx, lp.body, env')
+        bodyExpr := walk(lp.body, ctx, env')
+        setTypeOf!(ctx, body, [this.type])
+        body.rules := [ruleSubType(bodyExpr, body)]
+      else
+        body := walk(lp.body, ctx, env')
+        bindNode!(ctx, body, typeAny)
+        done! body
 
       this.rules := [ruleLoop(lp.kind, itorList, guardList, body)]
       this
@@ -588,7 +580,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       this.rules := 
         s.kind = "Capsule" => [ruleCapsule(exprList)]
-        ruleSeq(s.kind, this, exprList)
+        [ruleSeq(s.kind, this, exprList)]
       this.env := (last exprList).env
       this
 
@@ -614,6 +606,12 @@ SpadTypeTreeCreator() : Exports == Implementation where
         resType := node(ctx, 2).type
         returnType := nodeMappingType([integerType, resType], typeAny)
         types := [returnType, :types]
+
+      -- Convert "constant -> T" into "T"
+      for t in types repeat
+        t := stripOriginIfCan t
+        if mappingType? t and empty? (t :: MT).args then
+          types := [(t :: MT).result, :types]
 
       -- handle a symbol which is a type constructor
       if inDatabase? s then
@@ -748,9 +746,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkInt (i : Integer, ctx : CTX, env : ENV) : TN ==
       type :=
-        i > 0 => nodeApp(['PositiveInteger], [])
+        i > 0 => nodeApp(['PositiveInteger], []) 
         i >= 0 => nodeApp(['NonNegativeInteger], [])
-        nodeApp(['NonNegativeInteger], [])
+        nodeApp(['Integer], [])
       this := addNode!(ctx, [i], env)
       bindNode!(ctx, this, type)
       done! this
