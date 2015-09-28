@@ -481,7 +481,9 @@ SpadTypeTree() : Exports == Implementation where
       not typeVar? n.type => false
       tv := n.type :: TV
       terms := (x.m_typevars)(tv)
-      unknownType? terms or poisonType? terms or #terms > 1 => false
+      #terms ~= 1 => false
+      unknownType? terms => false
+      poisonType? terms => false
       term := first terms
       typeVar? term =>
         removeAlias!(x, tv, term)
