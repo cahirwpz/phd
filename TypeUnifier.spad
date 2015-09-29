@@ -525,7 +525,19 @@ TypeUnifier() : Exports == Implementation where
           isSubType'(nodeApp(['NonNegativeInteger], []), n2)
         n1 = nodeApp(['NonNegativeInteger], []) =>
           isSubType'(nodeApp(['Integer], []), n2)
-        "false"
+        app1 := n1 :: APP
+        app2 := n2 :: APP
+        app1.function ~= app2.function => "false"
+        #app1.args ~= #app2.args => "false"
+        ts : List(N) := []
+        for arg1 in app1.args for arg2 in app2.args repeat
+          r := isSubType'(arg1, arg2)
+          r case "false" => return "false"
+          r case "true" => "iterate"
+          ts := [r :: N, :ts]
+        empty? ts => "true"
+        #ts = 1 => ts.1
+        nodeApp(['and], removeDuplicates ts)
 
       recordType? n1 and recordType? n2 =>
         -- {Record(F1 : T1, F2 : T2, ..., Fn : Tn)}

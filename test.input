@@ -17,12 +17,12 @@
 )boot $PostParseHookEnable := true
 --)compile Test1.spad
 --)compile Test2.spad
-)compile Test3.spad
+--)compile Test3.spad
 --)compile Test4.spad
 --)compile Test5.spad
 --)compile Test6.spad
 --)compile Test7.spad
 --)compile Test8.spad
 --)compile Test9.spad
---)compile Test10.spad
+)compile Test10.spad
 )boot $PostParseHookEnable := false

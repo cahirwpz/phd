@@ -185,16 +185,18 @@ SpadTypeTreeChecker() : Exports == Implementation where
       hasUndefinedType?(ctx, fn) =>
         limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
 
-      if hasUnknownType? (ctx, n) then
-        t1 := tn.type
-        t2 := fn.type
-        u1 := (t1 ~= t2 => nodeUnionType [t1, t2]; t1)
-        u2 := (t1 ~= t2 => nodeUnionType [t2, t1]; t2)
-        ts := removeDuplicates [t1, t2, u1, u2]
+      t1 := tn.type
+      t2 := fn.type
+      ts : List(N) :=
+        t1 = t2 => [t1]
+        [t1, t2, nodeUnionType [t1, t2], nodeUnionType [t2, t1]]
+
+      if hasUnknownType?(ctx, n) then
         setTypeOf!(ctx, n, ts)
-        nodeSubTypeOf!(ctx, tn, ts) and nodeSubTypeOf!(ctx, fn, ts)
       else
-        nodeSubType!(ctx, tn, n) and nodeSubType!(ctx, fn, n)
+        not limitNodeType!(ctx, n, ts) => return false
+
+      nodeSubTypeOf!(ctx, tn, ts) and nodeSubTypeOf!(ctx, fn, ts)
 
     evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
