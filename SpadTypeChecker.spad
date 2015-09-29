@@ -222,8 +222,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
         not done? tn => return true
         if mappingType? tn.type and nodeRef? tn.node then
           tn := node(ctx, tn.node :: NR)
-          fn := tn.node :: FN
-          types := [nodeTypeDecl([fn.name :: Symbol], tn.type), :types]
+          if function? tn.node then
+            fn := tn.node :: FN
+            types := [nodeTypeDecl([fn.name :: Symbol], tn.type), :types]
       limitNodeType!(ctx, n, [nodeSeq("Join", reverse types)])
 
     -- evaluates single rule; note that it can happen that nothing was changed

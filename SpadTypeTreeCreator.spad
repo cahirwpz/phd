@@ -365,10 +365,12 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       for argNode in argNodeList for argType in fnType.args repeat
         if not unbound? argType then
-          setTypeOf!(ctx, argNode, [argType])
+          bindNode!(ctx, argNode, argType)
+          done! argNode
 
       if not unbound? fnType.result then
-        setTypeOf!(ctx, resNode, [fnType.result])
+        bindNode!(ctx, resNode, fnType.result)
+        done! resNode
 
       typeList : List(N) :=
         ([(emptyNode?(t) => n.type; t)

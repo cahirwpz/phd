@@ -548,7 +548,7 @@ TypeUnifier() : Exports == Implementation where
       unionType? n2 =>
         if unionType? n1 then
           r := isUnionSubType(n1 :: UT, n2 :: UT)
-          r ~= "false" => r
+          r ~= "false" => return r
 
         -- {S} <: {Union(T1, T2, ..., Tn)}
         -- i.e. foreach i such that S <: Ti. {S <: Ti or ...}
