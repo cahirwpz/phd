@@ -471,6 +471,22 @@ TypeUnifier() : Exports == Implementation where
          paren bold(empty? terms => red("no" :: PF); green("yes" :: PF))])
       [terms, merge subsList]
 
+    isSubType' : (N, N) -> Union(N, "true", "false")
+
+    isUnionSubType(ut1 : UT, ut2 : UT) : Union(N, "true", "false") ==
+      -- {Union(T1, T2, ..., Tn)} <: {Union(S1, S2, ..., Sm)} and n <= m
+      -- i.e. T1 <: S1 and T2 <: S2 and ... and Tn <: Sn
+      #(variants ut1) > #(variants ut2) => "false"
+      ts : List(N) := []
+      for v1 in variants ut1 for v2 in variants ut2 repeat
+        r := isSubType'(v1, v2)
+        r case "false" => return "false"
+        r case "true" => "iterate"
+        ts := [r :: N, :ts]
+      empty? ts => "true"
+      #ts = 1 => ts.1
+      nodeApp(['and], removeDuplicates ts)
+
     ++ INFO: Given a subtyping relation X <: Y, that reads as X is safe to use
     ++ in context where Y is used, we say that:
     ++ X <: Y => F(X) <: F(Y), then F is covariant
@@ -530,34 +546,19 @@ TypeUnifier() : Exports == Implementation where
         nodeApp(['and], removeDuplicates ts)
 
       unionType? n2 =>
-        unionType? n1 =>
-          -- {Union(T1, T2, ..., Tn)} <: {Union(S1, S2, ..., Sm)} and n <= m
-          -- i.e. T1 <: S1 and T2 <: S2 and ... and Tn <: Sn
-          ut1 := n1 :: UT
-          ut2 := n2 :: UT
-          #(variants ut1) > #(variants ut2) => "false"
-          ts : List(N) := []
-          for v1 in variants ut1 for v2 in variants ut2 repeat
-            r := isSubType'(v1, v2)
-            r case "false" => return "false"
-            r case "true" => "iterate"
-            ts := [r :: N, :ts]
-          empty? ts => "true"
-          #ts = 1 => ts.1
-          nodeApp(['and], removeDuplicates ts)
+        if unionType? n1 then
+          r := isUnionSubType(n1 :: UT, n2 :: UT)
+          r ~= "false" => r
 
         -- {S} <: {Union(T1, T2, ..., Tn)}
         -- i.e. foreach i such that S <: Ti. {S <: Ti or ...}
         ts : List(N) := []
-        once? := false
         for v in variants(n2 :: UT) repeat
           r := isSubType'(n1, v)
           r case "false" => "iterate"
-          once? := true
-          r case "true" => "iterate"
+          r case "true" => return "true"
           ts := [r :: N, :ts]
-        not once? => "false"
-        empty? ts => "true"
+        empty? ts => "false"
         #ts = 1 => ts.1
         nodeApp(['or], removeDuplicates ts)
 
