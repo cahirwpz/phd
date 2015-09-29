@@ -14,13 +14,6 @@ SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
         -- otherwise it's return statement
         nodeApp(['return], args)
       nodeApp(fn, args)
-
-    rewrite (fn : FN) : N ==
-      args' := [rewrite arg for arg in fn.args]
-      body' := rewrite fn.body
-      if not sequence? body' then
-        body' := nodeSeq("Sequence", [body'])
-      nodeFun(fn.name, args', rewrite fn.type, body')
 
 )abbrev package SMEXP SpadMacroExpander
 SpadMacroExpander() : Exports == Implementation where

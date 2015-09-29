@@ -144,6 +144,8 @@ SpadTypeNode() : Exports == Implementation where
       t := bold (x.m_type :: PF)
       if typeVar? x.m_type then
         t := red t
+      if emptyNode? x.m_type then
+        t := bold yellow("%none" :: PF)
       t := indent(13, t)
       not empty? x.m_rules =>
         r := sepBy(" | " :: PF, [(r :: PF) for r in x.m_rules])
@@ -244,9 +246,9 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
     poisonNode! (x : %, tn : TN) ==
       info ["Poisoning" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
-        unregisterNode!(x.m_tree, tn, typeUndef)
+        unregisterNode!(x.m_tree, tn, emptyNode())
       else
-        tn.type := typeUndef
+        tn.type := emptyNode()
 
     bindNode! (x : %, tn : TN, t : N) ==
       info ["Binding" :: PF, tn.index :: PF, "node type to" :: PF, t :: PF]
@@ -320,6 +322,7 @@ SpadTypeTree() : Exports == Implementation where
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
     hasUnknownType? : (%, TN) -> Boolean
+    hasUndefinedType? : (%, TN) -> Boolean
     typeOf : (%, TN) -> List(N)
     extendTypeOf! : (%, TN, List(N)) -> Void
     setTypeOf! : (%, TN, List(N)) -> Void
@@ -383,6 +386,9 @@ SpadTypeTree() : Exports == Implementation where
     unknownType? (terms : List(N)) : Boolean ==
       #terms = 1 and emptyNode?(first terms)
 
+    undefinedType? (terms : List(N)) : Boolean ==
+      #terms = 1 and typeUndef?(first terms)
+
     poisonType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeUndef?(first terms)
 
@@ -420,6 +426,11 @@ SpadTypeTree() : Exports == Implementation where
     hasUnknownType? (x : %, tn : TN) : Boolean ==
       not typeVar? tn.type => false
       unknownType? (x.m_typevars)(tn.type :: TV)
+
+    hasUndefinedType? (x : %, tn : TN) : Boolean ==
+      not typeVar? tn.type =>
+        tn.type = typeUndef
+      undefinedType? (x.m_typevars)(tn.type :: TV)
 
     typeOf (x : %, n : TN) : List(N) ==
       not typeVar? n.type => [n.type] 
@@ -483,7 +494,6 @@ SpadTypeTree() : Exports == Implementation where
       terms := (x.m_typevars)(tv)
       #terms ~= 1 => false
       unknownType? terms => false
-      poisonType? terms => false
       term := first terms
       typeVar? term =>
         removeAlias!(x, tv, term)
@@ -534,6 +544,20 @@ SpadTypeTree() : Exports == Implementation where
       empty? subs => true
       "and"/[limitTypeVar!(x, s.key, s.entry) for s in entries subs]
 
+    flattenTypeOf (x : %, tn : TN) : List(N) ==
+      visited : Set(TV) := empty()
+      queue : Queue(N) := [typeOf(x, tn)]
+      types : List(N) := []
+
+      while not empty? queue repeat
+        t := dequeue! queue
+        typeVar? t =>
+          member?(t :: TV, visited) => "iterate"
+          types := concat(types, (x.m_typevars)(t :: TV))
+        types := concat(types, t)
+
+      removeDuplicates types
+
     nodesTypeMatch! (x : %, ln : TN, rn : TN) : Boolean ==
       -- %a[?] ~ %b[?]
       hasUnknownType?(x, ln) and hasUnknownType?(x, rn) =>
@@ -573,12 +597,12 @@ SpadTypeTree() : Exports == Implementation where
       -- b) {%s[?]} <: {%t[t1, t2, ...] | T}
       hasUnknownType?(x, sn) or hasUnknownType?(x, tn) => true
       -- We're left with: {%s[s1, s2, ...] | S} <: {%t[t1, t2, ...] | T}
-      sl : List(N) := [s for s in typeOf(x, sn)]
-      tl : List(N) := [t for t in typeOf(x, tn)]
       -- In %s and %t there are usually some type variables. We could
       -- start normalizing terms to find out what's their exact structure, but
       -- I don't know how to deal with them yet. 
       -- With terms of known structure we can deal quite well.
+      sl : List(N) := []
+      tl : List(N) := []
       for s in typeOf(x, sn) repeat
         for t in typeOf(x, tn) repeat
           if isSubType(s, t) then

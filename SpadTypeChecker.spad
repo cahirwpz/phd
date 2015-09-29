@@ -117,6 +117,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
           argsOk? := false
         not argsOk? => "iterate"
         -- 3) Check if result type is correct for given signature.
+        sig.result = typeUndef =>
+          sigs := [t, :sigs]
         ures := unifyType(sig.result, typeOf(ctx, n))
         ures case "failed" => "iterate"
         -- 4) Collect variable substitutions and valid signature.
@@ -168,21 +170,30 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       tn := node(ctx, r.truebr :: NR) -- true branch node
       emptyNode? r.falsebr =>
-        types := [tn.type, nodeUnionType [tn.type, typeUndef]]
-        limitNodeType!(ctx, n, types) => true
-        false
+        limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
 
       fn := node(ctx, r.falsebr :: NR) -- false branch node
+
+      hasUndefinedType?(ctx, fn) and hasUndefinedType?(ctx, tn) =>
+        setTypeOf!(ctx, n, [typeUndef])
+        done! n
+        true
+
+      hasUndefinedType?(ctx, tn) =>
+        limitNodeType!(ctx, n, [fn.type, nodeUnionType [fn.type, typeUndef]])
+
+      hasUndefinedType?(ctx, fn) =>
+        limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
 
       t1 := tn.type
       t2 := fn.type
       u1 := (t1 ~= t2 => nodeUnionType [t1, t2]; t1)
       u2 := (t1 ~= t2 => nodeUnionType [t2, t1]; t2)
+      ts := removeDuplicates [u1, u2, t1, t2]
 
-      not limitNodeType!(ctx, tn, removeDuplicates [t2, u1, u2]) => false
-      not limitNodeType!(ctx, fn, removeDuplicates [t1, u1, u2]) => false
-      not limitNodeType!(ctx, n, removeDuplicates [t1, t2, u1, u2]) => false
-      true
+      if hasUnknownType? (ctx, n) then
+        setTypeOf!(ctx, n, ts)
+      nodeSubTypeOf!(ctx, tn, ts) and nodeSubTypeOf!(ctx, fn, ts)
 
     evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
@@ -192,6 +203,10 @@ SpadTypeTreeChecker() : Exports == Implementation where
     evalTypeIs(ctx : TT, r : TEI, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
       t := node(ctx, r.type :: NR)
+      -- %s[?] ~ (%t[?] | %t[t1, t2, ...] | T)
+      hasUnknownType?(ctx, s) =>
+        setTypeOf!(ctx, s, typeOf(ctx, t))
+        true
       nodesTypeMatch!(ctx, s, t)
 
     evalTypeOrigin(ctx : TT, r : TO, n : TN) : Boolean ==
@@ -253,13 +268,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
     checkAndMarkIfDone! (ctx : TT, n : TN) : Boolean ==
       unbound? n.type => false
-      typeUndef? n.type =>
-        empty? n.rules => false
-        for r in n.rules repeat
-          for f in r.formulas repeat
-            if not nodeRef? f then
-              return false
-        done! n; true
       if not empty? n.rules then
         -- We only care about first rule, because it produced actual solution.
         rule := first n.rules
@@ -332,13 +340,14 @@ SpadTypeTreeChecker() : Exports == Implementation where
         -- check if during meta-step the problem was reduced compared to
         -- previous meta-step
         newP := countProgress(ctx, i)
-        correct :=
+        progress? :=
           newP.a < p.a => true
           newP.a = p.a and newP.b < p.b => true
           false
-        not correct =>
-          fail ("Type checker does not advance by applying known typing rules!" :: PF)
-          return false
+        not progress? =>
+          warn(["Type checker does not progress in" :: PF,
+                number(i :: Integer) :: PF, "tree !" :: PF])
+          return true
 
         -- setup new meta-step
         p := newP

@@ -478,7 +478,7 @@ TypeUnifier() : Exports == Implementation where
     ++ otherwise F is invariant
     isSubType'(n1 : N, n2 : N) : Union(N, "true", "false") ==
       typeUndef? n1 or typeUndef? n2 => "false"
-      typeAny? n1 and typeAny? n2 => "false"
+      typeAny? n1 or typeAny? n2 => "true"
 
       n1 = n2 => "true"
       n2 = nodeApp(['Type], []) => "true"
@@ -592,9 +592,6 @@ TypeUnifier() : Exports == Implementation where
       typeVar? n2 =>
         occurs?(n2 :: TV, n1) => "false"
         nodeSubType(n1, n2)
-
-      -- Everything is subtype of wildcard type!
-      typeAny? n2 => "true"
 
       "false"
 

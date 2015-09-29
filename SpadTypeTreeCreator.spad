@@ -14,10 +14,11 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleCondExpr : (TN, TN, TN) -> TR
     ruleIfThen : (TN, TN) -> TR
     ruleFun : (FN, List(TN), TN, TN) -> TR
+    ruleFunDef : (TN, TN) -> TR
     ruleFtor : (FT, List(TN), TN, TN) -> TR
     ruleLoopIter : (TN, TN, TN) -> TR
     ruleLoop : (Union("loop", "collect", "repeat"), 
-                List(TN), List(TN), TN) -> TR
+                List(TN), List(TN), Union(TN, "none"), TN) -> TR
     ruleRef : (List(TN), TN) -> TR
     ruleTypeIs : (TN, TN) -> TR
     ruleTypeIs : (List(TN), TN, TN) -> TR
@@ -62,7 +63,11 @@ SpadTypeRuleFactory() : Exports == Implementation where
     -- compute "A1, ..., An, T, B"; if "T is B" then solution is "fn"
     ruleFun (fn, As', T', B') ==
       (As, T, B) := ([nodeRef(a) for a in As'], nodeRef(T'), nodeRef(B'))
-      [[:As, T, B, nodeTypeIs(B, T)], nodeFun(fn.name, As, T, B)]
+      [[:As, T, B, nodeSubType(B, T)], nodeFun(fn.name, As, T, B)]
+
+    ruleFunDef (S', T') ==
+      (S, T) := (nodeRef(S'), nodeRef(T'))
+      [[S, nodeTypeIs(S, T)], S]
 
     -- for functor "ft (a1 : A1, ..., an : An) : T == E add B" do:
     -- compute "A1, ..., An, T, B"; if "B <: T" then solution is "ft"
@@ -75,12 +80,15 @@ SpadTypeRuleFactory() : Exports == Implementation where
       (varRef, seqRef, iterRef) := (nodeRef(var), nodeRef(seq), nodeRef(iter))
       [[varRef, seqRef], nodeIterator(var.node :: Symbol, seqRef)]
 
-    ruleLoop (kind, itors, guards, body) ==
+    ruleLoop (kind, itors, guards, bodyType, body) ==
       itorRefs := [nodeRef(itor) for itor in itors]
       guardRefs := [nodeRef(guard) for guard in guards]
       bodyRef := nodeRef(body)
-      [[:itorRefs, :guardRefs, bodyRef],
-       nodeLoop(kind, itorRefs, guardRefs, bodyRef)]
+      formulas :=
+        bodyType case TN =>
+          [:itorRefs, :guardRefs, nodeRef(bodyType), bodyRef]
+        [:itorRefs, :guardRefs, bodyRef]
+      [formulas, nodeLoop(kind, itorRefs, guardRefs, bodyRef)]
 
     ruleRef (deps, body) ==
       depRefs := [nodeRef(dep) for dep in deps]
@@ -104,7 +112,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     ruleSeq (kind, seq, exprs) ==
       (seqRef, exprRefs) := (nodeRef(seq), [nodeRef(expr) for expr in exprs])
-      [[:exprRefs, nodeSubType(last exprRefs, seqRef)], nodeSeq(kind, exprRefs)]
+      [[:exprRefs, nodeTypeIs(seqRef, last exprRefs)], nodeSeq(kind, exprRefs)]
 
     ruleCapsule exprList ==
       exprRefList := [nodeRef(expr) for expr in exprList | not done? expr]
@@ -355,6 +363,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- specified, with type variables.
       fnType : MT := signature fn
 
+      for argNode in argNodeList for argType in fnType.args repeat
+        if not unbound? argType then
+          setTypeOf!(ctx, argNode, [argType])
+
+      if not unbound? fnType.result then
+        setTypeOf!(ctx, resNode, [fnType.result])
+
       typeList : List(N) :=
         ([(emptyNode?(t) => n.type; t)
           for n in [resNode, :argNodeList] for t in [fnType.result, :fnType.args]])
@@ -373,6 +388,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- the domain / package / function. Filter out those that don't match
       -- the type calculated above.
       candidateList : List(MT) := []
+
       if fn.name case Symbol then
         for n in search(fn.name :: Symbol, env') repeat
           candidate := emptyNode()
@@ -390,28 +406,26 @@ SpadTypeTreeCreator() : Exports == Implementation where
             candidate := substitute(fnType', ures :: SUBS)
             candidateList := [candidate :: MT, :candidateList]
 
-        for c in candidateList repeat 
-          for type in c.args | not unbound? type repeat
-            env' := envAddType(type, env')
-          if not unbound? c.result then
-            env' := envAddType(c.result, env')
+      for c in candidateList repeat 
+        for type in c.args | not unbound? type repeat
+          env' := envAddType(type, env')
+        if not unbound? c.result then
+          env' := envAddType(c.result, env')
 
-        -- TODO: Filter out function which have been already defined.
+      -- TODO: Filter out function which have been already defined.
+      if not empty? candidateList then
+        info(["Environment contains" :: PF, string bold(funName :: PF),
+              "from" :: PF, bold("$" :: PF), "with matching signatures:" :: PF,
+              bold bracket [c :: PF for c in candidateList]])
 
-        if not empty? candidateList then
-          info(["Environment contains" :: PF, string bold(funName :: PF),
-                "from" :: PF, bold("$" :: PF), "with matching signatures:" :: PF,
-                bold bracket [c :: PF for c in candidateList]])
-        else
-          info(["Considering" :: PF, string bold(funName :: PF),
-                "of type" :: PF, bold(fnType :: PF),
-                "to be a local function!" :: PF])
-          candidateList := [fnType]
-
-        setTypeOf!(ctx, funDeclNode, [[c] for c in candidateList])
-        setTypeOf!(ctx, resNode, [c.result for c in candidateList])
+        extendTypeOf!(ctx, funDeclNode, [[c] for c in candidateList])
+        extendTypeOf!(ctx, resNode, [c.result for c in candidateList])
         for argNode in argNodeList for i in 1.. repeat
-          setTypeOf!(ctx, argNode, [c.args.i for c in candidateList])
+          extendTypeOf!(ctx, argNode, [c.args.i for c in candidateList])
+      else
+        info(["Considering" :: PF, string bold(funName :: PF),
+              "of type" :: PF, bold(fnType :: PF),
+              "to be a local function!" :: PF])
 
       for n in fn.args for argNode in argNodeList repeat
         arg := n :: TD
@@ -421,7 +435,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       leaveSubTree!(ctx)
 
-      funDeclNode.rules := [ruleTypeIs(funDefNode, funDeclNode)]
+      funDeclNode.rules := [ruleFunDef(funDefNode, funDeclNode)]
       funDefNode.rules := [ruleFun(fn, argNodeList, resNode, bodyNode)]
 
       return funDeclNode
@@ -484,21 +498,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkLoop (lp : LP, ctx : CTX, env : ENV) : TN ==
       debug ["Loop statement." :: PF]
 
-      itemTypeNode : TN
-      deps : List(N) := []
-
-      if lp.kind case "collect" then
-        itemTypeNode := addNode!(ctx, emptyNode, env)
-        itemTypeNode.node := itemTypeNode.type
-        deps := [nodeRef(itemTypeNode)]
-
       this := addNode!(ctx, [lp], env)
       env' := env
-
-      if lp.kind case "collect" then
-        setTypeOf!(ctx, this, [nodeApp(['List], [itemTypeNode.type])])
-      else
-        bindNode!(ctx, this, typeUndef)
 
       debug ["Processing" :: PF, #(lp.itors) :: PF, "iterator(s)." :: PF]
       itorList : List(TN) := []
@@ -532,18 +533,23 @@ SpadTypeTreeCreator() : Exports == Implementation where
         guardList := [guardExpr, :guardList]
 
       debug ["Processing loop body." :: PF]
+      maybeBodyType : Union(TN, "none") := "none"
       body : TN
       if lp.kind case "collect" then
-        body := addNode!(ctx, lp.body, env')
-        bodyExpr := walk(lp.body, ctx, env')
-        setTypeOf!(ctx, body, [this.type])
-        body.rules := [ruleSubType(bodyExpr, body)]
+        bodyType := addNode!(ctx, emptyNode, env)
+        body := walk(lp.body, ctx, env')
+        bodyType.node := bodyType.type
+        bodyType.rules := [ruleSubType(body, bodyType)]
+        setTypeOf!(ctx, body, [bodyType.type])
+        setTypeOf!(ctx, this, [nodeApp(['List], [bodyType.type])])
+        maybeBodyType := bodyType
       else
         body := walk(lp.body, ctx, env')
         bindNode!(ctx, body, typeAny)
-        done! body
+        bindNode!(ctx, this, typeUndef)
 
-      this.rules := [ruleLoop(lp.kind, itorList, guardList, body)]
+      this.rules := 
+        [ruleLoop(lp.kind, itorList, guardList, maybeBodyType, body)]
       this
 
     walkSeg (seg : SEG, ctx : CTX, env : ENV) : TN ==
@@ -590,6 +596,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this := addNode!(ctx, [s], env)
 
       types := search(s, env)
+
+      -- Convert "constant -> T" into "T"
+      for t in types repeat
+        t := stripOriginIfCan t
+        if mappingType? t and (t :: MT).args = [['constant]] then
+          types := [(t :: MT).result, :types]
+
       -- BUG: parseTran uses true and false as "Boolean" and not as "() -> Boolean"
       -- workaround for Boolean constants
       if s = 'true or s = 'false then
@@ -597,21 +610,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
       if s = '_$NoValue then
         types := [voidType, :types]
       if s = 'leave then
-        leaveType := nodeMappingType([integerType, voidType], typeAny) 
+        leaveType := nodeMappingType([integerType, voidType], typeUndef) 
         types := [leaveType, :types]
       if s = 'error then
         errorType := nodeMappingType([stringType], typeAny)
         types := [errorType, :types]
       if s = 'return then
         resType := node(ctx, 2).type
-        returnType := nodeMappingType([integerType, resType], typeAny)
+        returnType := nodeMappingType([integerType, resType], typeUndef)
         types := [returnType, :types]
-
-      -- Convert "constant -> T" into "T"
-      for t in types repeat
-        t := stripOriginIfCan t
-        if mappingType? t and empty? (t :: MT).args then
-          types := [(t :: MT).result, :types]
 
       -- handle a symbol which is a type constructor
       if inDatabase? s then
