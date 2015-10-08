@@ -1,5 +1,7 @@
 )abbrev domain TEST1 Test1
 Test1() : Exports == Implementation where
+  NNI ==> NonNegativeInteger
+  PI ==> PositiveInteger
   I ==> Integer
   F ==> Float
   S ==> String
@@ -8,20 +10,24 @@ Test1() : Exports == Implementation where
     foo : I -> I
     foo : F -> F
     bar : (I, I) -> I
+    -- fib : NNI -> NNI
 
   Implementation ==> add
-    import Float
-    import PositiveInteger
-    import NonNegativeInteger
+    import F
+    import PI
+    import NNI
+    import I
 
     -- foo : I -> F
 
     foo (a : I) ==
       a2 := a * a
       ma := - a
-      if a >= 0
-        then ma * 2
-        else a2 + 2
+      r :=
+        if a >= 0
+          then ma * 2
+          else a2 + 2
+      r + 3
 
     -- [BUG] Type checker should remember that {foo : I -> I} has been already
     -- defined.
@@ -44,3 +50,9 @@ Test1() : Exports == Implementation where
 
     baz (x, y) ==
       x * y
+
+    -- [BUG]
+    -- fib n ==
+    --  n = 0 => 0
+    --  n = 1 => 1
+    --  fib(n - 1) + fib(n - 2)

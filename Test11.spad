@@ -1,0 +1,9 @@
+)abbrev domain TEST11 Test11
+Test11(S : Type) : Exports == Implementation where
+  I ==> Integer
+
+  Exports ==> List(S) with
+    id : List(S) -> List(S)
+
+  Implementation ==> List(S) add
+    id x == x

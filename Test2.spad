@@ -1,15 +1,31 @@
 )abbrev domain TEST2 Test2
 Test2(A : Type) : Exports == Implementation where
   I ==> Integer
+  PI ==> PositiveInteger
   NNI ==> NonNegativeInteger
+  F ==> Float
 
   Exports ==> with
+    gcd : (NNI, NNI) -> NNI
     index : (A -> Boolean, List(A)) -> NonNegativeInteger
     sumPositive : List(I) -> I
     sumRange : (List(I), Integer, Integer) -> Integer
     countPositive : List(I) -> I
+    -- findchar : (String, Character) -> PI
 
   Implementation ==> add
+    import I
+    import PI
+    import NNI
+    import F
+
+    gcd (a, b) ==
+      while a ~= 0 repeat
+         c := a
+         a := b rem a
+         b := c
+      b
+
     sumPositive l ==
       s := 0
       for i in reverse l | i > 0 repeat
@@ -19,18 +35,18 @@ Test2(A : Type) : Exports == Implementation where
 
     sumRange (l, i, j) ==
       s := 0
-      for k in i..(j - 1) repeat
+      for k in i..(j - 1) | odd? k repeat
         s := s + l(k)
         10
       s
 
     index(pred, l) ==
-      i := 1 :: NNI
+      i := 1 :: NNI -- BUG: Should it work without coercion ?
       while not empty? l repeat
         h := first l
         pred h =>
           return i
-        i := i + 1
+        i := i + 1 :: NNI -- BUG: ... same here.
         l := rest l
         'bogus
       0
@@ -42,3 +58,9 @@ Test2(A : Type) : Exports == Implementation where
           i := i + 1
         1.0
       i
+
+    -- This loop either finishes with return statement or crashes.
+    -- findchar (s, c) ==
+    --   for i in 1.. repeat
+    --     if s.i = c then
+    --       return i

@@ -3,11 +3,24 @@ Test7() : Exports == Implementation where
 
   Exports ==> with
     allPositive? : List(Integer) -> Boolean
+    -- allNegative? : List(Integer) -> Boolean
     positive? : List(Integer) -> List(Boolean)
+    doubleOdd : List(Integer) -> List(Integer)
+    -- existsGT : (List(Integer), Integer) -> Boolean
 
   Implementation ==> add
     allPositive? l ==
       every?(i +-> i > 0, l)
 
+    -- allNegative? l ==
+    --   "and"/[i < 0 for i in l]
+
     positive? l ==
       [i > 0 for i in l]
+
+    doubleOdd l ==
+      [i * 2 for i in l | odd? i]
+
+    -- existsGT (l, n) == 
+    --   GT x == x > n
+    --   any?(GT, l)
