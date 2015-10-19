@@ -46,7 +46,12 @@ TypeUnifier() : Exports == Implementation where
 
     findMatches : (List(N), List(N)) -> Record(terms : List(N), subs : SUBS)
 
-    isSubType : (N, N) -> Boolean
+    isSubType : (N, N) -> Union(N, "true", "false")
+
+    findSubTypes : (List(N), List(N)) -> List(N)
+
+    dropSuperTypes : List(N) -> List(N)
+    dropSubTypes : List(N) -> List(N)
 
   Implementation ==> add
     import Printer
@@ -494,7 +499,7 @@ TypeUnifier() : Exports == Implementation where
     ++ otherwise F is invariant
     isSubType'(n1 : N, n2 : N) : Union(N, "true", "false") ==
       typeUndef? n1 or typeUndef? n2 => "false"
-      typeAny? n1 or typeAny? n2 => "true"
+      typeAny? n1 or typeAny? n2 => "false"
 
       n1 = n2 => "true"
       n2 = nodeApp(['Type], []) => "true"
@@ -521,10 +526,10 @@ TypeUnifier() : Exports == Implementation where
         -- {T0(T1, T2, ..., Tk)} <: {S0(S1, S2, ..., Sk)}
         -- AFAIK functors in SPAD are invariant (!) for the time being.
         -- Handle built-in subtyping relations.
-        n1 = nodeApp(['PositiveInteger], []) =>
-          isSubType'(nodeApp(['NonNegativeInteger], []), n2)
-        n1 = nodeApp(['NonNegativeInteger], []) =>
-          isSubType'(nodeApp(['Integer], []), n2)
+        n1 = positiveIntegerType =>
+          isSubType'(nonNegativeIntegerType, n2)
+        n1 = nonNegativeIntegerType =>
+          isSubType'(integerType, n2)
         app1 := n1 :: APP
         app2 := n2 :: APP
         app1.function ~= app2.function => "false"
@@ -583,7 +588,8 @@ TypeUnifier() : Exports == Implementation where
       typeOrigin? n1 and typeOrigin? n2 =>
         to1 := n1 :: TO
         to2 := n2 :: TO
-        to1.type ~= to2.type => "false"
+        -- We don't care where signature comes from...
+        -- to1.type ~= to2.type => "false"
         isSubType'(to1.expr, to2.expr)
 
       sequence? n1 and sequence? n2 =>
@@ -608,12 +614,42 @@ TypeUnifier() : Exports == Implementation where
 
       "false"
 
-    isSubType(n1 : N, n2 : N) : Boolean ==
+    isSubType(n1 : N, n2 : N) : Union(N, "true", "false") ==
       res := isSubType'(n1, n2)
       pf :=
         res case "true" => bold green("yes" :: PF)
         res case "false" => bold red("no" :: PF)
         spaces [bold magenta ("when" :: PF), (res :: N) :: PF]
-      info ([brace(bold(n1 :: PF)), bold yellow("<:" :: PF),
-             brace(bold(n2 :: PF)), pf])
-      not res case "false"
+      debug ([brace(bold(n1 :: PF)), bold yellow("<:" :: PF),
+              brace(bold(n2 :: PF)), pf])
+      res
+
+    findSubTypes(ts1 : List(N), ts2 : List(N)) : List(N) ==
+      ts : List(N) := []
+      for t1 in ts1 repeat
+        for t2 in ts2 repeat
+          isSubType'(t1, t2) case "false" => "iterate"
+          ts := [t1, :ts]
+      removeDuplicates ts
+
+    dropSuperTypes(sl : List(N)) : List(N) ==
+      tl : List(N) := []
+      for s in sl repeat
+        subTypeExists? := false
+        for t in sl | s ~= t and not subTypeExists? repeat
+          if isSubType'(t, s) case "true" then
+            subTypeExists? := true
+        if not subTypeExists? then
+          tl := [s, :tl]
+      tl
+
+    dropSubTypes(sl : List(N)) : List(N) ==
+      tl : List(N) := []
+      for s in sl repeat
+        superTypeExists? := false
+        for t in sl | s ~= t and not superTypeExists? repeat
+          if isSubType'(s, t) case "true" then
+            superTypeExists? := true
+        if not superTypeExists? then
+          tl := [s, :tl]
+      tl

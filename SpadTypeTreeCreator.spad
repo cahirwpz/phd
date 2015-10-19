@@ -547,7 +547,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         maybeBodyType := bodyType
       else
         body := walk(lp.body, ctx, env')
-        bindNode!(ctx, body, typeAny)
+        setTypeOf!(ctx, body, [typeAny])
         bindNode!(ctx, this, typeUndef)
 
       this.rules := 
@@ -599,12 +599,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       types := search(s, env)
 
-      -- Convert "constant -> T" into "T"
-      for t in types repeat
-        t := stripOriginIfCan t
-        if mappingType? t and (t :: MT).args = [['constant]] then
-          types := [(t :: MT).result, :types]
-
       -- BUG: parseTran uses true and false as "Boolean" and not as "() -> Boolean"
       -- workaround for Boolean constants
       if s = 'true or s = 'false then
@@ -619,7 +613,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         types := [errorType, :types]
       if s = 'return then
         resType := node(ctx, 2).type
-        returnType := nodeMappingType([integerType, resType], typeUndef)
+        returnType := nodeMappingType([integerType, resType], typeAny)
         types := [returnType, :types]
 
       -- handle a symbol which is a type constructor
@@ -715,6 +709,22 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       expr := walk(tc.expr, ctx, env)
       coerceFun := walk(['coerce], ctx, env)
+
+      -- [WORKAROUND]
+      -- NonNegativeInteger should have:
+      --   coerce : I -> % 
+      --   retractIfCan : I -> Union(%, "failed")
+      -- PositiveInteger should have:
+      --   coerce : I -> % 
+      --   coerce : NNI -> % 
+      --   retractIfCan : I -> Union(%, "failed")
+      --   retractIfCan : NNI -> Union(%, "failed")
+      -- ... but they don't and compiler is able to perfom those coercions.
+      extendTypeOf!(ctx, coerceFun, [
+        nodeMappingType([integerType], nonNegativeIntegerType),
+        nodeMappingType([integerType], positiveIntegerType),
+        nodeMappingType([nonNegativeIntegerType], positiveIntegerType)])
+
       this.rules := [ruleSubType(expr, this), ruleApply(coerceFun, [expr])]
       this
     

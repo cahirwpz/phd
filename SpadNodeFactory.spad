@@ -17,6 +17,8 @@ SpadNodeFactory() : Exports == Implementation where
     booleanType : () -> N
     floatType : () -> N
     integerType : () -> N
+    nonNegativeIntegerType : () -> N
+    positiveIntegerType : () -> N
     outputFormType : () -> N
     stringType : () -> N
     symbolType : () -> N
@@ -40,6 +42,8 @@ SpadNodeFactory() : Exports == Implementation where
     booleanType () == nodeApp(['Boolean], [])
     floatType () == nodeApp(['DoubleFloat], [])
     integerType () == nodeApp(['Integer], [])
+    nonNegativeIntegerType () == nodeApp(['NonNegativeInteger], [])
+    positiveIntegerType () == nodeApp(['PositiveInteger], [])
     outputFormType () == nodeApp(['OutputForm], [])
     stringType () == nodeApp(['String], [])
     symbolType () == nodeApp(['Symbol], [])

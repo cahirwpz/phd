@@ -11,7 +11,7 @@ Test2(A : Type) : Exports == Implementation where
     sumPositive : List(I) -> I
     sumRange : (List(I), Integer, Integer) -> Integer
     countPositive : List(I) -> I
-    -- findchar : (String, Character) -> PI
+    findchar : (String, Character) -> PI
 
   Implementation ==> add
     import I
@@ -27,26 +27,26 @@ Test2(A : Type) : Exports == Implementation where
       b
 
     sumPositive l ==
-      s := 0
+      s : I := 0 -- BUG
       for i in reverse l | i > 0 repeat
         s := s + i
-        "bogus" :: String
+        "bogus"
       s
 
     sumRange (l, i, j) ==
-      s := 0
+      s : I := 0 -- BUG
       for k in i..(j - 1) | odd? k repeat
         s := s + l(k)
         10
       s
 
     index(pred, l) ==
-      i := 1 :: NNI -- BUG: Should it work without coercion ?
+      i := 1
       while not empty? l repeat
         h := first l
         pred h =>
           return i
-        i := i + 1 :: NNI -- BUG: ... same here.
+        i := i + 1
         l := rest l
         'bogus
       0
@@ -60,7 +60,7 @@ Test2(A : Type) : Exports == Implementation where
       i
 
     -- This loop either finishes with return statement or crashes.
-    -- findchar (s, c) ==
-    --   for i in 1.. repeat
-    --     if s.i = c then
-    --       return i
+    findchar (s, c) ==
+      for i in 1.. repeat
+        if s.i = c then
+          return i

@@ -71,6 +71,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
   SUBS ==> AssociationList(TV, List(N))
   URES ==> Union(SUBS, "failed")
+  SIG ==> Record(sig : N, subs : SUBS)
 
   TT ==> SpadTypeTree
   TNA ==> SpadTypeNodeArray(SpadTypeTree)
@@ -90,60 +91,71 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
     walk' : (TT, PI) -> Boolean
 
-    evalApply(ctx : TT, r : APP, n : TN) : Boolean ==
-      nfun := node(ctx, r.function :: NR) -- function node
-      nargs := [node(ctx, arg :: NR) for arg in r.args] -- argument nodes
+    coerce (s : SIG) : PF ==
+      empty? s.subs =>
+        bold(s.sig :: PF)
+      spaces [bold(s.sig :: PF), bold cyan("with" :: PF), bold(s.subs :: PF)]
 
-      sigs : List(N) := []
-      subsList : List(SUBS) := []
-      for t in typeOf(ctx, nfun) repeat
+    evalApply(ctx : TT, r : APP, n : TN) : Boolean ==
+      funNode := node(ctx, r.function :: NR)
+      argNodeList := [node(ctx, arg :: NR) for arg in r.args]
+
+      candidates : List(SIG) := []
+
+      for t in typeOf(ctx, funNode) repeat
         -- 1) Consider signature types with correct number of arguments.
         t' := stripOriginIfCan t
         not mappingType? t' => "iterate"
         sig := t' :: MT
+        -- replace {constant -> Type} with {() -> Type}
         if sig.args = [['constant]] then
           sig := [[], sig.result]$MT
-        #sig.args ~= #nargs => "iterate"
-        debug ["Checking signature:" :: PF, bold(t :: PF)]
+        #sig.args ~= #argNodeList => "iterate"
         -- 2) Check if arguments can be applied to function of given
         --    signature.
+        debug ["Checking signature:" :: PF, bold(t :: PF)]
+        subs : List(SUBS) := []
         argsOk? := true
-        for arg in sig.args for narg in nargs | argsOk? repeat
+        for arg in sig.args for narg in argNodeList | argsOk? repeat
           argTypes := typeOf(ctx, narg)
           ures := unifyType(arg, argTypes)
           ures case SUBS =>
-            subsList := [ures :: SUBS, :subsList]
-          "or"/[isSubType(argType, arg) for argType in argTypes] => "iterate"
-          argsOk? := false
+            subs := [ures :: SUBS, :subs]
+          "and"/[isSubType(argType, arg) case "false" for argType in argTypes] => 
+            argsOk? := false
         not argsOk? => "iterate"
         -- 3) Check if result type is correct for given signature.
-        sig.result = typeUndef =>
-          sigs := [t, :sigs]
-        ures := unifyType(sig.result, typeOf(ctx, n))
-        ures case "failed" => "iterate"
-        -- 4) Collect variable substitutions and valid signature.
-        subsList := [ures :: SUBS, :subsList]
-        sigs := [t, :sigs]
-      subs := merge subsList
+        resOk? := true
+        if sig.result ~= typeUndef and sig.result ~= typeAny then
+          res := sig.result
+          resTypes := typeOf(ctx, n)
+          ures := unifyType(res, resTypes)
+          ures case SUBS =>
+            subs := [ures :: SUBS, :subs]
+          "and"/[isSubType(res, resType) case "false" for resType in resTypes] =>
+            resOk? := false
+        not resOk? => "iterate"
+        -- 4) Collect valid signature.
+        candidates := [[t, merge subs], :candidates]
 
-      debug ["Valid signatures:" :: PF, bold bracket [t :: PF for t in sigs]]
+      notice pile ["Valid signatures:" :: PF, :[coerce c for c in candidates]]
 
-      empty? sigs => false
+      empty? candidates => false
 
-      if typeVar? nfun.type then
-        nodeSubTypeOf!(ctx, nfun, sigs)
+      if typeVar? funNode.type then
+        limitNodeType!(ctx, funNode, [c.sig for c in candidates])
 
-      for s in entries subs repeat
+      for s in entries merge [c.subs for c in candidates] repeat
         limitTypeVar!(ctx, s.key, s.entry)
 
       -- Fetch all inferred mappings.
       mappings : List(MT) := []
-      for t in sigs repeat
+      for t in [c.sig for c in candidates] repeat
         t := stripOriginIfCan t
         not mappingType? t => "iterate"
         mappings := [t :: MT, :mappings]
       -- Propagate function arguments and return type down the tree.
-      for i in 1..#nargs for narg in nargs repeat
+      for i in 1..#argNodeList for narg in argNodeList repeat
         nodeSubTypeOf!(ctx, narg, [(mt.args)(i) for mt in mappings])
       limitNodeType!(ctx, n, [mt.result for mt in mappings]) 
       true
@@ -170,46 +182,84 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       tn := node(ctx, r.truebr :: NR) -- true branch node
       emptyNode? r.falsebr =>
+        hasAnyType?(ctx, tn) =>
+          bindNode!(ctx, n, typeUndef)
+          bindNode!(ctx, tn, typeUndef)
+          done! n
+          done! tn
+          true
         limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
 
       fn := node(ctx, r.falsebr :: NR) -- false branch node
 
       hasUndefinedType?(ctx, fn) and hasUndefinedType?(ctx, tn) =>
-        setTypeOf!(ctx, n, [typeUndef])
+        bindNode!(ctx, n, typeUndef)
         done! n
         true
+
+      hasAnyType?(ctx, tn) and hasAnyType?(ctx, fn) =>
+        hasAnyType?(ctx, n) =>
+          bindNode!(ctx, n, typeAny)
+          done! n
+          true
+        hasUnknownType?(ctx, n) =>
+          setTypeOf!(ctx, n, [typeAny])
+        limitNodeType!(ctx, tn, [n.type]) and limitNodeType!(ctx, fn, [n.type])
 
       hasUndefinedType?(ctx, tn) =>
         limitNodeType!(ctx, n, [fn.type, nodeUnionType [fn.type, typeUndef]])
 
+      hasAnyType?(ctx, tn) =>
+        limitNodeType!(ctx, n, [fn.type]) and limitNodeType!(ctx, tn, [fn.type])
+
       hasUndefinedType?(ctx, fn) =>
         limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
+
+      hasAnyType?(ctx, fn) =>
+        limitNodeType!(ctx, n, [tn.type]) and limitNodeType!(ctx, fn, [tn.type])
 
       t1 := tn.type
       t2 := fn.type
       ts : List(N) :=
         t1 = t2 => [t1]
+        isSubType(t1, t2) case "true" => [t2]
+        isSubType(t2, t1) case "true" => [t1]
         [t1, t2, nodeUnionType [t1, t2], nodeUnionType [t2, t1]]
 
-      if hasUnknownType?(ctx, n) then
-        setTypeOf!(ctx, n, ts)
-      else
-        not limitNodeType!(ctx, n, ts) => return false
-
-      nodeSubTypeOf!(ctx, tn, ts) and nodeSubTypeOf!(ctx, fn, ts)
+      (limitNodeType!(ctx, n, ts) and
+       nodeSubTypeOf!(ctx, tn, ts) and
+       nodeSubTypeOf!(ctx, fn, ts))
 
     evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
       t := node(ctx, r.type :: NR)
+      hasAnyType?(ctx, s) => limitNodeType!(ctx, s, [t.type])
+      hasUndefinedType?(ctx, s) => true
       nodeSubType!(ctx, s, t)
 
     evalTypeIs(ctx : TT, r : TEI, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
       t := node(ctx, r.type :: NR)
-      -- %s[?] ~ (%t[?] | %t[t1, t2, ...] | T)
+      -- %s[? | %any] is (%t[?] | %t[t1, t2, ...] | T)
       hasUnknownType?(ctx, s) =>
-        setTypeOf!(ctx, s, typeOf(ctx, t))
-        true
+        setTypeOf!(ctx, s, [t.type])
+      -- (%s[t1, t2, ...] | S) is %t[%any]
+      hasAnyType?(ctx, t)  =>
+        setTypeOf!(ctx, t, [s.type])
+      -- %s[%any] is (%t[?] | %t[t1, t2, ...] | T)
+      hasAnyType?(ctx, s) =>
+        -- %s[%any] is %t[?]
+        hasUnknownType?(ctx, t) =>
+          setTypeOf!(ctx, t, [typeAny])
+        -- %s[%any] is %t[%undef]
+        hasUndefinedType?(ctx, t) =>
+          bindNode!(ctx, s, typeUndef)
+          done! s
+          true
+        -- %s[%any] is (%t[t1, t2, ...] | T)
+        any := first typeOf(ctx, t)
+        setTypeOf!(ctx, s, [any])
+        setTypeOf!(ctx, t, [any])
       nodesTypeMatch!(ctx, s, t)
 
     evalTypeOrigin(ctx : TT, r : TO, n : TN) : Boolean ==
@@ -295,7 +345,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       p := [#listTypeVars(x), 0]
       for n in members x | not done? n repeat
         p.a := p.a + 1
-        if hasUnknownType?(ctx, n)
+        if hasUnknownType?(ctx, n) or hasAnyType?(ctx, n)
           then p.a := p.a + 1
           else p.b := p.b + #typeOf(ctx, n)
       p

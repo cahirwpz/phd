@@ -10,15 +10,13 @@ Test1() : Exports == Implementation where
     foo : I -> I
     foo : F -> F
     bar : (I, I) -> I
-    -- fib : NNI -> NNI
+    fib : NNI -> NNI
 
   Implementation ==> add
     import F
     import PI
     import NNI
     import I
-
-    -- foo : I -> F
 
     foo (a : I) ==
       a2 := a * a
@@ -32,7 +30,6 @@ Test1() : Exports == Implementation where
     -- [BUG] Type checker should remember that {foo : I -> I} has been already
     -- defined.
     -- foo a == a + 1
-
     foo (a : F) == a + 1.0
 
     baz : (I, I) -> I
@@ -51,8 +48,7 @@ Test1() : Exports == Implementation where
     baz (x, y) ==
       x * y
 
-    -- [BUG]
-    -- fib n ==
-    --  n = 0 => 0
-    --  n = 1 => 1
-    --  fib(n - 1) + fib(n - 2)
+    fib n ==
+      n = 0 => 0
+      n = 1 => 1
+      fib((n - 1) :: NNI) + fib((n - 2) :: NNI)

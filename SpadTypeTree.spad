@@ -323,9 +323,10 @@ SpadTypeTree() : Exports == Implementation where
     addNode! : (%, N, ENV) -> TN
     hasUnknownType? : (%, TN) -> Boolean
     hasUndefinedType? : (%, TN) -> Boolean
+    hasAnyType? : (%, TN) -> Boolean
     typeOf : (%, TN) -> List(N)
     extendTypeOf! : (%, TN, List(N)) -> Void
-    setTypeOf! : (%, TN, List(N)) -> Void
+    setTypeOf! : (%, TN, List(N)) -> Boolean
 
     addSubTree! : % -> Void
     leaveSubTree! : % -> Void
@@ -432,6 +433,11 @@ SpadTypeTree() : Exports == Implementation where
         tn.type = typeUndef
       undefinedType? (x.m_typevars)(tn.type :: TV)
 
+    hasAnyType? (x : %, tn : TN) : Boolean ==
+      not typeVar? tn.type =>
+        tn.type = typeAny
+      anyType? (x.m_typevars)(tn.type :: TV)
+
     typeOf (x : %, n : TN) : List(N) ==
       not typeVar? n.type => [n.type] 
       tl := (x.m_typevars)(n.type :: TV)
@@ -445,10 +451,11 @@ SpadTypeTree() : Exports == Implementation where
           (x.m_typevars)(tv) := terms
         (x.m_typevars)(tv) := removeDuplicates concat((x.m_typevars)(tv), terms)
 
-    setTypeOf! (x : %, tn : TN, terms : List(N)) : Void ==
+    setTypeOf! (x : %, tn : TN, terms : List(N)) : Boolean ==
       typeVar? tn.type =>
         (x.m_typevars)(tn.type :: TV) := terms
-      #terms ~= 1 or not isSubType(terms.1, tn.type) =>
+        true
+      #terms ~= 1 or isSubType(terms.1, tn.type) case "false" =>
         warn ["Cannot set the type of" :: PF, tn.index :: PF, "node!" :: PF]
         warn pile(
           ["Types not equal:" :: PF,
@@ -456,7 +463,9 @@ SpadTypeTree() : Exports == Implementation where
            indent(2, tn.type :: PF),
            bold red("new:" :: PF), 
            indent(2, vconcat [t :: PF for t in terms])])
+        false
       tn.type := terms.1
+      true
 
     addSubTree! x ==
       subtree := [x, (#(x.m_nodes) + 1) :: PI]
@@ -494,6 +503,7 @@ SpadTypeTree() : Exports == Implementation where
       terms := (x.m_typevars)(tv)
       #terms ~= 1 => false
       unknownType? terms => false
+      anyType? terms => false
       term := first terms
       typeVar? term =>
         removeAlias!(x, tv, term)
@@ -514,11 +524,18 @@ SpadTypeTree() : Exports == Implementation where
       rewriteNodes!(x, tv, alias)
       remove!(tv, x.m_typevars)
 
+    findMatches'(ts1 : List(N), ts2 : List(N)) : Record(terms : List(N), subs : SUBS) ==
+      warn [bracket [t :: PF for t in ts1], "~" :: PF, bracket [t :: PF for t in ts2]]
+      ms := findMatches(ts1, ts2)
+      ts := [t for t in findSubTypes(ts1, ts2) | not typeVar? t]
+      [removeDuplicates concat(ms.terms, ts), ms.subs]
+
     limitTypeVar! (x : %, tv : TV, terms : List(N)) : Boolean ==
       debug(["Modyfing" :: PF, bold(tv :: PF), "type variable with" :: PF,
              bracket [bold(t :: PF) for t in terms]])
       -- 1) typevars(%x) = [?]
-      unknownType? (x.m_typevars)(tv) =>
+      ts := (x.m_typevars)(tv)
+      unknownType? ts or anyType? ts =>
         -- a) %x = %y => alias removal
         -- b) %x = [t1, t2, t3, ...]
         if aliasType? terms
@@ -528,16 +545,9 @@ SpadTypeTree() : Exports == Implementation where
       -- 2) typevars(%x) = [s1, s2, s3, ...], %x = [t1, t2, t3, ...]
       -- Unify proposed values with already stored in the variable
       -- store only matching ones (without performing substitutions).
-      ms := findMatches((x.m_typevars)(tv), terms)
-      not empty? ms.terms =>
-        (x.m_typevars)(tv) := ms.terms
-        true
-      -- Unification failed, as a last resort use subtyping.
-      for term in terms repeat
-        for t in (x.m_typevars)(tv) repeat
-          if not isSubType(t, term) then
-            return false
-      (x.m_typevars)(tv) := terms
+      ms := findMatches'(ts, terms)
+      empty? ms.terms => false
+      (x.m_typevars)(tv) := ms.terms
       true
 
     limitTypeVar! (x : %, subs : SUBS) : Boolean ==
@@ -564,6 +574,13 @@ SpadTypeTree() : Exports == Implementation where
         ures := unifyType(ln.type, rn.type)
         ures case "failed" => false
         limitTypeVar!(x, ures :: SUBS)
+      -- %a[%any] ~ %b[...]
+      hasAnyType?(x, ln) and not hasAnyType?(x, rn) =>
+        bindNode!(x, ln, first typeOf(x, rn))
+        true
+      not hasAnyType?(x, ln) and hasAnyType?(x, rn) =>
+        bindNode!(x, rn, first typeOf(x, ln))
+        true
       -- %a[?] ~ (%b[t1, t2, ...] | T)
       hasUnknownType?(x, ln) and not hasUnknownType?(x, rn) =>
         limitTypeVar!(x, ln.type :: TV, [rn.type])
@@ -571,7 +588,7 @@ SpadTypeTree() : Exports == Implementation where
       not hasUnknownType?(x, ln) and hasUnknownType?(x, rn) =>
         limitTypeVar!(x, rn.type :: TV, [ln.type])
       -- (%a[t1, t2, ...] | T) ~ (%b[s1, s2, ...] | S)
-      ms := findMatches(typeOf(x, ln), typeOf(x, rn))
+      ms := findMatches'(typeOf(x, ln), typeOf(x, rn))
       empty? ms.terms => false
       if not aliasType? ms.terms then
         setTypeOf!(x, ln, ms.terms)
@@ -579,11 +596,15 @@ SpadTypeTree() : Exports == Implementation where
       limitTypeVar!(x, ms.subs)
 
     limitNodeType! (x : %, n : TN, types : List(N)) : Boolean ==
+      debug(["Limit type of" :: PF, n.index :: PF, "node to" :: PF,
+             bracket [t :: PF for t in types]])
+      types := dropSuperTypes types
       -- %a[?] ~ [s1, s2, ...]
       hasUnknownType?(x, n) =>
         limitTypeVar!(x, n.type :: TV, types)
       -- (%a[t1, t2, ...] | T) ~ [s1, s2, ...]
-      ms := findMatches(typeOf(x, n), types)
+      anyType? types => true
+      ms := findMatches'(typeOf(x, n), types)
       empty? ms.terms => false
       if not aliasType? ms.terms then
         setTypeOf!(x, n, ms.terms)
@@ -605,9 +626,9 @@ SpadTypeTree() : Exports == Implementation where
       tl : List(N) := []
       for s in typeOf(x, sn) repeat
         for t in typeOf(x, tn) repeat
-          if isSubType(s, t) then
-            sl := [s, :sl]
-            tl := [t, :tl]
+          isSubType(s, t) case "false" => "iterate"
+          sl := [s, :sl]
+          tl := [t, :tl]
       empty? sl or empty? tl => false
       setTypeOf!(x, sn, removeDuplicates sl)
       setTypeOf!(x, tn, removeDuplicates tl)
@@ -621,8 +642,8 @@ SpadTypeTree() : Exports == Implementation where
       sl : List(N) := []
       for s in typeOf(x, sn) repeat
         for t in types repeat
-          if isSubType(s, t) then
-            sl := [s, :sl]
+          isSubType(s, t) case "false" => "iterate"
+          sl := [s, :sl]
       empty? sl => false
       sl := removeDuplicates sl
       -- {%s[s1, s2, ...] | S) <: %any
@@ -630,11 +651,7 @@ SpadTypeTree() : Exports == Implementation where
         -- let's choose a type that is super type of [s1, s2, ...]
         setTypeOf!(x, sn, [(#sl = 1 => first sl; nodeUnionType sl)])
         true
-      tl : List(N) := []
-      for s in sl repeat
-        if not "or"/[isSubType(s, t) for t in sl | s ~= t] then
-          tl := [s, :tl]
-      setTypeOf!(x, sn, tl)
+      setTypeOf!(x, sn, dropSuperTypes sl)
       true
 
     coerceTV (e : Record(key : TV, entry : List(N))) : PF ==

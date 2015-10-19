@@ -8,7 +8,7 @@ Test3() : Exports == Implementation where
     hello2 : () -> Void
     foobar : Integer -> Integer
     baz : Integer -> String
-    -- barf : I -> NNI
+    barf : Integer -> NNI
 
   Implementation ==> add
     import Integer
@@ -16,7 +16,7 @@ Test3() : Exports == Implementation where
     import OutputForm
     import PositiveInteger
 
-    ++ [OK] Type checker removes coercion to PositiveInteger.
+    -- [OK] Type checker removes coercion to PositiveInteger.
     id x == x :: PositiveInteger
 
     hello1() ==
@@ -25,7 +25,7 @@ Test3() : Exports == Implementation where
     hello2() ==
       print(coerce(0@Integer)@OutputForm)
 
-    ++ [OK] Support for %any type.
+    -- [OK] Support for %any type.
     foobar x ==
       x < 0 => error "Cannot accept negative integer!"
       x
@@ -33,9 +33,10 @@ Test3() : Exports == Implementation where
     baz x ==
       error "Not implemented!"
 
-    -- [BUG] What is the type of if expression ?
-    -- barf a ==
-    --   if a > 0 then
-    --     return a
-    --   else
-    --     return -a
+    -- [BUG] Coercion selects {coerce : I -> PI}
+    --       instead of {coerce : I -> NNI}
+    barf a ==
+      if a > 0 then
+        return (a :: NNI)
+      else
+        return ((-a) :: NNI)
