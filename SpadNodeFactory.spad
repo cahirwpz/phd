@@ -74,6 +74,7 @@ SpadNodeFactory() : Exports == Implementation where
         s : N := f.expr
         r : N := f.type
         funs := ([[f.expr, mt([['constant]$N], s)],
+                  [f.expr, s],
                   [['elt], mt([n, s], r)],
                   [['setelt!], mt([n, s, r], r)], :funs])
       funs

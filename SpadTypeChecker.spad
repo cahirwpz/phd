@@ -138,7 +138,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         -- 4) Collect valid signature.
         candidates := [[t, merge subs], :candidates]
 
-      notice pile ["Valid signatures:" :: PF, :[coerce c for c in candidates]]
+      info pile ["Valid signatures:" :: PF, :[coerce c for c in candidates]]
 
       empty? candidates => false
 

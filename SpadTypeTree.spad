@@ -525,7 +525,6 @@ SpadTypeTree() : Exports == Implementation where
       remove!(tv, x.m_typevars)
 
     findMatches'(ts1 : List(N), ts2 : List(N)) : Record(terms : List(N), subs : SUBS) ==
-      warn [bracket [t :: PF for t in ts1], "~" :: PF, bracket [t :: PF for t in ts2]]
       ms := findMatches(ts1, ts2)
       ts := [t for t in findSubTypes(ts1, ts2) | not typeVar? t]
       [removeDuplicates concat(ms.terms, ts), ms.subs]

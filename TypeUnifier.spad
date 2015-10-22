@@ -585,12 +585,13 @@ TypeUnifier() : Exports == Implementation where
         td1.expr ~= td2.expr => "false"
         isSubType'(td1.type, td2.type)
 
-      typeOrigin? n1 and typeOrigin? n2 =>
+      typeOrigin? n1 =>
         to1 := n1 :: TO
+        isSubType'(to1.expr, n2)
+
+      typeOrigin? n2 =>
         to2 := n2 :: TO
-        -- We don't care where signature comes from...
-        -- to1.type ~= to2.type => "false"
-        isSubType'(to1.expr, to2.expr)
+        isSubType'(n1, to2.expr)
 
       sequence? n1 and sequence? n2 =>
         s1 := n1 :: SEQ
