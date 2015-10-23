@@ -279,8 +279,7 @@ TypeUnifier() : Exports == Implementation where
       typeDecl? n =>
         td := n :: TD
         nodeTypeDecl(substitute(td.expr, var, term),
-                     substitute(td.type, var, term),
-                     td.sig)
+                     substitute(td.type, var, term))
       typeGuard? n =>
         tg := n :: TG
         nodeTypeGuard(substitute(tg.expr, var, term),
@@ -498,10 +497,17 @@ TypeUnifier() : Exports == Implementation where
     ++ X <: Y => F(Y) <: F(X), then F is contravariant
     ++ otherwise F is invariant
     isSubType'(n1 : N, n2 : N) : Union(N, "true", "false") ==
+      typeOrigin? n1 =>
+        to1 := n1 :: TO
+        isSubType'(to1.expr, n2)
+
+      typeOrigin? n2 =>
+        to2 := n2 :: TO
+        isSubType'(n1, to2.expr)
+
       typeUndef? n1 or typeUndef? n2 => "false"
       typeAny? n1 or typeAny? n2 => "false"
 
-      n1 = n2 => "true"
       n2 = nodeApp(['Type], []) => "true"
 
       mappingType? n1 and mappingType? n2 =>
@@ -511,9 +517,9 @@ TypeUnifier() : Exports == Implementation where
         mt1 := n1 :: MT
         mt2 := n2 :: MT
         #mt1.args ~= #mt2.args => "false"
+        mt1.result ~= mt2.result => "false"
         ts : List(N) := []
-        for s in [mt1.result, :mt2.args]
-          for t in [mt2.result, :mt1.args] repeat
+        for s in mt2.args for t in mt1.args repeat
             r := isSubType'(s, t)
             r case "false" => return "false"
             r case "true" => "iterate"
@@ -527,8 +533,10 @@ TypeUnifier() : Exports == Implementation where
         -- AFAIK functors in SPAD are invariant (!) for the time being.
         -- Handle built-in subtyping relations.
         n1 = positiveIntegerType =>
+          n2 = positiveIntegerType => "true"
           isSubType'(nonNegativeIntegerType, n2)
         n1 = nonNegativeIntegerType =>
+          n2 = nonNegativeIntegerType => "true"
           isSubType'(integerType, n2)
         app1 := n1 :: APP
         app2 := n2 :: APP
@@ -585,14 +593,6 @@ TypeUnifier() : Exports == Implementation where
         td1.expr ~= td2.expr => "false"
         isSubType'(td1.type, td2.type)
 
-      typeOrigin? n1 =>
-        to1 := n1 :: TO
-        isSubType'(to1.expr, n2)
-
-      typeOrigin? n2 =>
-        to2 := n2 :: TO
-        isSubType'(n1, to2.expr)
-
       sequence? n1 and sequence? n2 =>
         s1 := n1 :: SEQ
         s2 := n2 :: SEQ
@@ -612,6 +612,8 @@ TypeUnifier() : Exports == Implementation where
       typeVar? n2 =>
         occurs?(n2 :: TV, n1) => "false"
         nodeSubType(n1, n2)
+
+      n1 = n2 => "true"
 
       "false"
 

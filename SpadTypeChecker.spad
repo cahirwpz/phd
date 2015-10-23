@@ -96,6 +96,17 @@ SpadTypeTreeChecker() : Exports == Implementation where
         bold(s.sig :: PF)
       spaces [bold(s.sig :: PF), bold cyan("with" :: PF), bold(s.subs :: PF)]
 
+    dropSubTypeSignatures(sl : List(SIG)) : List(SIG) ==
+      tl : List(SIG) := []
+      for s in sl repeat
+        superTypeExists? := false
+        for t in sl | s.sig ~= t.sig and not superTypeExists? repeat
+          if isSubType(s.sig, t.sig) case "true" then
+            superTypeExists? := true
+        if not superTypeExists? then
+          tl := [s, :tl]
+      tl
+
     evalApply(ctx : TT, r : APP, n : TN) : Boolean ==
       funNode := node(ctx, r.function :: NR)
       argNodeList := [node(ctx, arg :: NR) for arg in r.args]
@@ -132,11 +143,12 @@ SpadTypeTreeChecker() : Exports == Implementation where
           ures := unifyType(res, resTypes)
           ures case SUBS =>
             subs := [ures :: SUBS, :subs]
-          "and"/[isSubType(res, resType) case "false" for resType in resTypes] =>
-            resOk? := false
+          resOk? := false
         not resOk? => "iterate"
         -- 4) Collect valid signature.
         candidates := [[t, merge subs], :candidates]
+
+      candidates := dropSubTypeSignatures candidates
 
       info pile ["Valid signatures:" :: PF, :[coerce c for c in candidates]]
 
@@ -156,7 +168,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         mappings := [t :: MT, :mappings]
       -- Propagate function arguments and return type down the tree.
       for i in 1..#argNodeList for narg in argNodeList repeat
-        nodeSubTypeOf!(ctx, narg, [(mt.args)(i) for mt in mappings])
+        limitNodeType!(ctx, narg, [(mt.args)(i) for mt in mappings])
       limitNodeType!(ctx, n, [mt.result for mt in mappings]) 
       true
 
@@ -224,11 +236,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
         t1 = t2 => [t1]
         isSubType(t1, t2) case "true" => [t2]
         isSubType(t2, t1) case "true" => [t1]
-        [t1, t2, nodeUnionType [t1, t2], nodeUnionType [t2, t1]]
+        dropSubTypes [t1, t2, nodeUnionType [t1, t2], nodeUnionType [t2, t1]]
 
-      (limitNodeType!(ctx, n, ts) and
-       nodeSubTypeOf!(ctx, tn, ts) and
-       nodeSubTypeOf!(ctx, fn, ts))
+      not limitNodeType!(ctx, n, ts) => false
+
+      ts := typeOf(ctx, n)
+
+      nodeSubTypeOf!(ctx, tn, ts) and nodeSubTypeOf!(ctx, fn, ts)
 
     evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
       s := node(ctx, r.expr :: NR)
@@ -289,7 +303,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
           walk'(ctx, nr.major)
         true
 
-      debug (["Running type inference for" :: PF, n.index :: PF,
+      debug (["Running type inference for" :: PF, bold(n.index :: PF),
               "of" :: PF, n.type :: PF, "type." :: PF])
 
       apply? f => evalApply(ctx, f :: APP, n)
@@ -387,7 +401,8 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
           -- If type is inferred for all formulas the node itself won't change
           checkAndMarkIfDone!(ctx, n) =>
-            debug ["Processing node" :: PF, n.index :: PF, "completed!" :: PF]
+            debug(["Processing node" :: PF, bold(n.index :: PF),
+                   "completed!" :: PF])
 
           enqueue!(n, newQ)
 

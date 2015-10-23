@@ -273,19 +273,16 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> SpadTypeExprCategory(N) with
     construct : (N, N, Boolean) -> %
-    elt : (%, "sig") -> Boolean
 
   Implementation ==> add
     import ParserTools
 
-    Rep := Record(n_expr : N, n_type : N, n_sig : Boolean)
+    Rep := Record(n_expr : N, n_type : N)
 
     elt(x, "expr") == x.n_expr
     elt(x, "type") == x.n_type
-    elt(x, "sig") == x.n_sig
 
-    construct(e, t) == [e, t, false]$Rep
-    construct(e, t, s) == [e, t, s]$Rep
+    construct(e, t) == [e, t]$Rep
 
     parse ex ==
       var? ex =>
@@ -310,14 +307,11 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
         targs : List(N) := if #ex = 3
           then [parse e for e in destruct cdr ex.3]
           else [parse ex.4]
-        [[name], [[targs, res]$MT], true]
+        [[name], [[targs, res]$MT]]
       error "Cannot parse type declaration!"
 
     convert x ==
-      if x.sig then
-        convert [convert ("SIGNATURE" :: Symbol), convert x.expr, cdr convert x.type]
-      else
-        convert [convert (":" :: Symbol), convert x.expr, convert x.type]
+      convert [convert (":" :: Symbol), convert x.expr]
 
     coerce n ==
       typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
@@ -1334,7 +1328,6 @@ SpadNode() : Exports == Implementation where
     nodeSubType : (%, %) -> %
     nodeTypeCoerce : (%, %) -> %
     nodeTypeDecl : (%, %) -> %
-    nodeTypeDecl : (%, %, Boolean) -> %
     nodeTypeGuard : (%, %) -> %
     nodeTypeHas : (%, %) -> %
     nodeTypeInfo : (Symbol, List TD, List(%), List(%), SEQ) -> %
@@ -1778,7 +1771,6 @@ SpadNode() : Exports == Implementation where
     nodeSeg (start, end, step) == [[start, end, step]$SEG]
     nodeTypeCoerce (expr : %, type : %) == [[expr, type]$TC]
     nodeTypeDecl (expr : %, type : %) == [[expr, type]$TD]
-    nodeTypeDecl (expr : %, type : %, sig : Boolean) == [[expr, type, sig]$TD]
     nodeTypeGuard (expr, type) == [[expr, type]$TG]
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeHas (expr, type) == [[expr, type]$TEH]

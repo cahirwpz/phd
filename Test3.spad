@@ -33,8 +33,6 @@ Test3() : Exports == Implementation where
     baz x ==
       error "Not implemented!"
 
-    -- [BUG] Coercion selects {coerce : I -> PI}
-    --       instead of {coerce : I -> NNI}
     barf a ==
       if a > 0 then
         return (a :: NNI)

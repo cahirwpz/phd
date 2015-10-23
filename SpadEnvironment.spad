@@ -28,6 +28,8 @@ SpadEnvironment() : Exports == Implementation where
     elt : (%, KEY) -> List(N)
     setelt! : (%, KEY, N) -> %
 
+    reset! : (%, KEY) -> %
+
     createScope : % -> %
     discardScope : % -> %
 
@@ -110,6 +112,11 @@ SpadEnvironment() : Exports == Implementation where
       top := first env
       member?(value, values) => env
       top(key) := [value, :values]
+      env
+
+    reset! (env : %, key : KEY) : % ==
+      top := first env
+      top(key) := []
       env
 
     elt (env : %, key : KEY) : List(N) ==

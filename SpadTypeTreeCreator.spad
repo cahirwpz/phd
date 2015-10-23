@@ -613,7 +613,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         types := [errorType, :types]
       if s = 'return then
         resType := node(ctx, 2).type
-        returnType := nodeMappingType([integerType, resType], typeAny)
+        returnType := nodeMappingType([positiveIntegerType, resType], typeAny)
         types := [returnType, :types]
 
       -- handle a symbol which is a type constructor
@@ -752,7 +752,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
       setTypeOf!(ctx, this, [booleanType])
 
       if symbol? c.expr then
-        this.env := (env(c.expr :: Symbol) := c.type)
+        s := c.expr :: Symbol
+        reset!(env, s)
+        this.env := (env(s) := c.type)
 
       exprType := addNode!(ctx, c.type, env)
       setTypeOf!(ctx, exprType, [c.type])

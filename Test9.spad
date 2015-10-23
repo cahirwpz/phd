@@ -6,18 +6,16 @@ Test9 : Exports == Implementation where
     mycoerce : Integer -> Union(NonNegativeInteger, "failed")
 
   Implementation ==> add
-    ++ [OK] Subtyping => return union variants.
+    -- Subtyping => return union variants.
     check (x, min, max) ==
       x < min => "failed"
       x > max => "failed"
       x
 
-    ++ [OK] Subtyping => checking union variants.
+    -- Subtyping => checking union variants.
     addZero x ==
       x case Integer => x * 10
       x case String => concat(x, "0")
-      -- [BUG] Type checker crashes if following line is removed.
-      x
 
     mycoerce x ==
       x >= 0 => qcoerce(x)

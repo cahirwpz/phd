@@ -27,14 +27,14 @@ Test2(A : Type) : Exports == Implementation where
       b
 
     sumPositive l ==
-      s : I := 0 -- BUG
+      s := 0
       for i in reverse l | i > 0 repeat
         s := s + i
         "bogus"
       s
 
     sumRange (l, i, j) ==
-      s : I := 0 -- BUG
+      s := 0
       for k in i..(j - 1) | odd? k repeat
         s := s + l(k)
         10
@@ -63,4 +63,4 @@ Test2(A : Type) : Exports == Implementation where
     findchar (s, c) ==
       for i in 1.. repeat
         if s.i = c then
-          return i
+          return (i :: PI)

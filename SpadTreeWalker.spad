@@ -132,7 +132,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeTypeCoerce(rewrite te.expr, rewrite te.type)
 
       rewrite (te : TD) : N ==
-        nodeTypeDecl(rewrite te.expr, rewrite te.type, te.sig)
+        nodeTypeDecl(rewrite te.expr, rewrite te.type)
 
       rewrite (te : TG) : N ==
         nodeTypeGuard(rewrite te.expr, rewrite te.type)
