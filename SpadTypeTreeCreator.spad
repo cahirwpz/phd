@@ -347,6 +347,12 @@ SpadTypeTreeCreator() : Exports == Implementation where
         debug ["Processing function" :: PF, string(funName :: PF)]
 
       funDeclNode := addNode!(ctx, [fn], env)
+
+      if fn.name case Symbol then
+        s := fn.name :: Symbol 
+        if not key?(s, env) then
+          env(s) := funDeclNode.type
+
       addSubTree!(ctx)
       env' := createScope env
 

@@ -6,7 +6,7 @@ Test7() : Exports == Implementation where
     -- allNegative? : List(Integer) -> Boolean
     positive? : List(Integer) -> List(Boolean)
     doubleOdd : List(Integer) -> List(Integer)
-    -- existsGT : (List(Integer), Integer) -> Boolean
+    existsGT : (List(Integer), Integer) -> Boolean
 
   Implementation ==> add
     allPositive? l ==
@@ -21,6 +21,6 @@ Test7() : Exports == Implementation where
     doubleOdd l ==
       [i * 2 for i in l | odd? i]
 
-    -- existsGT (l, n) == 
-    --   GT x == x > n
-    --   any?(GT, l)
+    existsGT (l, n) == 
+      GT x == x > n
+      any?(GT, l)
