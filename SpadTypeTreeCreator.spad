@@ -272,8 +272,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- First case with a twist: arbitrary list construction.
       if a.function = ['construct] then
-        item := addNode!(ctx, ['construct], env)
-        setTypeOf!(ctx, item, [argExpr.type for argExpr in argExprList])
+        item := addNode!(ctx, emptyNode(), env)
+        item.node := item.type
+        setTypeOf!(ctx, item, dropSubTypes [argExpr.type for argExpr in argExprList])
         constructArgs := [item.type for i in 1..#a.args]
         constructRes := nodeApp(['List], [item.type])
         extendTypeOf!(ctx, funExpr, [nodeMappingType(constructArgs, constructRes)])

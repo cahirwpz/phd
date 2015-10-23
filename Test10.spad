@@ -1,11 +1,13 @@
 )abbrev package TEST10 Test10
 Test10 : Exports == Implementation where
+  NNI ==> NonNegativeInteger
+
   Exports ==> with
     blah : String -> Union(String, Integer)
     blah : Integer -> Union(String, Integer)
     blah : NonNegativeInteger -> Integer
-    --blah : Union(String, Integer) -> Union(String, Integer, Float)
-    --blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
+    blah : Union(String, Integer) -> Union(String, Integer, Float)
+    blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
 
     baz : NonNegativeInteger -> Integer
     foo : PositiveInteger -> Float
@@ -13,26 +15,26 @@ Test10 : Exports == Implementation where
     triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 
   Implementation ==> add
-    -- [OK] Various subtyping cases.
+    -- Various subtyping cases.
     blah (x : String) == x
     blah (x : Integer) == x
     blah (x : NonNegativeInteger) == x
 
-    -- [OK] Subtyping at assign time.
+    -- Subtyping at assign time.
     baz x ==
       y : Integer := x
       y - 1
 
     bar : Integer -> Float
 
-    -- [OK] Subtyping at function application time.
+    -- Subtyping at function application time.
     foo x ==
       bar x
 
-    -- [OK] Arbitrary list construction.
+    -- Arbitrary list construction.
     triplet (x, y, z) ==
       [x, y, z] -- not a call to construct(...) !
 
     -- These are not supported by original compiler.
-    -- blah (x : Union(String, Integer)) == x
-    -- blah (x : Record(a : NonNegativeInteger, b : String)) == x
+    blah (x : Union(String, Integer)) == x
+    blah (x : Record(a : NonNegativeInteger, b : String)) == x

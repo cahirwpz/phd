@@ -418,8 +418,8 @@ TypeUnifier() : Exports == Implementation where
           paren bold red("no" :: PF)
         ures case SUBS =>
           spaces [paren bold green("yes" :: PF), (ures :: SUBS) :: PF]
-      debug([brace bold(n1 :: PF), bold yellow("~" :: PF),
-             brace bold(n2 :: PF), summary])
+      -- debug([brace bold(n1 :: PF), bold yellow("~" :: PF),
+      --        brace bold(n2 :: PF), summary])
       ures
 
     unifyType(type : N, terms : List(N)) : URES ==
@@ -436,8 +436,8 @@ TypeUnifier() : Exports == Implementation where
           paren bold red("no" :: PF)
         ures case SUBS =>
           spaces [paren bold green("yes" :: PF), (ures :: SUBS) :: PF]
-      debug([brace bold(type :: PF), bold yellow("~" :: PF),
-             bracket [bold(t :: PF) for t in terms], summary])
+      -- debug([brace bold(type :: PF), bold yellow("~" :: PF),
+      --        bracket [bold(t :: PF) for t in terms], summary])
       ures
 
     unify?(n1, n2) ==
@@ -623,8 +623,8 @@ TypeUnifier() : Exports == Implementation where
         res case "true" => bold green("yes" :: PF)
         res case "false" => bold red("no" :: PF)
         spaces [bold magenta ("when" :: PF), (res :: N) :: PF]
-      debug ([brace(bold(n1 :: PF)), bold yellow("<:" :: PF),
-              brace(bold(n2 :: PF)), pf])
+      -- debug ([brace(bold(n1 :: PF)), bold yellow("<:" :: PF),
+      --         brace(bold(n2 :: PF)), pf])
       res
 
     findSubTypes(ts1 : List(N), ts2 : List(N)) : List(N) ==

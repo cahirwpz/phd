@@ -540,8 +540,22 @@ SpadTypeTree() : Exports == Implementation where
       -- Unify proposed values with already stored in the variable
       -- store only matching ones (without performing substitutions).
       ms := findMatches(ts, terms)
-      empty? ms.terms => false
-      (x.m_typevars)(tv) := ms.terms
+      not empty? ms.terms =>
+        (x.m_typevars)(tv) := ms.terms
+        true
+      -- 3) no matching types? let's check if we tried to replace
+      --    supertype with subtype.
+      for t in ts repeat
+        for s in terms repeat
+          not isSubType(s, t) case "false" => return true
+      -- 4) we could've tried to replace subtype with supertype.
+      sl : List(N) := []
+      for t in ts repeat
+        for s in terms repeat
+          isSubType(t, s) case "false" => "iterate"
+          sl := [s, :sl]
+      empty? sl => false
+      (x.m_typevars)(tv) := sl
       true
 
     limitTypeVar! (x : %, subs : SUBS) : Boolean ==
@@ -563,6 +577,8 @@ SpadTypeTree() : Exports == Implementation where
       removeDuplicates types
 
     nodesTypeMatch! (x : %, ln : TN, rn : TN) : Boolean ==
+      info(["Types of" :: PF, bold(ln.index :: PF), "and" :: PF, 
+            bold(rn.index :: PF), "must match." :: PF])
       -- %a[?] ~ %b[?]
       hasUnknownType?(x, ln) and hasUnknownType?(x, rn) =>
         ures := unifyType(ln.type, rn.type)
@@ -606,6 +622,8 @@ SpadTypeTree() : Exports == Implementation where
     -- With limited knowledge this routine tries to constraint types in given
     -- nodes to pairs which are (possibly) in subtyping relation.
     nodeSubType! (x : %, sn : TN, tn : TN) : Boolean ==
+      info(["Node" :: PF, bold(sn.index :: PF), "has subtype of" :: PF,
+            bold(tn.index :: PF), "node." :: PF])
       -- In both cases we can assume nothing...
       -- a) {%s[s1, s2, ...] | S} <: {%t[?]}
       -- b) {%s[?]} <: {%t[t1, t2, ...] | T}
@@ -629,8 +647,8 @@ SpadTypeTree() : Exports == Implementation where
       true
 
     nodeSubTypeOf!(x : %, sn : TN, types : List(N)) : Boolean ==
-      debug(["Node" :: PF, bold(sn.index :: PF), "has subtype of" :: PF,
-             bracket [t :: PF for t in types]])
+      info(["Node" :: PF, bold(sn.index :: PF), "has subtype of" :: PF,
+            bracket [t :: PF for t in types]])
       -- {%s[?]} <: [t1, t2, ...]
       hasUnknownType?(x, sn) => false
       -- {%s[s1, s2, ...] | S} <: [t1, t2, ...]
