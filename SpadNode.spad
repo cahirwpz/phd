@@ -273,6 +273,7 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> SpadTypeExprCategory(N) with
     construct : (N, N, Boolean) -> %
+    insideCapsule : Boolean -> Void
 
   Implementation ==> add
     import ParserTools
@@ -310,8 +311,20 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
         [[name], [[targs, res]$MT]]
       error "Cannot parse type declaration!"
 
+    insideCapsule? := false
+
+    insideCapsule (x : Boolean) : Void ==
+      insideCapsule? := x
+
     convert x ==
-      convert [convert (":" :: Symbol), convert x.expr]
+      insideCapsule? => 
+        convert [convert (":" :: Symbol), convert x.expr, convert x.type]
+      t :=
+        mappingType? x.type =>
+          mt := x.type :: MT
+          convert [convert n for n in [mt.result, :mt.args]]
+        convert x.type
+      convert [convert ("SIGNATURE" :: Symbol), convert x.expr, t]
 
     coerce n ==
       typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
@@ -1183,6 +1196,7 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     import ParserTools
     import SExpression
     import SpadNode
+    import SpadTypeDecl(SpadNode)
 
     SEX ==> SExpression
 
@@ -1206,11 +1220,14 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     convert x ==
       argNames := [convert (arg.expr :: Symbol) for arg in x.args]
       argTypes := [convert arg.type for arg in x.args]
+      insideCapsule true
+      caps := convert x.capsule
+      insideCapsule false
       convert([convert 'DEF,
                convert [convert x.name, :argNames],
                convert [convert x.type, :argTypes],
                convert [convert [] for i in 0..#x.args],
-               convert x.capsule])
+               caps])
 
     coerce n ==
       def := spaces [n.name :: PF, paren [arg :: PF for arg in n.args], ":" :: PF]
