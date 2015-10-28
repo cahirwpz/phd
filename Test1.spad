@@ -45,8 +45,12 @@ Test1() : Exports == Implementation where
         nx := -x 
       nx + y
 
+    -- a global value :)
+    magic := 2
+
     baz (x, y) ==
-      x * y
+      bar := x * y   -- bar already defined earlier as a function
+      bar - magic
 
     fib n ==
       n = 0 => 0

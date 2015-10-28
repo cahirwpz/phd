@@ -295,7 +295,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       introduced? := false
       if symbol? a.lval then
         s := a.lval :: Symbol
-        if empty? search(s, env) then
+        ts := search(s, env) 
+        if empty? ts or not any?(symbol?, ts)  then
           debug ["Processing fresh assignment" :: PF, string(s :: PF)]
           env(s) := this.type
           introduced? := true
