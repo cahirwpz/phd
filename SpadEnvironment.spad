@@ -16,6 +16,7 @@ SpadEnvironment() : Exports == Implementation where
     new : () -> %
 
     coerce : KEY -> PF
+    coerce : SCOPE -> PF
 
     addDomain : (APP, %) -> %
     addDomainAs : (APP, KEY, %) -> %
@@ -32,6 +33,8 @@ SpadEnvironment() : Exports == Implementation where
 
     createScope : % -> %
     discardScope : % -> %
+
+    mergeEnv: (%, %, %) -> %
 
   Implementation ==> add
     Rep := List SCOPE
@@ -141,10 +144,24 @@ SpadEnvironment() : Exports == Implementation where
     discardScope env ==
       rest env
 
+    mergeEnv (env : %, left : %, right : %) : % ==
+      top := [k :: Symbol for k in keys first env | k case Symbol]
+      lks := [k :: Symbol for k in keys first left | k case Symbol]
+      rks := [k :: Symbol for k in keys first right | k case Symbol]
+      for k in setIntersection(lks, rks) repeat
+        if not member?(k, top) then
+          for n in concat(left k, right k) repeat
+            env(k) := n
+      env
+
     coerce (env : %) : PF ==
-      entries : List(PF) := []
       empty? env => "()" :: PF
-      for e in members(first flatten env)@List(MEMBER) repeat
+      (first flatten env) :: PF
+
+    coerce (scope : SCOPE) : PF ==
+      entries : List(PF) := []
+      empty? scope => "()" :: PF
+      for e in members(scope)@List(MEMBER) repeat
         sym := hconcat [bold cyan(e.key :: PF), ":" :: PF]
         mms := [mm :: PF for mm in e.entry]
         of :=

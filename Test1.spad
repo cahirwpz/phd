@@ -35,9 +35,6 @@ Test1() : Exports == Implementation where
     baz : (I, I) -> I
 
     bar (x, y) ==
-      -- [BUG] Cannot remove next line, because branch environment merging
-      -- doesn't work.
-      nx : Integer
       if x > 0 then
         y := -10
         nx := baz(x, y)

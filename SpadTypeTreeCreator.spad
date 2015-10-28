@@ -318,14 +318,18 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this := addNode!(ctx, [ce])
 
       cond := walk(ce.cond, ctx, env)
-      truebr := walk(ce.truebr, ctx, cond.env)
+      trueEnv := createScope cond.env
+      truebr := walk(ce.truebr, ctx, trueEnv)
 
       emptyNode? ce.falsebr =>
         this.env := env
         this.rules := [ruleIfThen(cond, truebr)]
         this
 
-      falsebr := walk(ce.falsebr, ctx, (case? ce.cond => env; cond.env))
+      falseEnv := createScope (case? ce.cond => env; cond.env)
+      falsebr := walk(ce.falsebr, ctx, falseEnv)
+
+      env := mergeEnv(env, trueEnv, falseEnv)
 
       -- TODO: "truebr.env" and "falsebr.env" should be merged and passed
       -- forward instead of just "env". Merging means that if the same variable
