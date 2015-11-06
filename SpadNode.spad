@@ -1173,6 +1173,7 @@ SpadWhere(N : SpadNodeCategory) : Exports == Implementation where
 
 )abbrev package SFTOR SpadFunctor
 SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
+  APP ==> SpadApply(N)
   TD ==> SpadTypeDecl(N)
   MT ==> SpadMappingType(N)
   PF ==> PrintableForm
@@ -1196,7 +1197,8 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     import ParserTools
     import SExpression
     import SpadNode
-    import SpadTypeDecl(SpadNode)
+    import SpadApply(N)
+    import SpadTypeDecl(N)
 
     SEX ==> SExpression
 
@@ -1211,11 +1213,13 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     parse ex ==
       argNames := destruct cdr ex.2
       argTypes := destruct cdr ex.3
+      fname := symbol car ex.2
       fbody := ex.5
       fargs := [[[symbol s], parse t]$TD for s in argNames for t in argTypes]
       fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
       fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
-      [symbol car ex.2, fargs, parse car ex.3, parseNonNull fextends, parse fcapsule]
+      fextends' := (null? fextends => [[['Type], []]$APP]; parse fextends)
+      [fname, fargs, parse car ex.3, fextends', parse fcapsule]
 
     convert x ==
       argNames := [convert (arg.expr :: Symbol) for arg in x.args]

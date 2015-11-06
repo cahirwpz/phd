@@ -15,7 +15,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleIfThen : (TN, TN) -> TR
     ruleFun : (FN, List(TN), TN, TN) -> TR
     ruleFunDef : (TN, TN) -> TR
-    ruleFtor : (FT, List(TN), TN, TN) -> TR
+    ruleFtor : (FT, List(TN), TN, TN, TN) -> TR
     ruleLoopIter : (TN, TN, TN) -> TR
     ruleLoop : (Union("loop", "collect", "repeat"), 
                 List(TN), List(TN), Union(TN, "none"), TN) -> TR
@@ -71,10 +71,10 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     -- for functor "ft (a1 : A1, ..., an : An) : T == E add B" do:
     -- compute "A1, ..., An, T, B"; if "B <: T" then solution is "ft"
-    ruleFtor (ft, As', T', B') ==
-      (As, T, B) := ([nodeRef(a) for a in As'], nodeRef(T'), nodeRef(B'))
-      E := (emptyNode? ft.extends => ['Type]; ft.extends)
-      [[:As, T, B, nodeSubType(B, T)], nodeFtor(ft.name, ft.args, ft.type, E, B)]
+    ruleFtor (ft, As', E', T', B') ==
+      As := [nodeRef(a) for a in As']
+      (E, T, B) := (nodeRef(E'), nodeRef(T'), nodeRef(B'))
+      [[:As, E, T, B, nodeSubType(B, T)], nodeFtor(ft.name, ft.args, ft.type, E, B)]
 
     ruleLoopIter (var, seq, iter) == 
       (varRef, seqRef, iterRef) := (nodeRef(var), nodeRef(seq), nodeRef(iter))
@@ -195,6 +195,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadTypeRuleFactory
     import SpadTypeNodeArray
     import TypeUnifier
+    import TypeEvaluator
     import Printer
     import Logger('Create)
 
@@ -403,13 +404,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- the type calculated above.
       candidateList : List(MT) := []
 
+      dom := first env("$" :: Symbol)
+
       if fn.name case Symbol then
         for n in search(fn.name :: Symbol, env') repeat
           candidate := emptyNode()
 
           if typeOrigin? n then
             to := n :: TO
-            if to.type = ["$" :: Symbol] and mappingType? to.expr then
+            if to.type = dom and mappingType? to.expr then
               candidate := to.expr
           if mappingType? n then
             candidate := n
@@ -467,9 +470,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this := addNode!(ctx, [ft.name], env)
 
       resNode := addNode!(ctx, ft.type, env)
-      -- FIXME: Functor's return type is not of "Join" node!
-      resType := (sequence? ft.type => nodeSeq("Join", (ft.type :: SEQ).list); ft.type)
-      setTypeOf!(ctx, resNode, [resType])
       resType := resNode.type
 
       argSub := [[]]$Table(Symbol, N)
@@ -479,7 +479,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       for arg in ft.args repeat
         name := arg.expr :: Symbol
         argNode := addNode!(ctx, arg.expr, env)
-        setTypeOf!(ctx, argNode, [arg.type])
+        bindNode!(ctx, argNode, arg.type)
         env(name) := argNode.type
         env := addDomainAs(arg.type :: APP, name, env)
         argSub(name) := argNode.type
@@ -487,19 +487,25 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       argNodeList := reverse argNodeList
       argList := [argNode.node for argNode in argNodeList]
-      env("$" :: Symbol) := nodeApp([ft.name], argList)
+      ftType := nodeApp([ft.name], argList)
+      env("$" :: Symbol) := ftType
       setTypeOf!(ctx, this, [nodeMappingType(argList, resType)])
 
-      -- process functor's body
-      for n in (ft.type :: SEQ).list | typeDecl? n repeat
-        td := n :: TD
-        env(td.expr :: Symbol) := nodeTypeOrigin(td.type, ["$" :: Symbol])
+      -- add functor's type info to the environment
+      ti := getTypeInfo ft
+      env := addDomain(ftType :: APP, env)
+      ftRealType := substitute(first env(ftType :: APP), typeVar() :: TV, ftType)
+      -- FIXME: Functor's return type is not of "Join" node!
+      bindNode!(ctx, resNode, nodeSeq("Join", (ftRealType :: TI).body.list))
+
+      extNode := addNode!(ctx, ft.extends, env)
+      bindNode!(ctx, extNode, ft.extends)
 
       bodyNode := walk(ft.capsule, ctx, env)
 
       leaveSubTree!(ctx)
 
-      this.rules := [ruleFtor(ft, argNodeList, resNode, bodyNode)]
+      this.rules := [ruleFtor(ft, argNodeList, extNode, resNode, bodyNode)]
       this
 
     walkImport (im : IM, ctx : CTX, env : ENV) : TN ==

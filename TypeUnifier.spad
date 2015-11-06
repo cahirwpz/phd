@@ -12,6 +12,7 @@ TypeUnifier() : Exports == Implementation where
   RT ==> SpadRecordType(N)
   TD ==> SpadTypeDecl(N)
   TG ==> SpadTypeGuard(N)
+  TI ==> SpadTypeInfo(N)
   TEH ==> SpadTypeHas(N)
   TEI ==> SpadTypeIs(N)
   TO ==> SpadTypeOrigin(N)
@@ -92,6 +93,12 @@ TypeUnifier() : Exports == Implementation where
       typeOrigin? n =>
         to := n :: TO
         occurs'? to.expr or occurs'? to.type
+      typeGuard? n =>
+        tg := n :: TG
+        occurs'? tg.expr or occurs'? tg.type
+      typeHas? n =>
+        te := n :: TEH
+        occurs'? te.expr or occurs'? te.type
       typeVar? n =>
         (n :: TV) = tvar
 
@@ -129,6 +136,12 @@ TypeUnifier() : Exports == Implementation where
       typeOrigin? n =>
         to := n :: TO
         unbound? to.expr or unbound? to.type
+      typeGuard? n =>
+        tg := n :: TG
+        unbound? tg.expr or unbound? tg.type
+      typeHas? n =>
+        te := n :: TEH
+        unbound? te.expr or unbound? te.type
 
       fail ["unbound?: case not handled for" :: PF, n :: PF]
       error ""
@@ -276,6 +289,13 @@ TypeUnifier() : Exports == Implementation where
       sequence? n =>
         seq := n :: SEQ
         nodeSeq(seq.kind, [substitute(t, var, term) for t in seq.list])
+      typeInfo? n =>
+        ti := n :: TI
+        nodeTypeInfo(ti.name,
+                     [substitute([arg], var, term) :: TD for arg in ti.args],
+                     [substitute(hasItem, var, term) for hasItem in ti.hasList],
+                     [substitute(c, var, term) for c in ti.constraints],
+                     substitute([ti.body], var, term) :: SEQ)
       typeDecl? n =>
         td := n :: TD
         nodeTypeDecl(substitute(td.expr, var, term),

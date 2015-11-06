@@ -78,6 +78,7 @@ SpadTypeEvaluator() : Exports == Implementation where
   PI ==> PositiveInteger
   N ==> SpadNode
   APP ==> SpadApply(N)
+  FT ==> SpadFunctor(N)
   MT ==> SpadMappingType(N)
   SEQ ==> SpadSequence(N)
   TD ==> SpadTypeDecl(N)
@@ -96,6 +97,7 @@ SpadTypeEvaluator() : Exports == Implementation where
 
     getTypeInfo : Symbol -> TI
     getTypeInfo : APP -> TI
+    getTypeInfo : FT -> TI
 
   Implementation ==> add
     import SpadNode
@@ -107,6 +109,7 @@ SpadTypeEvaluator() : Exports == Implementation where
     import Printer
 
     fromDatabase : Symbol -> Union(TI, "failed")
+    fromFunctor : FT -> Union(TI, "failed")
     apply : (TI, List(N)) -> TI
     flatten : TI -> TI
     evalTypeGuards : TI -> TI
@@ -152,6 +155,14 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       ti!
 
+    getTypeInfo(ft : FT) : TI ==
+      ti := fromFunctor(ft) :: TI
+      ti := flatten(ti)
+      ti := evalTypeGuards(ti)
+      ti := eraseConstraints(ti, false)
+      cache([[ft.name], [emptyNode()]]) := ti
+      ti
+
     mkvar(s1 : String, s2 : String) : Symbol ==
       concat(s1, s2)$String :: Symbol
 
@@ -164,23 +175,21 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       cat? := (cmm.type = nodeApp(['Category], []))
 
-      ++ Some symbols will be rewritten to type variables.
+      -- Some symbols will be rewritten to type variables.
       ctx := [[]]$Table(Symbol, N)
-      ++ "%" => "%0"
+      -- "%" => "%0"
       ctx("%" :: Symbol) := typeVar()
-      ++ "#1" => "%1", "#2" => "%2", ...
+      -- "#1" => "%1", "#2" => "%2", ...
       for i in 1..#cmm.args repeat
         s := mkvar("#", string i)
         v := typeVar(i :: PI)
         ctx(s) := v
-      ++ "t#1" => "%1", "t#2" => "%2", ...
+      -- "t#1" => "%1", "t#2" => "%2", ...
       for arg in cmm.args for i in 1.. repeat
         s := mkvar("t", string(arg.expr :: Symbol))
         v := typeVar(i :: PI)
         ctx(s) := v
 
-      ++ Symbols in SpadNamedType cannot be rewritten to type variable, so just
-      ++ change name.
       types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
       args := [[typeVar(i :: PI), typ]$TD for typ in types for i in 1..]
       body := (cat? => getCtorCategory(t); cmm.type)
@@ -191,6 +200,26 @@ SpadTypeEvaluator() : Exports == Implementation where
       body := rewrite(body)$FlattenDatabaseType
 
       [cmm.name, args, [], [], body :: SEQ]
+
+    fromFunctor (ft : FT) : Union(TI, "failed") ==
+      debug ["fromFunctor:" :: PF, bold(ft :: PF)]
+
+      -- Some symbols will be rewritten to type variables.
+      ctx := [[]]$Table(Symbol, N)
+      for arg in ft.args for i in 1.. repeat
+        s := (arg :: TD).expr :: Symbol
+        v := typeVar(i :: PI)
+        ctx(s) := v
+
+      types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in ft.args] 
+      args := [[typeVar(i :: PI), t]$TD for t in types for i in 1..]
+
+      body := 
+        ft.type = nodeApp(['Category], []) => ft.capsule
+        nodeSeq("Domain", (ft.type :: SEQ).list)
+      body := rewrite(body)$SpadTreeSymbolReplace(ctx)
+
+      [ft.name, args, [], [], body :: SEQ]
 
     DelVer := SpadTreeTypeVarSetMajor(0)
     AddVer := SpadTreeTypeVarSetMajor(1)
@@ -326,7 +355,10 @@ SpadTypeEvaluator() : Exports == Implementation where
           debug ["Copy" :: PF, bold(n :: PF), "to" :: PF, ti.self :: PF]
           flatBody := [n, :flatBody]
 
-        fail ["Flatten" :: PF, n :: PF]
+        sequence? n =>
+          origBody := concat((n :: SEQ).list, origBody)
+
+        fail ["Flatten" :: PF, bold(n :: PF)]
         error "Not handled!"
 
       hasLst' : List(N) := []
