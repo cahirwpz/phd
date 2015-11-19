@@ -116,7 +116,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     ruleCapsule exprList ==
       exprRefList := [nodeRef(expr) for expr in exprList | not done? expr]
-      [[:exprRefList, nodeSeq("Capsule", exprRefList)], nodeSeq("Capsule", exprRefList)]
+      [exprRefList, nodeSeq("Capsule", exprRefList)]
 
     ruleTypeOrigin (expr, origin) ==
       exprRef := nodeRef(expr)
@@ -145,9 +145,39 @@ SpadTypeRuleFactory() : Exports == Implementation where
       (Ps, S, T) := ([nodeRef(p) for p in Ps'], nodeRef(S'), nodeRef(T'))
       [[:Ps, S, nodeSubType(S, T)], S]
 
+
+)abbrev package STEXCAPT SpadTreeExtractCapsuleType
+SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implementation where
+  PF ==> PrintableForm
+  PI ==> PositiveInteger
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  FN ==> SpadFunction(N)
+  NR ==> SpadNodeRef(N)
+  TO ==> SpadTypeOrigin(N)
+  TV ==> SpadTypeVar(N)
+  SEQ ==> SpadSequence(N)
+  TN ==> SpadTypeNode
+
+  Implementation ==> add
+    import Logger('Capsule)
+
+    rewrite (seq : SEQ) : N ==
+      ts : List(N) := []
+
+      for n in seq.list | nodeRef? n repeat
+        tn := find(coerce(n)@NR)
+        if function? tn.node then
+          fn := coerce(tn.node)@FN
+          fnName := [coerce(fn.name)@Symbol]
+          ts := [nodeTypeDecl(fnName, tn.type), :ts]
+          
+      nodeSeq("Join", reverse ts)
+
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
   PF ==> PrintableForm
+  PI ==> PositiveInteger
 
   N ==> SpadNode
   APP ==> SpadApply(N)
@@ -502,6 +532,11 @@ SpadTypeTreeCreator() : Exports == Implementation where
       bindNode!(ctx, extNode, ft.extends)
 
       bodyNode := walk(ft.capsule, ctx, env)
+
+      findTypeNode := ((nr : NR) : TN +-> node(ctx, nr))
+      capsuleType := (first bodyNode.rules).solution
+      capsuleType := rewrite(capsuleType)$SpadTreeExtractCapsuleType(findTypeNode)
+      setTypeOf!(ctx, bodyNode, [capsuleType])
 
       leaveSubTree!(ctx)
 

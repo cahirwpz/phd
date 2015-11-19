@@ -280,19 +280,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
       fun := node(ctx, r.expr :: NR)
       limitNodeType!(ctx, n, [fun.type])
 
-    evalCapsule(ctx : TT, r : SEQ, n : TN) : Boolean ==
-      items := r.list
-      types : List(N) := []
-      for item in items repeat
-        tn := node(ctx, item :: NR)
-        not done? tn => return true
-        if mappingType? tn.type and nodeRef? tn.node then
-          tn := node(ctx, tn.node :: NR)
-          if function? tn.node then
-            fn := tn.node :: FN
-            types := [nodeTypeDecl([fn.name :: Symbol], tn.type), :types]
-      limitNodeType!(ctx, n, [nodeSeq("Join", reverse types)])
-
     -- evaluates single rule; note that it can happen that nothing was changed
     -- even if no type error was detected (result "true" means yes or maybe)
     evalFormula(ctx : TT, f : N, n : TN) : Boolean ==
@@ -312,7 +299,6 @@ SpadTypeTreeChecker() : Exports == Implementation where
       subType? f => evalSubType(ctx, f :: ST, n)
       typeIs? f => evalTypeIs(ctx, f :: TEI, n)
       typeOrigin? f => evalTypeOrigin(ctx, f :: TO, n)
-      capsule? f => evalCapsule(ctx, f :: SEQ, n)
 
       fail ["evalFormula: case not handled for" :: PF, f :: PF]
       error "Internal error!"
