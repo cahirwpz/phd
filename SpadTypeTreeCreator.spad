@@ -533,11 +533,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       bodyNode := walk(ft.capsule, ctx, env)
 
-      findTypeNode := ((nr : NR) : TN +-> node(ctx, nr))
-      capsuleType := (first bodyNode.rules).solution
-      capsuleType := rewrite(capsuleType)$SpadTreeExtractCapsuleType(findTypeNode)
-      setTypeOf!(ctx, bodyNode, [capsuleType])
-
       leaveSubTree!(ctx)
 
       this.rules := [ruleFtor(ft, argNodeList, extNode, resNode, bodyNode)]
@@ -639,9 +634,14 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       exprList : List(TN) := [(n := walk(e, ctx, env); env := n.env; n) for e in s.list]
 
-      this.rules := 
-        s.kind = "Capsule" => [ruleCapsule(exprList)]
-        [ruleSeq(s.kind, this, exprList)]
+      if s.kind = "Capsule" then
+        rule := ruleCapsule(exprList)
+        findTypeNode := ((nr : NR) : TN +-> node(ctx, nr))
+        capsuleType := rewrite(rule.solution)$SpadTreeExtractCapsuleType(findTypeNode)
+        setTypeOf!(ctx, this, [capsuleType])
+        this.rules := [rule]
+      else
+        this.rules := [ruleSeq(s.kind, this, exprList)]
       this.env := (last exprList).env
       this
 
