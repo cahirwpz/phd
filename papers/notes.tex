@@ -1,0 +1,600 @@
+\documentclass[10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{syntax} % mdwtools
+\usepackage{amssymb}
+\usepackage{bussproofs}
+\usepackage{verbatim}
+\usepackage{stmaryrd}
+\usepackage{mathtools}
+\usepackage{stackengine}
+\usepackage[margin=0.75in]{geometry}
+
+\newcommand\Fin{\mathcal{F}}
+\newcommand\Tup{\mathcal{T}}
+\newcommand\FV{\mathsf{FV}}
+
+\def\denot#1{{\llbracket #1 \rrbracket}}
+\def\without{{\, ! \,}}
+\def\subtype{{\, \texttt{<:} \,}}
+
+\newcommand\TyEval{\overset{\Delta}{\longrightarrow}\,}
+
+\newcommand\Env{\textit{Env}}
+\newcommand\Dom{\textit{Dom}}
+\newcommand\Cat{\textit{Cat}}
+\newcommand\Var{\textit{Var}}
+\newcommand\Term{\textit{Term}}
+\newcommand\Id{\textit{Id}}
+\newcommand\Ty{\textit{Ty}}
+\newcommand\TyId{\textit{TyId}}
+\newcommand\TyApp{\textit{TyApp}}
+\newcommand\TyCond{\textit{TyCond}}
+\newcommand\TyFun{\textit{TyFun}}
+\newcommand\TySig{\textit{TySig}}
+\newcommand\TyVar{\textit{TyVar}}
+\newcommand\TyCps{\textit{TyCps}}
+\newcommand\TyScr{\textit{TyScr}}
+
+\newcommand\Builtin{\textit{Builtin}}
+\newcommand\Category{\texttt{Category}}
+\newcommand\Union{\texttt{Union}}
+\newcommand\TagUnion{\texttt{TagUnion}}
+\newcommand\Record{\texttt{Record}}
+\newcommand\Mapping{\texttt{Mapping}}
+\newcommand\SubDomain{\texttt{SubDomain}}
+\newcommand\SumType{\texttt{Join}}
+\newcommand\UnionCategory{\texttt{UnionCategory}}
+\newcommand\RecordCategory{\texttt{RecordCategory}}
+\newcommand\Signature{\texttt{Signature}}
+
+\newcommand\Tif{\mathrel{\texttt{if}}}
+\newcommand\Tnot{\mathrel{\texttt{not}}}
+\newcommand\Tand{\mathrel{\texttt{and}}}
+\newcommand\Tor{\mathrel{\texttt{or}}}
+\newcommand\Tthen{\mathrel{\texttt{then}}}
+\newcommand\Telse{\mathrel{\texttt{else}}}
+\newcommand\Twith{\mathrel{\texttt{with}}}
+
+\newcommand\TyDef{\;\texttt{==}\;}
+\newcommand\TyHas{\;\texttt{has}\;}
+\newcommand\TyIs{\;\texttt{is}\;}
+\newcommand\Add{\;\texttt{add}\;}
+\newcommand\Guard{\;|\;}
+\newcommand\Type{\texttt{Type}}
+\newcommand\BasicType{\texttt{BasicType}}
+\newcommand\PartialOrder{\texttt{PartialOrder}}
+\newcommand\SetCategory{\texttt{SetCategory}}
+\newcommand\Integer{\texttt{Integer}}
+\newcommand\Float{\texttt{Float}}
+\newcommand\Boolean{\texttt{Boolean}}
+\newcommand\List{\texttt{List}}
+
+\begin{document}
+
+\title{Notes on type system of \textit{FriCAS}}
+\author{Krystian Bacławski}
+\maketitle
+
+\section*{Language grammar}
+
+\begin{grammar}
+<type> ::= <type-const>
+\alt <type-var>
+\alt $<singleton>^{D}$
+\alt <functor> ($<type>_1$, $<type>_2$, \ldots, $<type>_n$)
+\alt <type> `|' <condition>
+
+<functor> ::= <builtin-domain>
+\alt <builtin-category>
+
+<type-const> ::= `Type'
+\alt `Category'
+
+<builtin-domain> ::= `Union'
+\alt `TaggedUnion'
+\alt `Record'
+\alt `Mapping'
+\alt `SubDomain'
+
+<builtin-category> ::= `Join'
+\alt `UnionCategory'
+\alt `RecordCategory'
+\alt `Signature'
+
+<type-var> :: = `\%'
+\alt `\%' <symbol>
+
+<singleton> ::= <symbol>
+
+<condition> ::= `not' <condition>
+\alt <condition> `or' <condition>
+\alt <condition> `and' <condition>
+\alt <domain> `is' <domain>
+\alt <domain> `has' <category>
+\alt `true'
+\alt `false'
+\end{grammar}
+
+\clearpage
+\section*{Terms and types}
+
+Let $\mathcal{F}(S)$ and $\mathcal{T}(S)$ be a set of finite subsets and tuples
+of $S$ respectively.
+
+\begin{table}[!h]
+  \begin{align*}
+    \TyVar & \subset \Id
+      & \text{type variables} \\
+    \Ty & \equiv \TyFun \,\cup \TyVar \,\cup \TyApp
+      & \text{types} \\
+    \TyFun & \equiv \Tup(\Ty) \times \Ty
+      & (T_0, T_1, \ldots, T_k) \Rightarrow T \\
+    \TySig & \equiv \Id \times \Ty
+      & \alpha : T \\
+    \TyId & \equiv \Dom \,\cup \Cat \subset \Id
+      & \text{domains and categories identifiers} \\
+    \TyApp & \equiv \TyId \times \Tup(\Ty)
+      & C(T_{0}, T_{1}, \ldots) \\
+    \TyCps & \equiv \Fin(\TyApp\,\cup \TySig)
+      & \text{functor's capsule} \\
+    \TyScr & \equiv \Fin(\TyApp) \times \Fin(\Term) \times \TyCps
+      & \text{type structure (has--list, constraints, capsule)} \\
+    \\
+    \FV(\tau) & \subset \Id
+      & \text{free variables of $\tau$ term} \\
+    \TyIs & \subset \Term \times \Term & \text{type equivalence relation} \\
+    \TyHas & \subset \Term \times \Term & \text{subtyping relation} \\
+  \end{align*}
+
+  \begin{align*}
+    \tau & \in \Term & \text{terms} \\
+    \alpha, \beta & \in \TyVar & \text{type variables} \\
+    A, B & \in \TyId & \text{functor identifiers} \\
+    T, S & \in \Ty & \text{types} \\
+    x, y, z & \in \Id & \text{identifiers} \\
+    \square & \in \Ty & \text{unknown type} \\
+  \end{align*}
+\end{table}
+
+\clearpage
+\section*{Type structure}
+
+\begin{table}[!h]
+  \begin{align*}
+    daase : &\ \TyId \rightarrow (\TyApp \mapsto \TyScr) &
+      \text{type database query} \\
+    flatten: &\ \Term \rightarrow \TyCps &
+      \text{capsule evaluation} \\
+    \Delta : &\ \TyApp \rightarrow \TyScr &
+      \text{the structure of a type}
+    \\[0.5em]
+    \{ \Type() &\; \mapsto(\varnothing, \varnothing, \varnothing) \} \in
+      \Delta & \text{top type}\\
+  \end{align*}
+
+  \vspace{-1.0em}
+
+  \begin{align*}
+    daase(\BasicType) = \BasicType() \mapsto
+      &\ ( \{ \Category() \}, \\
+      &\ \ \varnothing, \\
+      &\ \ \{ \texttt{=} : (\%,\%) \rightarrow \Boolean(), \ldots \})
+    \\[0.5em]
+    daase(\PartialOrder) = \PartialOrder() \mapsto
+      &\ ( \{ \Category() \}, \\
+      &\ \ \varnothing, \\
+      &\ \ \{ \texttt{<} : (\%,\%) \rightarrow \Boolean(),
+              \texttt{>} : (\%,\%) \rightarrow \Boolean(), \ldots \} )
+    \\[0.5em]
+    daase(\List) = \Lambda \alpha.\,\List(\alpha) \mapsto
+      &\ ( \{\PartialOrder() \Guard \alpha \TyHas \PartialOrder(), \ldots \}, \\
+      &\ \ \{ \ldots \}, \\
+      &\ \ \{ \texttt{<} : (\%,\%) \rightarrow \Boolean() \Guard \alpha \TyHas
+              \PartialOrder(), \ldots \} )
+    \\[0.5em]
+    \Delta(\List(\Integer())) = 
+      &\ ( \{ \PartialOrder(), \ldots \}, \\
+      &\ \ \varnothing, \\
+      &\ \ \{ \texttt{<} : (\%,\%) \rightarrow \Boolean(), \ldots \} ) \\
+  \end{align*}
+\end{table}
+
+\subsection*{Capsule flattening}
+
+\begin{table}[!h]
+  \begin{align*}
+    flatten\denot{\tau_1 \Twith \tau_2} \rightarrow &\;
+      flatten\denot{\tau_1} \cup flatten\denot{\tau_2}
+    \\
+    flatten\denot{\SumType(
+      \Lambda \vec{\alpha}. A(\vec{\alpha}), \ldots,
+      \Lambda \vec{\beta}.  B(\vec{\beta})))}
+    \rightarrow &\;
+      \{ \Lambda \vec{\alpha}. A(\vec{\alpha}), \ldots,
+         \Lambda \vec{\beta}. B(\vec{\beta}) \}
+    \\
+    flatten\denot{(\tau_1; \ldots; \tau_n)} \rightarrow &\;
+      flatten\denot{\tau_1} \cup \ldots \cup flatten\denot{\tau_n}
+    \\
+    flatten\denot{\Tif \tau_c \Tthen \tau_1 \Telse \tau_2}
+    \rightarrow &\;
+      flatten\denot{\Tif \tau_c \Tthen \tau_1} \cup
+      flatten\denot{\Tif\;\Tnot \tau_c \Tthen \tau_2}
+    \\
+    flatten\denot{\Tif \tau_c \Tthen (\tau_1; \ldots; \tau_n)}
+    \rightarrow &\;
+      flatten\denot{\Tif \tau_c \Tthen \tau_1} \cup \ldots \cup
+      flatten\denot{\Tif \tau_c \Tthen \tau_n}
+    \\
+    flatten\denot{\Tif \tau_0 \Tthen\;\Tif \tau_1 \Tthen \tau}
+    \rightarrow &\;
+      flatten\denot{\Tif (\tau_0 \Tand \tau_1) \Tthen \tau}
+    \\
+    flatten\denot{\Tif \tau \Tthen x : T}
+    \rightarrow &\; \{ x : T \Guard \tau \}
+    \\
+    flatten\denot{\Tif \tau \Tthen \Lambda \vec{\alpha}. A(\vec{\alpha})}
+    \rightarrow &\; \{\Lambda \vec{\alpha}. A(\vec{\alpha}) \Guard \tau \}
+    \\
+  \end{align*}
+
+  \begin{prooftree}
+    \AxiomC{$
+      \Delta \vdash daase(A) = \{
+        \Lambda \vec{\alpha}. A(\vec{\alpha}) \mapsto \pi \}
+    $}
+    \RightLabel{\scriptsize(\textsc{TypeFetch})}
+    \UnaryInfC{$
+      \Delta, 
+        \{ \Lambda \vec{\alpha}. A(\vec{\alpha}) \mapsto \pi \} \in \Delta
+      \vdash
+    $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      \Delta, \{ \Lambda \vec{\beta}. B \mapsto \sigma \} \in \Delta \vdash
+      \Lambda \vec{\alpha}. A \mapsto (
+        \pi_0 \cup \{ B[\vec{\beta}/\vec{\alpha}] \},
+        \pi_1 \cup \sigma_1[\vec{\beta}/\vec{\alpha}],
+        \pi_2 \cup \sigma_2[\vec{\beta}/\vec{\alpha}]
+      )
+    $}
+    \RightLabel{\scriptsize(\textsc{CapsMerge})}
+    \UnaryInfC{$
+      \Delta \vdash
+      \Lambda \vec{\alpha}. A \mapsto (\pi_0, \pi_1,
+        \pi_2 \cup \{ B[\vec{\beta}/\vec{\alpha}] \})
+    $}
+  \end{prooftree}
+\end{table}
+
+\clearpage
+\section*{Environment}
+
+\begin{table}[!h]
+  \begin{gather*}
+    E : \Env \times \Term \rightarrow \Env
+    \\[0.5em]
+    import : \Env \times (\TyId\ \cup \TyApp) \rightarrow \Env \\
+    import : \Env \times \Tup(\TyId\ \cup \TyApp) \rightarrow \Env
+    \\[0.5em]
+    merge : \Env \times \Env \rightarrow \Env \\
+    \\
+    Env \quad \equiv \quad
+      \Id\, \times (\Ty\, \cup \TyVar) \quad \cup \quad
+      \TyVar\, \times \Ty \quad \cup \quad
+      \TyApp\, \times \TyScr\\
+    \\
+    \{ x \mapsto T \} \in \Env \\
+    \{ x \mapsto \alpha \} \in \Env \\
+    \{ \alpha \mapsto T \} \in \Env \\
+    \{ T \mapsto \Delta(T) \} \in \Env \\
+  \end{gather*}
+
+  \vspace{-2em}
+
+  \begin{align*}
+    \texttt{x} \mapsto &\ \square
+    \\[0.5em]
+    \texttt{num} \mapsto &\ \Integer() \\
+    \texttt{num} \mapsto &\ \Float()
+    \\[0.5em]
+    \texttt{=} \mapsto &\ (\Integer(), \Integer()) \rightarrow \Boolean() \\
+    \texttt{=} \mapsto &\ (\Float(), \Float()) \rightarrow \Boolean()
+    \\[0.5em]
+    \BasicType \mapsto &\ \BasicType(), \\
+    \BasicType() \mapsto &\ ( \{ \Category() \}, \varnothing,
+      \{ \texttt{=} : (\%,\%) \rightarrow \Boolean(), \ldots )
+    \\[0.5em]
+    \PartialOrder \mapsto &\ \PartialOrder(), \\
+    \PartialOrder() \mapsto ( & \{ \Category() \}, \varnothing, \\
+    & \{ \texttt{<} : (\%,\%) \rightarrow \Boolean(),
+         \texttt{>} : (\%,\%) \rightarrow \Boolean(), \ldots \} )
+    \\[0.5em]
+    \List \mapsto &\ \Lambda \alpha.\,\List(\alpha) \\
+    \Lambda \alpha.\, \List(\alpha) \mapsto ( &
+      \{\PartialOrder() \Guard \alpha \TyHas \PartialOrder(), \ldots \}, \\
+    & \{ \alpha \TyHas \SetCategory() \}, \\
+    & \{ \texttt{<} : (\%,\%) \rightarrow \Boolean() \Guard \alpha \TyHas
+      \PartialOrder(), \ldots \} ) \\
+    \List(\Integer()) \mapsto ( & \{ \PartialOrder(), \ldots \}, \varnothing, \\
+    & \{ \texttt{<} : (\List(\Integer()),\List(\Integer())) \rightarrow
+      \Boolean(), \ldots \} ) \\
+  \end{align*}
+
+  \vspace{2em}
+
+  \begin{prooftree}
+    \AxiomC{$\{ x \mapsto T \} \in \Gamma_0$}
+    \AxiomC{$\{ x \mapsto T \} \in \Gamma_1$}
+    \RightLabel{\scriptsize(\textsc{MergeEnv-1})}
+    \BinaryInfC{$\{ x \mapsto T \} \in merge(\Gamma_0, \Gamma_1)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\{ x \mapsto T_0 \} \in \Gamma_0$}
+    \AxiomC{$\{ x \mapsto T_1 \} \in \Gamma_1$}
+    \RightLabel{\scriptsize(\textsc{MergeEnv-2})}
+    \BinaryInfC{$
+      \{ x \mapsto \texttt{Union}(T_0, T_1) \} \in merge(\Gamma_0, \Gamma_1)
+    $}
+  \end{prooftree}
+\end{table}
+
+\clearpage
+\section*{Term processing}
+
+\begin{table}[!h]
+  \begin{prooftree}
+    \AxiomC{$\Gamma \vdash \texttt{"failed"} : \texttt{String()}$}
+    \RightLabel{\scriptsize(\textsc{String-1})}
+    \UnaryInfC{$E(\Gamma, \denot{\texttt{"failed"}}) \rightarrow \Gamma$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma \vdash \texttt{"failed"} : \texttt{Singleton("failed")}$}
+    \RightLabel{\scriptsize(\textsc{String-2})}
+    \UnaryInfC{$E(\Gamma, \denot{\texttt{"failed"}}) \rightarrow \Gamma$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma \vdash \texttt{5} : \texttt{NonNegativeInteger()}$}
+    \RightLabel{\scriptsize(\textsc{WholeNumber})}
+    \UnaryInfC{$E(\Gamma, \denot{\texttt{5}}) \rightarrow \Gamma$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma \vdash \texttt{3.14} : \texttt{Float()}$}
+    \RightLabel{\scriptsize(\textsc{Float})}
+    \UnaryInfC{$E(\Gamma, \denot{\texttt{3.14}}) \rightarrow \Gamma$}
+  \end{prooftree}
+
+  \vspace{1em}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma \vdash x : T$}
+    \RightLabel{\scriptsize(\textsc{TypeDecl})}
+    \UnaryInfC{$E(\Gamma, \denot{x : T}) \rightarrow 
+      \Gamma \cup \{x \mapsto T\}$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma \without \{x, \alpha\} \vdash x : \alpha$}
+    \RightLabel{\scriptsize(\textsc{VarIntro})}
+    \UnaryInfC{$E(\Gamma, \denot{x}) \rightarrow 
+      \Gamma \cup \{x \mapsto \alpha, \alpha \mapsto \square \}$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma, \{x \mapsto \alpha\} \in \Gamma \vdash x : \alpha$}
+    \RightLabel{\scriptsize(\textsc{VarUse})}
+    \UnaryInfC{$E(\Gamma, \denot{x}) \rightarrow  \Gamma$}
+  \end{prooftree}
+
+  \vspace{1em}
+
+  \begin{prooftree}
+    \AxiomC{$E(\Gamma_i, \denot{\tau_{i+1}}) \rightarrow \Gamma_{i+1}$}
+    \AxiomC{$\Gamma_i \without \alpha_i \vdash \tau_i : \alpha_i$}
+    \AxiomC{$\Gamma_n \without \alpha \vdash \tau : \alpha$}
+    \RightLabel{\scriptsize(\textsc{Sequence})}
+    \TrinaryInfC{$E(\Gamma_0, \tau \equiv \denot{\tau_1; \ldots; \tau_n})
+                 \rightarrow \Gamma_n$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma_i, \denot{\tau_i}) \rightarrow \Gamma_{i+1}$}
+    \AxiomC{$\Gamma_{i+1} \without \alpha_i \vdash \tau_i : \alpha_i$}
+    \AxiomC{$\Gamma_{n+1} \without \alpha \vdash \tau : \alpha$}
+    \RightLabel{\scriptsize(\textsc{Application})}
+    \TrinaryInfC{$
+       E(\Gamma_0, \tau \equiv \denot{\tau_0(\tau_1, \ldots, \tau_n)})
+       \rightarrow \Gamma_{n+1}
+    $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma_0, \denot{\tau_1}) \rightarrow \Gamma_1
+      \quad
+      E(\Gamma_1, \denot{\tau_2}) \rightarrow \Gamma_2$}
+    \AxiomC{$\Gamma_i \without \alpha_i \vdash \tau_i : \alpha_i$}
+    \AxiomC{$\Gamma_2 \without \alpha \vdash \tau : \alpha$}
+    \RightLabel{\scriptsize(\textsc{Assignment})}
+    \TrinaryInfC{$
+       E(\Gamma_0, \tau \equiv \denot{\tau_1 \coloneqq \tau_2}) \rightarrow \Gamma_2$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma, \denot{\tau_1}) \rightarrow \Gamma_1
+      \quad
+      E(\Gamma_1, \denot{\tau_2}) \rightarrow \Gamma_2
+      \quad
+      E(\Gamma_1, \denot{\tau_3}) \rightarrow \Gamma_3$}
+    \AxiomC{$
+      \Gamma_1 \vdash \tau_1 : \Boolean
+      \quad
+      \Gamma_{i} \without \alpha_{i} \vdash \tau_{i} : \alpha_{i}
+      \quad
+      \Gamma \without \alpha \vdash \tau : \alpha$}
+    \RightLabel{\scriptsize(\textsc{IfThenElse})}
+    \BinaryInfC{$
+       E(\Gamma, \tau \equiv \denot{\texttt{if}\ \tau_1\ \texttt{then}
+         \ \tau_2 \ \texttt{else}\ \tau_3})
+       \rightarrow merge(\Gamma_2, \Gamma_3) \equiv \Gamma$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma_0, \denot{\tau_1}) \rightarrow \Gamma_1
+      \quad
+      E(\Gamma_1, \denot{\tau_2}) \rightarrow \Gamma_2$}
+    \AxiomC{$\Gamma_1 \vdash \tau_1 : \Boolean$}
+    \AxiomC{$\Gamma_2 \without \alpha \vdash \tau : \alpha$}
+    \RightLabel{\scriptsize(\textsc{While})}
+    \TrinaryInfC{$
+      E(\Gamma_0, \tau \equiv \denot{\texttt{while}\ \tau_1\ \texttt{repeat}\ \tau_2})
+      \rightarrow \Gamma_2
+    $}
+  \end{prooftree}
+
+\end{table}
+
+\pagebreak
+
+\begin{table}
+
+  \begin{prooftree}
+    \AxiomC{}
+    \RightLabel{\scriptsize(\textsc{Import})}
+    \UnaryInfC{$
+       E(\Gamma, \denot{\texttt{import}\ T}) \rightarrow import(\Gamma, T)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$E(import(\Gamma, T), \denot{\tau}) \rightarrow \Gamma'$}
+    \AxiomC{$\Gamma' \vdash \tau : T$}
+    \RightLabel{\scriptsize(\textsc{TypeOrigin})}
+    \BinaryInfC{$
+       E(\Gamma, \denot{\tau\ \texttt{@}\ T}) \rightarrow import(\Gamma, T)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$E(import(\Gamma, T), \denot{\tau}) \rightarrow \Gamma'$}
+    \AxiomC{$\Gamma' \vdash x \in \Delta^{*}_2(T)$}
+    \RightLabel{\scriptsize(\textsc{TypeSelect})}
+    \BinaryInfC{$
+       E(\Gamma, \denot{x\ \texttt{\$}\ T}) \rightarrow import(\Gamma, T)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma, \denot{\texttt{coerce}(\tau)\ \texttt{@}\ T}) 
+        \rightarrow \Gamma'$}
+    \RightLabel{\scriptsize(\textsc{TypeCoerce-1})}
+    \UnaryInfC{$
+       E(\Gamma, \denot{\tau\ \texttt{::}\ T}) \rightarrow import(\Gamma, T)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$E(import(\Gamma, T), \denot{\tau}) \rightarrow \Gamma'$}
+    \AxiomC{$\Gamma' \without \alpha \vdash \tau : \alpha$}
+    \AxiomC{$\Gamma' \cup \{ \alpha \mapsto \square \} \vdash
+      \alpha \subtype T$}
+    \RightLabel{\scriptsize(\textsc{TypeCoerce-2})}
+    \TrinaryInfC{$
+       E(\Gamma, \denot{\tau\ \texttt{::}\ T}) \rightarrow import(\Gamma, T)$}
+  \end{prooftree}
+
+  \vspace{1em}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma, \denot{(x_1 : T_1, \ldots, x_n : T_n) : T_0
+       \ \texttt{+->}\ \tau}) \rightarrow \Gamma'$}
+    \RightLabel{\scriptsize(\textsc{LambdaDef})}
+    \UnaryInfC{$
+      E(\Gamma, \tau' \equiv \denot{y(x_1 : T_1, \ldots, x_n : T_n) : T_0
+      \ \texttt{==}\ \tau}) \rightarrow
+      \Gamma' \cup
+      \{ y \mapsto (T_1, \ldots, T_n) \rightarrow T_0 \}
+    $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      E(\Gamma' \equiv import(\Gamma_0, \{T_0, \ldots, T_n\}) \cup
+      \{x_1 \mapsto T_1, \ldots, x_n \mapsto T_n\},
+      \denot{\tau}) \rightarrow \Gamma_1$}
+    \AxiomC{$\Gamma_1 \vdash \tau : (T_1, \ldots, T_n) \rightarrow T_0$}
+    \RightLabel{\scriptsize(\textsc{FunDef})}
+    \BinaryInfC{$
+      E(\Gamma_0, \denot{(x_1 : T_1, \ldots, x_n : T_n) : T_0
+       \ \texttt{+->}\ \tau}) \rightarrow import(\Gamma_1, T_0) $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$E(import(\Gamma, \{T_i\}) \cup \{x_i \mapsto T_i\},
+      \denot{\tau_0}) \rightarrow \Gamma' $}
+    \AxiomC{$\Gamma' \without \alpha \vdash \tau_1 : \alpha$}
+    \RightLabel{\scriptsize(\textsc{CatDecl})}
+    \BinaryInfC{\stackanchor
+      {$E(\Gamma, \denot{y(x_0 : T_0, \ldots, x_n : T_n) : 
+        \Category \TyDef \tau_0 \Add \tau_1 }) \rightarrow$}
+      {$\Gamma \cup \{ y \mapsto ((x_1, \ldots, x_n),
+        \{ x_i \TyHas T_i\}, \{ \Category() \}, \tau_0 ) [x_i / \alpha_i] \}$}
+    }
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$E(import(\Gamma, \{T_i\}) \cup \{x_i \mapsto T_i\},
+      \denot{\tau_1 \Add \tau_2}) \rightarrow \Gamma' $}
+    \AxiomC{$\Gamma' \without \alpha \vdash \tau_1 \Add \tau_2: \alpha$}
+    \RightLabel{\scriptsize(\textsc{DomDecl})}
+    \BinaryInfC{\stackanchor
+      {$E(\Gamma, \denot{y(\alpha_0 : T_0, \ldots, \alpha_n : T_n) : 
+        \tau_0 \TyDef \tau_1 \Add \tau_2}) \rightarrow$}
+      {$\Gamma \cup \{ y \mapsto ((x_1, \ldots, x_n),
+        \{ x_i \TyHas T_i\}, \varnothing, \tau_0 ) [x_i / \alpha_i] \}$}
+    }
+  \end{prooftree}
+
+\end{table}
+
+
+\begin{comment}
+  \begin{prooftree}
+    \AxiomC{$T \equiv S$}
+    \AxiomC{$\Gamma \vdash T$}
+    \AxiomC{$\Gamma \vdash S$}
+    \RightLabel{\scriptsize(\textsc{TyIs})}
+    \TrinaryInfC{$\Gamma \vdash T \TyIs S $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Gamma \vdash v_0 : T_0$}
+    \AxiomC{$\Gamma \vdash v_1 : T_1$}
+    \AxiomC{$\Gamma, \{(T_0, T_1) \Rightarrow \texttt{Boolean}()\} \subseteq
+      \Sigma(\texttt{=}) \vdash \texttt{=}(v_0, v_1) \leadsto \texttt{true}
+    $}
+    \RightLabel{\scriptsize(\textsc{ValIs})}
+    \TrinaryInfC{$\Gamma \vdash v_0 \TyIs v_1$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\mathcal{A} \equiv \mathcal{B}$}
+    \AxiomC{$m = n$}
+    \AxiomC{$\Gamma \vdash T_i \TyIs S_i $}
+    \RightLabel{\scriptsize(\textsc{TyCtorIs})}
+    \TrinaryInfC{$\Gamma \vdash 
+      \mathcal{A}(T_0, T_1, \ldots, T_m) \TyIs \mathcal{B}(S_0, S_1, \ldots, T_n)
+    $}
+  \end{prooftree}
+\end{comment}
+
+\end{document}
+
+% vim: spelllang=en_US
