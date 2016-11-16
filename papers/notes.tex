@@ -54,12 +54,19 @@
 \newcommand\Tthen{\mathrel{\texttt{then}}}
 \newcommand\Telse{\mathrel{\texttt{else}}}
 \newcommand\Twith{\mathrel{\texttt{with}}}
+\newcommand\Thas{\mathrel{\texttt{has}}}
+\newcommand\Tis{\mathrel{\texttt{is}}}
+\newcommand\Ttrue{\texttt{true}}
+\newcommand\Tfalse{\texttt{false}}
+
+\newcommand\Mflatten{\mathop{flatten}}
+\newcommand\Mguard{\mathop{guard}}
+\newcommand\Mhas{\mathop{has}}
+\newcommand\Mis{\mathop{is}}
+\newcommand\Mif{\mathrel{|}}
 
 \newcommand\TyDef{\;\texttt{==}\;}
-\newcommand\TyHas{\;\texttt{has}\;}
-\newcommand\TyIs{\;\texttt{is}\;}
 \newcommand\Add{\;\texttt{add}\;}
-\newcommand\Guard{\;|\;}
 \newcommand\Type{\texttt{Type}}
 \newcommand\BasicType{\texttt{BasicType}}
 \newcommand\PartialOrder{\texttt{PartialOrder}}
@@ -121,7 +128,7 @@
 Let $\mathcal{F}(S)$ and $\mathcal{T}(S)$ be a set of finite subsets and tuples
 of $S$ respectively.
 
-\begin{table}[!h]
+\begin{minipage}{\textwidth}
   \begin{align*}
     \TyVar & \subset \Id
       & \text{type variables} \\
@@ -142,8 +149,8 @@ of $S$ respectively.
     \\
     \FV(\tau) & \subset \Id
       & \text{free variables of $\tau$ term} \\
-    \TyIs & \subset \Term \times \Term & \text{type equivalence relation} \\
-    \TyHas & \subset \Term \times \Term & \text{subtyping relation} \\
+    \Tis & \subset \Term \times \Term & \text{type equivalence relation} \\
+    \Thas & \subset \Term \times \Term & \text{subtyping relation} \\
   \end{align*}
 
   \begin{align*}
@@ -154,16 +161,16 @@ of $S$ respectively.
     x, y, z & \in \Id & \text{identifiers} \\
     \square & \in \Ty & \text{unknown type} \\
   \end{align*}
-\end{table}
+\end{minipage}
 
 \clearpage
 \section*{Type structure}
 
-\begin{table}[!h]
+\begin{minipage}{\textwidth}
   \begin{align*}
     daase : &\ \TyId \rightarrow (\TyApp \mapsto \TyScr) &
       \text{type database query} \\
-    flatten: &\ \Term \rightarrow \TyCps &
+    \Mflatten : &\ \Term \rightarrow \TyCps &
       \text{capsule evaluation} \\
     \Delta : &\ \TyApp \rightarrow \TyScr &
       \text{the structure of a type}
@@ -172,7 +179,7 @@ of $S$ respectively.
       \Delta & \text{top type}\\
   \end{align*}
 
-  \vspace{-1.0em}
+  \vspace{-2.0em}
 
   \begin{align*}
     daase(\BasicType) = \BasicType() \mapsto
@@ -187,9 +194,9 @@ of $S$ respectively.
               \texttt{>} : (\%,\%) \rightarrow \Boolean(), \ldots \} )
     \\[0.5em]
     daase(\List) = \Lambda \alpha.\,\List(\alpha) \mapsto
-      &\ ( \{\PartialOrder() \Guard \alpha \TyHas \PartialOrder(), \ldots \}, \\
+      &\ ( \{\PartialOrder() \Mif \alpha \Thas \PartialOrder(), \ldots \}, \\
       &\ \ \{ \ldots \}, \\
-      &\ \ \{ \texttt{<} : (\%,\%) \rightarrow \Boolean() \Guard \alpha \TyHas
+      &\ \ \{ \texttt{<} : (\%,\%) \rightarrow \Boolean() \Mif \alpha \Thas
               \PartialOrder(), \ldots \} )
     \\[0.5em]
     \Delta(\List(\Integer())) = 
@@ -197,57 +204,80 @@ of $S$ respectively.
       &\ \ \varnothing, \\
       &\ \ \{ \texttt{<} : (\%,\%) \rightarrow \Boolean(), \ldots \} ) \\
   \end{align*}
-\end{table}
+\end{minipage}
 
-\subsection*{Capsule flattening}
+\subsection*{capsule flattening}
 
-\begin{table}[!h]
+\begin{minipage}{\textwidth}
   \begin{align*}
-    flatten\denot{\tau_1 \Twith \tau_2} \rightarrow &\;
-      flatten\denot{\tau_1} \cup flatten\denot{\tau_2}
+    \Mflatten \denot{\tau_1 \Twith \tau_2} \rightarrow &\;
+      \Mflatten \denot{\tau_1} \cup \Mflatten \denot{\tau_2}
     \\
-    flatten\denot{\SumType(
+    \Mflatten \denot{\SumType(
       \Lambda \vec{\alpha}. A(\vec{\alpha}), \ldots,
       \Lambda \vec{\beta}.  B(\vec{\beta})))}
     \rightarrow &\;
       \{ \Lambda \vec{\alpha}. A(\vec{\alpha}), \ldots,
          \Lambda \vec{\beta}. B(\vec{\beta}) \}
     \\
-    flatten\denot{(\tau_1; \ldots; \tau_n)} \rightarrow &\;
-      flatten\denot{\tau_1} \cup \ldots \cup flatten\denot{\tau_n}
+    \Mflatten \denot{(\tau_1; \ldots; \tau_n)} \rightarrow &\;
+      \Mflatten \denot{\tau_1} \cup \ldots \cup \Mflatten \denot{\tau_n}
     \\
-    flatten\denot{\Tif \tau_c \Tthen \tau_1 \Telse \tau_2}
+    \Mflatten \denot{\Tif \tau_c \Tthen \tau_1 \Telse \tau_2}
     \rightarrow &\;
-      flatten\denot{\Tif \tau_c \Tthen \tau_1} \cup
-      flatten\denot{\Tif\;\Tnot \tau_c \Tthen \tau_2}
+      \Mflatten \denot{\Tif \tau_c \Tthen \tau_1} \cup
+      \Mflatten \denot{\Tif\;\Tnot \tau_c \Tthen \tau_2}
     \\
-    flatten\denot{\Tif \tau_c \Tthen (\tau_1; \ldots; \tau_n)}
+    \Mflatten \denot{\Tif \tau_c \Tthen (\tau_1; \ldots; \tau_n)}
     \rightarrow &\;
-      flatten\denot{\Tif \tau_c \Tthen \tau_1} \cup \ldots \cup
-      flatten\denot{\Tif \tau_c \Tthen \tau_n}
+      \Mflatten \denot{\Tif \tau_c \Tthen \tau_1} \cup \ldots \cup
+      \Mflatten \denot{\Tif \tau_c \Tthen \tau_n}
     \\
-    flatten\denot{\Tif \tau_0 \Tthen\;\Tif \tau_1 \Tthen \tau}
+    \Mflatten \denot{\Tif \tau_0 \Tthen\;\Tif \tau_1 \Tthen \tau}
     \rightarrow &\;
-      flatten\denot{\Tif (\tau_0 \Tand \tau_1) \Tthen \tau}
+      \Mflatten \denot{\Tif (\tau_0 \Tand \tau_1) \Tthen \tau}
     \\
-    flatten\denot{\Tif \tau \Tthen x : T}
-    \rightarrow &\; \{ x : T \Guard \tau \}
+    \Mflatten \denot{\Tif \tau \Tthen x : T}
+    \rightarrow &\; \{ x : T \Mif \Mguard \denot{\tau} \}
     \\
-    flatten\denot{\Tif \tau \Tthen \Lambda \vec{\alpha}. A(\vec{\alpha})}
-    \rightarrow &\; \{\Lambda \vec{\alpha}. A(\vec{\alpha}) \Guard \tau \}
+    \Mflatten \denot{\Tif \tau \Tthen \Lambda \vec{\alpha}. A(\vec{\alpha})}
+    \rightarrow &\;
+    \{\Lambda \vec{\alpha}. A(\vec{\alpha}) \Mif \Mguard \denot{\tau} \}
+    \\[0.5em]
+    \Mguard \denot{\tau_0 \Tand \tau_1}
+    \rightarrow &\;
+      \Mguard \denot{\tau_0} \wedge \Mguard \denot{\tau_1}
+    \\
+    \Mguard \denot{\tau_0 \Tor \tau_1}
+    \rightarrow &\;
+      \Mguard \denot{\tau_0} \vee \Mguard \denot{\tau_1}
+    \\
+    \Mguard \denot{\Tnot \tau}
+    \rightarrow &\;
+      \neg \Mguard \denot{\tau}
+    \\
+    \Mguard \denot{\tau_0 \Thas \tau_1}
+    \rightarrow &\;
+      \Mhas (\Mflatten \denot{\tau_0}, \Mflatten \denot{\tau_1})
+    \\
+    \Mguard \denot{\tau_0 \Tis \tau_1}
+    \rightarrow &\;
+      \Mis (\Mflatten \denot{\tau_0}, \Mflatten \denot{\tau_1})
+    \\
+    \Mguard \denot{\alpha} \rightarrow &\; \alpha
     \\
   \end{align*}
+\end{minipage}
 
+\begin{minipage}{\textwidth}
   \begin{prooftree}
     \AxiomC{$
       \Delta \vdash daase(A) = \{
-        \Lambda \vec{\alpha}. A(\vec{\alpha}) \mapsto \pi \}
+        \Lambda \vec{\alpha}. A(\vec{\alpha}) \mapsto \rho \}
     $}
     \RightLabel{\scriptsize(\textsc{TypeFetch})}
     \UnaryInfC{$
-      \Delta, 
-        \{ \Lambda \vec{\alpha}. A(\vec{\alpha}) \mapsto \pi \} \in \Delta
-      \vdash
+      \Delta \cup \{ \Lambda \vec{\alpha}. A(\vec{\alpha}) \mapsto \rho \} \vdash
     $}
   \end{prooftree}
 
@@ -255,24 +285,104 @@ of $S$ respectively.
     \AxiomC{$
       \Delta, \{ \Lambda \vec{\beta}. B \mapsto \sigma \} \in \Delta \vdash
       \Lambda \vec{\alpha}. A \mapsto (
-        \pi_0 \cup \{ B[\vec{\beta}/\vec{\alpha}] \},
-        \pi_1 \cup \sigma_1[\vec{\beta}/\vec{\alpha}],
-        \pi_2 \cup \sigma_2[\vec{\beta}/\vec{\alpha}]
+        \rho_0 \cup \{ B[\vec{\beta}/\vec{\alpha}] \},
+        \rho_1 \cup \sigma_1[\vec{\beta}/\vec{\alpha}],
+        \rho_2 \cup \sigma_2[\vec{\beta}/\vec{\alpha}]
       )
     $}
     \RightLabel{\scriptsize(\textsc{CapsMerge})}
     \UnaryInfC{$
       \Delta \vdash
-      \Lambda \vec{\alpha}. A \mapsto (\pi_0, \pi_1,
-        \pi_2 \cup \{ B[\vec{\beta}/\vec{\alpha}] \})
+      \Lambda \vec{\alpha}. A \mapsto (\rho_0, \rho_1,
+        \rho_2 \cup \{ B[\vec{\beta}/\vec{\alpha}] \})
     $}
   \end{prooftree}
-\end{table}
+\end{minipage}
+
+\subsection*{$\Mhas$ and $\Mis$ predicates}
+
+\begin{minipage}{\textwidth}
+  \vspace{2em}
+
+  \begin{prooftree}
+    \AxiomC{$\top$}
+    \RightLabel{\scriptsize(\textsc{HasAll})}
+    \UnaryInfC{$\Delta \vdash \Mhas(\tau, \Type())$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\tau_0 \equiv \tau_1$}
+    \RightLabel{\scriptsize(\textsc{HasSym})}
+    \UnaryInfC{$\Delta \vdash \Mhas(\tau_0, \tau_1)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\tau_0 \equiv \tau_1$}
+    \RightLabel{\scriptsize(\textsc{IsSym})}
+    \UnaryInfC{$\Delta \vdash \Mis(\tau_0, \tau_1)$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$
+      \Delta \vdash \Mhas (\tau, \tau_1)
+      \quad \ldots \quad
+      \Delta \vdash \Mhas (\tau, \tau_n)
+    $}
+    \RightLabel{\scriptsize(\textsc{HasMany})}
+    \UnaryInfC{$\Delta \vdash \Mhas(\tau, \{ \tau_1, \ldots, \tau_n \})$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Delta, 
+      \{ \Lambda \vec{\alpha}. A \mapsto (\rho_0, \rho_1, \rho_2) \} \in \Delta
+      \vdash \Lambda \vec{\beta}. B \in \rho_0
+    $}
+    \RightLabel{\scriptsize(\textsc{HasType})}
+    \UnaryInfC{$\Delta \vdash
+      \Mhas(\{ \Lambda \vec{\alpha}. A \}, \{ \Lambda \vec{\beta}.  B \})
+    $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Delta, 
+      \{ \Lambda \vec{\alpha}. A \mapsto (\rho_0, \rho_1, \rho_2) \} \in \Delta
+      \vdash x : T \in \rho_2
+    $}
+    \RightLabel{\scriptsize(\textsc{HasSig})}
+    \UnaryInfC{$\Delta \vdash
+      \Mhas(\{ \Lambda \vec{\alpha}. A \}, \{ x : T \})
+    $}
+  \end{prooftree}
+\end{minipage}
+
+\subsection*{type guards evaluation}
+
+\begin{minipage}{\textwidth}
+  \vspace{1em}
+
+  \begin{prooftree}
+    \AxiomC{$\Delta \vdash \{ \Lambda \vec{\alpha}. A \}$}
+    \AxiomC{$\Delta \vdash \varphi$}
+    \RightLabel{\scriptsize(\textsc{TyAppGuard})}
+    \BinaryInfC{$
+      \Delta \vdash \{ \Lambda \vec{\alpha}. A \Mif \varphi \}
+    $}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$\Delta \vdash \{ x : T \}$}
+    \AxiomC{$\Delta \vdash \varphi$}
+    \RightLabel{\scriptsize(\textsc{TySigGuard})}
+    \BinaryInfC{$
+      \Delta \vdash \{ x : T \Mif \varphi \}
+    $}
+  \end{prooftree}
+\end{minipage}
 
 \clearpage
 \section*{Environment}
 
-\begin{table}[!h]
+\begin{minipage}{\textwidth}
   \begin{gather*}
     E : \Env \times \Term \rightarrow \Env
     \\[0.5em]
@@ -314,9 +424,9 @@ of $S$ respectively.
     \\[0.5em]
     \List \mapsto &\ \Lambda \alpha.\,\List(\alpha) \\
     \Lambda \alpha.\, \List(\alpha) \mapsto ( &
-      \{\PartialOrder() \Guard \alpha \TyHas \PartialOrder(), \ldots \}, \\
-    & \{ \alpha \TyHas \SetCategory() \}, \\
-    & \{ \texttt{<} : (\%,\%) \rightarrow \Boolean() \Guard \alpha \TyHas
+      \{\PartialOrder() \Mif \alpha \Thas \PartialOrder(), \ldots \}, \\
+    & \{ \alpha \Thas \SetCategory() \}, \\
+    & \{ \texttt{<} : (\%,\%) \rightarrow \Boolean() \Mif \alpha \Thas
       \PartialOrder(), \ldots \} ) \\
     \List(\Integer()) \mapsto ( & \{ \PartialOrder(), \ldots \}, \varnothing, \\
     & \{ \texttt{<} : (\List(\Integer()),\List(\Integer())) \rightarrow
@@ -340,12 +450,12 @@ of $S$ respectively.
       \{ x \mapsto \texttt{Union}(T_0, T_1) \} \in merge(\Gamma_0, \Gamma_1)
     $}
   \end{prooftree}
-\end{table}
+\end{minipage}
 
 \clearpage
 \section*{Term processing}
 
-\begin{table}[!h]
+\begin{minipage}{\textwidth}
   \begin{prooftree}
     \AxiomC{$\Gamma \vdash \texttt{"failed"} : \texttt{String()}$}
     \RightLabel{\scriptsize(\textsc{String-1})}
@@ -460,13 +570,11 @@ of $S$ respectively.
       \rightarrow \Gamma_2
     $}
   \end{prooftree}
-
-\end{table}
+\end{minipage}
 
 \pagebreak
 
-\begin{table}
-
+\begin{minipage}{\textwidth}
   \begin{prooftree}
     \AxiomC{}
     \RightLabel{\scriptsize(\textsc{Import})}
@@ -545,7 +653,7 @@ of $S$ respectively.
       {$E(\Gamma, \denot{y(x_0 : T_0, \ldots, x_n : T_n) : 
         \Category \TyDef \tau_0 \Add \tau_1 }) \rightarrow$}
       {$\Gamma \cup \{ y \mapsto ((x_1, \ldots, x_n),
-        \{ x_i \TyHas T_i\}, \{ \Category() \}, \tau_0 ) [x_i / \alpha_i] \}$}
+        \{ x_i \Thas T_i\}, \{ \Category() \}, \tau_0 ) [x_i / \alpha_i] \}$}
     }
   \end{prooftree}
 
@@ -558,42 +666,10 @@ of $S$ respectively.
       {$E(\Gamma, \denot{y(\alpha_0 : T_0, \ldots, \alpha_n : T_n) : 
         \tau_0 \TyDef \tau_1 \Add \tau_2}) \rightarrow$}
       {$\Gamma \cup \{ y \mapsto ((x_1, \ldots, x_n),
-        \{ x_i \TyHas T_i\}, \varnothing, \tau_0 ) [x_i / \alpha_i] \}$}
+        \{ x_i \Thas T_i\}, \varnothing, \tau_0 ) [x_i / \alpha_i] \}$}
     }
   \end{prooftree}
-
-\end{table}
-
-
-\begin{comment}
-  \begin{prooftree}
-    \AxiomC{$T \equiv S$}
-    \AxiomC{$\Gamma \vdash T$}
-    \AxiomC{$\Gamma \vdash S$}
-    \RightLabel{\scriptsize(\textsc{TyIs})}
-    \TrinaryInfC{$\Gamma \vdash T \TyIs S $}
-  \end{prooftree}
-
-  \begin{prooftree}
-    \AxiomC{$\Gamma \vdash v_0 : T_0$}
-    \AxiomC{$\Gamma \vdash v_1 : T_1$}
-    \AxiomC{$\Gamma, \{(T_0, T_1) \Rightarrow \texttt{Boolean}()\} \subseteq
-      \Sigma(\texttt{=}) \vdash \texttt{=}(v_0, v_1) \leadsto \texttt{true}
-    $}
-    \RightLabel{\scriptsize(\textsc{ValIs})}
-    \TrinaryInfC{$\Gamma \vdash v_0 \TyIs v_1$}
-  \end{prooftree}
-
-  \begin{prooftree}
-    \AxiomC{$\mathcal{A} \equiv \mathcal{B}$}
-    \AxiomC{$m = n$}
-    \AxiomC{$\Gamma \vdash T_i \TyIs S_i $}
-    \RightLabel{\scriptsize(\textsc{TyCtorIs})}
-    \TrinaryInfC{$\Gamma \vdash 
-      \mathcal{A}(T_0, T_1, \ldots, T_m) \TyIs \mathcal{B}(S_0, S_1, \ldots, T_n)
-    $}
-  \end{prooftree}
-\end{comment}
+\end{minipage}
 
 \end{document}
 
