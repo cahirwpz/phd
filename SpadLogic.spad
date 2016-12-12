@@ -8,6 +8,7 @@ SpadLogic() : Exports == Implementation where
 
   Exports ==> with
     extractPredicates : N -> List(N)
+    evaluate : (N, List(N)) -> N
 
   Implementation ==> add
     import SpadNode
@@ -40,12 +41,39 @@ SpadLogic() : Exports == Implementation where
           concat [extractPredicates arg for arg in app.args]
         app.function = ['or] => []
         app.function = ['not] and #app.args = 1 =>
-          n' := app.args.1
+          n' := first app.args
           typeHas? n' or typeIs? n' => [n]
           apply? n' => extractPredicates(invert n')
           []
         []
       []
+
+    evaluate(n : N, ns : List(N)) : N ==
+      typeHas? n or typeIs? n =>
+        member?(n, ns) => ['true]
+        member?(nodeApp(['not], [n]), ns) => ['false]
+        n
+      apply? n =>
+        app := n :: APP
+        lst := [evaluate(arg, ns) for arg in app.args]
+        app.function = ['and] =>
+          any?(false?, lst) => ['false]
+          lst := remove(true?, lst)
+          #lst = 0 => ['true]
+          #lst = 1 => first lst
+          nodeApp(['and], lst)
+        app.function = ['or] =>
+          any?(true?, lst) => ['true]
+          lst := remove(false?, lst)
+          #lst = 0 => ['false]
+          #lst = 1 => first lst
+          nodeApp(['or], lst)
+        app.function = ['not] and #app.args = 1 =>
+          n' := evaluate(first app.args, ns)
+          true? n' => ['false]
+          n
+        n
+      n
 
 )abbrev package SLOGICT SpadLogicTest
 SpadLogicTest() : Exports == Implementation where
@@ -55,6 +83,7 @@ SpadLogicTest() : Exports == Implementation where
 
   Exports ==> with
     test1 : () -> Void
+    test2 : () -> Void
 
   Implementation ==> add
     import SpadNode
@@ -64,8 +93,12 @@ SpadLogicTest() : Exports == Implementation where
     import SpadLogic
 
     extract (n : N) : Void ==
-      println pile([spaces [n :: PF, "=>" :: PF],
+      println pile([spaces [n :: PF, bold("=>" :: PF)],
                     bracket [p :: PF for p in extractPredicates n]])
+
+    eval (n : N, ns : List(N)) : Void ==
+      println pile([spaces [n :: PF, bold("=>" :: PF), evaluate(n, ns) :: PF],
+                    spaces [bold("when" :: PF), :[k :: PF for k in ns]]])
 
     test1 () ==
       loggerDefaultLevel "info"
@@ -81,3 +114,18 @@ SpadLogicTest() : Exports == Implementation where
       extract nodeApp(['not], [n1])
       extract n2
       extract nodeApp(['not], [n2])
+
+    test2 () ==
+      loggerDefaultLevel "info"
+      resetTime()
+
+      a1 := nodeApp(['_>], [['x], [0]])
+      a2 := nodeTypeHas(['S], ['Foo])
+      a3 := nodeTypeIs(['R], ['Integer])
+      n1 := nodeApp(["and" :: Symbol], [a1, a2, a3])
+      n2 := nodeApp(["or" :: Symbol], [a1, a2, a3])
+
+      eval(n1, [nodeApp(['not], [a2])])
+      eval(n1, [a2])
+      eval(n2, [nodeApp(['not], [a3])])
+      eval(n2, [a3])
