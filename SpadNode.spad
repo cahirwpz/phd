@@ -1283,7 +1283,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
         x.ti_body.kind case "Join" => "Category"
         x.ti_body.kind case "Domain" => "Domain"
         x.ti_body.kind case "Package" => "Package"
-        error "???"
+        error x.ti_body.kind
       pile([spaces [app, bold("is" :: PF), k :: PF],
             pile [bold("defined as:" :: PF), x.ti_body :: PF],
             pile [bold("has relation:" :: PF), :[h :: PF for h in x.ti_hasList]],

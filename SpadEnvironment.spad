@@ -3,12 +3,14 @@ SpadEnvironment() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   TD ==> SpadTypeDecl(N)
+  TEH ==> SpadTypeHas(N)
+  TEI ==> SpadTypeIs(N)
   TG ==> SpadTypeGuard(N)
   TI ==> SpadTypeInfo(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   PF ==> PrintableForm
-  KEY ==> Union(Symbol, APP)
+  KEY ==> Union("ctrs", Symbol, APP)
   MEMBER ==> Record(key : KEY, entry : List(N))
   SCOPE ==> HashTable(KEY, List(N), "UEQUAL")
 
@@ -18,6 +20,7 @@ SpadEnvironment() : Exports == Implementation where
     coerce : KEY -> PF
     coerce : SCOPE -> PF
 
+    addConstraints : (N, %) -> %
     addDomain : (APP, %) -> %
     addDomainAs : (APP, KEY, %) -> %
 
@@ -51,6 +54,19 @@ SpadEnvironment() : Exports == Implementation where
     coerce (key : KEY) : PF ==
       key case APP => key :: APP :: PF
       key :: Symbol :: PF
+
+    addConstraints (n : N, env : %) : % ==
+      typeHas? n or typeIs? n =>
+        warn ["new constraint" :: PF, n :: PF]
+        env("ctrs") := n
+      function? n =>
+        app := n :: APP
+        app.function = ['and] =>
+          for arg in app.args repeat
+            env := addConstraints(arg, env)
+          env
+        env
+      env
 
     importDomain (ti : TI, dom : N, env : %) : % ==
       for n in ti.body.list repeat

@@ -67,8 +67,8 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
         emptyNode? n => "iterate"
         sequence? n =>
           s : SEQ := coerce(n)
-          l := concat(reverse s.list, l)
-        l := [n, :l]
+          l := concat(l, s.list)
+        l := concat!(l, n)
       #l = 1 and seq.kind = "Body" => first l
       nodeSeq(seq.kind, l)
 
@@ -94,6 +94,8 @@ SpadTypeEvaluator() : Exports == Implementation where
   Exports ==> CoercibleTo(PF) with
     typeInfoCacheInit : () -> Void
     typeInfoCacheList : () -> List(APP)
+
+    invalidateTypeInfo : Symbol -> Void
 
     getTypeInfo : Symbol -> TI
     getTypeInfo : APP -> TI
@@ -123,6 +125,12 @@ SpadTypeEvaluator() : Exports == Implementation where
       daase := [[]]
 
     typeInfoCacheList() == keys(cache)
+
+    invalidateTypeInfo(sym : Symbol) ==
+      -- TODO: track dependencies and remove them as well
+      sameName (r : Record(key : APP, entry : TI)) : Boolean ==
+        r.key.function = [sym]
+      cache := remove(sameName, cache)
 
     getTypeInfo(sym : Symbol) : TI ==
       ti? := search(sym, daase)
@@ -218,6 +226,7 @@ SpadTypeEvaluator() : Exports == Implementation where
         ft.type = nodeApp(['Category], []) => ft.capsule
         nodeSeq("Domain", (ft.type :: SEQ).list)
       body := rewrite(body)$SpadTreeSymbolReplace(ctx)
+      body := rewrite(body)$FlattenDatabaseType
 
       [ft.name, args, [], [], body :: SEQ]
 
@@ -293,10 +302,14 @@ SpadTypeEvaluator() : Exports == Implementation where
           -- check if we have already merged a functor
           key?(app, hasLst) => 
             debug ["Skipping:" :: PF, bold(app :: PF), "with" :: PF, bold(hasLst(app) :: PF)]
+            -- if true then erase previously remembered constraints
             true? cond =>
               hasLst(app) := cond
+            -- if remembered constraints are true then ignore new constraints
             true? hasLst(app) => "iterate"
             hasLstVal := hasLst(app)
+            -- BUG: hasLstVal may be a complex logic expression, checks below
+            --      assume it's a flat list of statements
             condLst : List(N) :=
               apply? hasLstVal =>
                 (hasLstVal :: APP).args
@@ -310,17 +323,29 @@ SpadTypeEvaluator() : Exports == Implementation where
           hasLst(app) := cond
           ti' := getTypeInfo(app.function :: Symbol) :: TI
           ti' := apply(ti', app.args)
+          -- TODO: does it make sense?
           constraints := concat(ti'.constraints, constraints)
+          -- warn [f :: PF for f in constraints]
 
           -- extend original functor's body with included constructor type
           snippet : List(N) := []
 
+          -- TODO: merge both branches
           if true? cond then
             -- case 1: merged functor has no constraints
             for e in ti'.body.list repeat
               e' :=
-                apply? e or typeGuard? e => e 
-                typeDecl? e => nodeTypeOrigin(e, n)
+                cond' := ['true]
+                if typeGuard? e then
+                  tg := e :: TG
+                  (e, cond') := (tg.expr, tg.type)
+                apply? e => -- add constraint to merged functor
+                  true? cond' => e
+                  nodeTypeGuard(e, cond')
+                typeDecl? e => -- add origin to function signature
+                  e := nodeTypeOrigin(e, n)
+                  true? cond' => e
+                  nodeTypeGuard(e, cond')
                 error "Not handled!"
               snippet := [e', :snippet]
           else
@@ -333,18 +358,19 @@ SpadTypeEvaluator() : Exports == Implementation where
             --
             -- This allows to add extra options to condition "% has A" in case
             -- we encounter some other (less restrictive) constraints later.
-            cond := nodeTypeHas(typeVar(), [app])
 
             for e in ti'.body.list repeat
               e' :=
+                cond' := nodeTypeHas(typeVar(), [app])
+                if typeGuard? e then
+                  tg := e :: TG
+                  -- add extra constraint to merged functor
+                  (e, cond') := (tg.expr, nodeApp(['and], [cond', tg.type]))
                 apply? e => -- add constraint to merged functor
-                  nodeTypeGuard(e, cond)
+                  nodeTypeGuard(e, cond')
                 typeDecl? e => -- add origin to function signature
                   e := nodeTypeOrigin(e, n)
-                  nodeTypeGuard(e, cond)
-                typeGuard? e => -- add extra constraint to merged functor
-                  tg := e :: TG
-                  nodeTypeGuard(tg.expr, nodeApp(['and], [cond, tg.type]))
+                  nodeTypeGuard(e, cond')
                 error "Not handled!"
               snippet := [e', :snippet]
 
@@ -489,7 +515,7 @@ SpadTypeEvaluator() : Exports == Implementation where
             not typeGuard? n => n
             tg := n :: TG
             type' := evalGuard(tg.type, ti)
-            type' = ['true] => (continue? := true; tg.expr)
+            true? type' => (continue? := true; tg.expr)
             nodeTypeGuard(tg.expr, type')
           newHasList := [n', :newHasList]
 
@@ -499,7 +525,7 @@ SpadTypeEvaluator() : Exports == Implementation where
         not typeGuard? n => n
         tg := n :: TG
         type' := evalGuard(tg.type, ti)
-        type' = ['true] => tg.expr
+        true? type' => tg.expr
         nodeTypeGuard(tg.expr, type')
 
       body := map(eval, ti.body.list)

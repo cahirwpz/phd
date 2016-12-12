@@ -152,6 +152,7 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implemen
   PI ==> PositiveInteger
   N ==> SpadNode
   APP ==> SpadApply(N)
+  CE ==> SpadCondExpr(N)
   FN ==> SpadFunction(N)
   NR ==> SpadNodeRef(N)
   TO ==> SpadTypeOrigin(N)
@@ -163,16 +164,24 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implemen
     import Logger('Capsule)
 
     rewrite (seq : SEQ) : N ==
-      ts : List(N) := []
+      nodeSeq("Join", [rewrite(coerce(n)@NR) for n in seq.list | nodeRef? n])
 
-      for n in seq.list | nodeRef? n repeat
-        tn := find(coerce(n)@NR)
-        if function? tn.node then
-          fn := coerce(tn.node)@FN
-          fnName := [coerce(fn.name)@Symbol]
-          ts := [nodeTypeDecl(fnName, tn.type), :ts]
-          
-      nodeSeq("Join", reverse ts)
+    rewrite (nr : NR) : N ==
+      tn := find(nr)
+      tn.node = [nr] =>
+        fail pile ["Self reference detected:" :: PF, tn :: PF]
+        error ""
+      function? tn.node =>
+        fn : FN := coerce(tn.node)
+        fnName : Symbol := coerce(fn.name)
+        nodeTypeDecl([fnName], tn.type)
+      condExpr? tn.node =>
+        ce : CE := coerce(first(tn.rules).solution)
+        cond := rewrite(ce.cond)
+        truebr := nodeTypeGuard(rewrite(ce.truebr), cond)
+        falsebr := nodeTypeGuard(rewrite(ce.falsebr), nodeApp(['not], [cond]))
+        nodeSeq("Join", [truebr, falsebr])
+      rewrite tn.node
 
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
@@ -198,9 +207,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
   SM ==> SpadMacro(N)
   TC ==> SpadTypeCoerce(N)
   TD ==> SpadTypeDecl(N)
-  TG ==> SpadTypeGuard(N)
   TEH ==> SpadTypeHas(N)
   TEI ==> SpadTypeIs(N)
+  TG ==> SpadTypeGuard(N)
   TO ==> SpadTypeOrigin(N)
   TI ==> SpadTypeInfo(N)
   TS ==> SpadTypeSelect(N)
@@ -494,8 +503,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- sig is unchecked and may contain invalid types
       ftorApp := nodeApp([ft.name], [[td] for td in ft.args])
 
-      debug pile([spaces ["Processing functor" :: PF, bold(ftorApp :: PF), "with:" :: PF],
-                  ft.type :: PF])
+      debug pile([spaces ["Processing functor" :: PF, bold(ftorApp :: PF),
+                          "with:" :: PF], ft.type :: PF])
 
       addSubTree!(ctx)
 
@@ -524,6 +533,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       setTypeOf!(ctx, this, [nodeMappingType(argList, resType)])
 
       -- add functor's type info to the environment
+      invalidateTypeInfo(ft.name)
       ti := getTypeInfo ft
       env := addDomain(ftType :: APP, env)
       ftRealType := substitute(first env(ftType :: APP), typeVar() :: TV, ftType)
@@ -534,6 +544,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
       bindNode!(ctx, extNode, ft.extends)
 
       bodyNode := walk(ft.capsule, ctx, env)
+
+      warn(ft.capsule :: PF)
+      warn(bodyNode :: PF)
+
+      capsuleType := nodeSeq("Join", [extNode.type, bodyNode.type])
+
+      warn(nodeTypeInfo(ft.name, ft.args, [], [], capsuleType :: SEQ) :: PF)
 
       leaveSubTree!(ctx)
 
@@ -640,7 +657,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         rule := ruleCapsule(exprList)
         findTypeNode := ((nr : NR) : TN +-> node(ctx, nr))
         capsuleType := rewrite(rule.solution)$SpadTreeExtractCapsuleType(findTypeNode)
-        setTypeOf!(ctx, this, [capsuleType])
+        bindNode!(ctx, this, capsuleType)
         this.rules := [rule]
       else
         this.rules := [ruleSeq(s.kind, this, exprList)]
