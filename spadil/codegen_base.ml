@@ -45,6 +45,7 @@ let mdkind_id = Llvm.mdkind_id the_context
 let izero = const_int int_type 0
 let fzero = const_float double_type 0.0
 let iundef = Llvm.undef int_type
+let gen_undef = Llvm.undef gen_type
 
 let string_of_icmp = function
   | Icmp.Eq -> "eq"
@@ -304,7 +305,7 @@ class module_pass_manager =
 
 class package a_module a_jit =
   object (self)
-    val package = a_module
+    val package : Llvm.llmodule = a_module
     val jit = a_jit
     val localfuns : (string, Ast.spadtype) Hashtbl.t = Hashtbl.create 10
 
@@ -350,6 +351,9 @@ class package a_module a_jit =
 
     method iter_functions fn =
       Llvm.iter_functions fn package
+
+    method iter_globals fn = 
+      Llvm.iter_globals fn package
  
     method get_module = package
 
@@ -402,10 +406,13 @@ class execution_engine =
 
     method add_package name =
       (* http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-September/042966.html *)
+      (*
       let runtime = (Hashtbl.find map "runtime")#get_module in
       let pkg = new package (Llvm_utils.clone_module runtime) self in
       pkg#iter_functions (fun (f) ->
         Llvm.add_function_attr f Llvm.Attribute.Alwaysinline);
+      *)
+      let pkg = new package (Llvm.create_module the_context name) self in
       Hashtbl.add map name pkg;
       Jit.add_module pkg#get_module jit;
       pkg
@@ -429,4 +436,10 @@ class execution_engine =
 
     method iter_packages fn =
       Hashtbl.iter (fun _ pkg -> fn pkg) map
+
+    method run_static_ctors =
+      Jit.run_static_ctors jit
+
+    method run_static_dtors =
+      Jit.run_static_dtors jit
   end;;

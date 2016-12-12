@@ -101,8 +101,8 @@
 (SDEFUN |main| (($ |Void|))
        (PROGN
          ; wykryć złą ilość argumentów!
-         (|print_SI| (|ZZZ;fac| 8 NIL))
-         (|print_SI| (|ZZZ;fac_acc| 10 1 NIL))
-         (|print_SI| (|ZZZ;fib| 10 NIL))
-         (|print_SI| (|ZZZ;gcd| 144 328 NIL))
-         (|print_DF| (|ZZZ;sqrt| 2.0 NIL))))
+         (|print_SI| (|ZZZ;fac| 8 NIL)) (|print_eol|)
+         (|print_SI| (|ZZZ;fac_acc| 10 1 NIL)) (|print_eol|)
+         (|print_SI| (|ZZZ;fib| 10 NIL)) (|print_eol|)
+         (|print_SI| (|ZZZ;gcd| 144 328 NIL)) (|print_eol|)
+         (|print_DF| (|ZZZ;sqrt| 2.0 NIL)) (|print_eol|)))

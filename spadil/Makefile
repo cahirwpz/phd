@@ -8,13 +8,12 @@ all: spadil.native
 
 tests = $(wildcard tests/*.lisp)
 
-spadil.native: runtime.bc vmdata.bc benchmark.bc
+spadil.native: runtime.bc benchmark.bc
 	ocamlbuild $(FLAGS) $@
 
-spadil.byte: runtime.bc vmdata.bc benchmark.bc
+spadil.byte: runtime.bc benchmark.bc
 	ocamlbuild $(FLAGS) $@
 
-vmdata.bc: vmdata.c vmdata.h
 runtime.bc: runtime.c vmdata.h
 benchmark.bc: benchmark.c
 

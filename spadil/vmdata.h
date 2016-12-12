@@ -11,6 +11,7 @@ struct type_key {
   char *name;
 };
 
+#if 0
 const GEN key_key;
 const GEN vector_1d_key;
 const GEN string_key;
@@ -19,6 +20,7 @@ const GEN integer_key;
 const GEN bigint_key;
 const GEN dfloat_key;
 const GEN cons_key;
+#endif
 
 typedef struct vector_1d {
   KEY descriptor;
@@ -60,6 +62,12 @@ typedef struct cons {
   GEN snd;
 } cons_t;
 
+typedef struct any {
+  KEY descriptor;
+} any_t;
+
+#if 0
 const GEN vm_nil;
+#endif
 
 #endif

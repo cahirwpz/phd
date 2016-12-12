@@ -8,7 +8,7 @@
 
 #undef NULL
 
-#include "vmdata.h"
+#include "vmdata.c"
 
 int gc_start() {
   GC_INIT();
@@ -18,6 +18,12 @@ int gc_start() {
 void error(const char *str) {
   puts(str);
   abort();
+}
+
+void print_ANY(GEN any);
+
+void print_eol(void) {
+  putchar('\n');
 }
 
 /* SingleInteger */
@@ -40,7 +46,7 @@ LONG unbox_SI(GEN ptr) {
 }
 
 void print_SI(LONG a) {
-  printf("%ld\n", a);
+  printf("%ld", a);
 }
 
 /* DoubleFloat */
@@ -63,7 +69,7 @@ double unbox_DF(GEN ptr) {
 }
 
 void print_DF(double a) {
-  printf("%.15g\n", a);
+  printf("%.15g", a);
 }
 
 /* Cons */
@@ -92,6 +98,10 @@ GEN CDR(GEN ptr) {
   assert(val->descriptor == cons_key);
 
   return val->snd;
+}
+
+GEN NIL() {
+  return vm_nil;
 }
 
 bool NULL(GEN ptr) {
@@ -140,6 +150,17 @@ LONG LENGTH(GEN lst) {
   return l;
 }
 
+void print_CONS(GEN lst) {
+  putchar('[');
+  while (!NULL(lst)) {
+    print_ANY(CAR(lst));
+    lst = CDR(lst);
+    if (!NULL(lst))
+      printf(", ");
+  }
+  putchar(']');
+}
+
 /* Rational numbers */
 
 GEN DIVIDE2(LONG a, LONG b) {
@@ -175,6 +196,7 @@ LONG QCDR(GEN ptr) {
 GEN MAKEARR1(LONG size, LONG init) {
   vector_1d_t *val = GC_malloc(sizeof(vector_1d_t) + sizeof(GEN) * size);
 
+  val->descriptor = vector_1d_key;
   val->size = size;
 
   for (int i = 0; i < size; i++)
@@ -219,3 +241,35 @@ GEN LIST2VEC(GEN lst) {
   return vec;
 }
 
+void print_VEC(GEN ptr) {
+  vector_1d_t *vec = (vector_1d_t *)ptr;
+
+  LONG i = 0;
+  LONG n = vec->size;
+
+  putchar('<');
+  while (i < n) {
+    print_ANY(vec->data[i++]);
+    if (i < n)
+      printf(", ");
+  }
+  putchar('>');
+}
+
+/* Any */
+
+void print_ANY(GEN ptr) {
+  any_t *any = (any_t *)ptr;
+  KEY key = any->descriptor;
+
+  if (key == integer_key)
+    print_SI(unbox_SI(ptr));
+  else if (key == dfloat_key)
+    print_DF(unbox_DF(ptr));
+  else if (key == cons_key)
+    print_CONS(ptr);
+  else if (key == vector_1d_key)
+    print_VEC(ptr);
+  else
+    putchar('?');
+}

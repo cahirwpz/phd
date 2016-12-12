@@ -12,23 +12,28 @@ let rec parse_file pkg lexbuf =
   List.iter (parse_unit pkg) (Parser.program Lexer.token lexbuf)
 
 and parse_unit pkg input =
-  printf "@[<v 2>LISP (original)@,@,"; Sexpr.print (Sexpr.reader_pass input); printf "@]@.@.";
+  (* printf "@[<v 2>LISP (original)@,@,"; Sexpr.print (Sexpr.reader_pass input); printf "@]@.@."; *)
   let lisp_opt = Sexpr.simplify input in
   printf "@[<v 2>LISP (rewritten)@,@,"; Sexpr.print lisp_opt; printf "@]@.@.";
   let il = Ast.convert lisp_opt in
   (* printf "@[<v 2>IL (original)@,@,"; Ast.print il; printf "@]@.@."; *)
   let il_opt = Rewrite.simplify il in
-  (* printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@."; *)
-  Ast.print il_opt; printf "@.@.";
-  List.iter (load_bc jit) bclist; printf "@."
-  ignore(Codegen.codegen_toplevel pkg il)
+  printf "@[<v 2>IL (rewritten)@,@,"; Ast.print il_opt; printf "@]@.@.";
+  match Codegen.codegen_toplevel pkg il with
+  | Some value ->
+      printf "@[<v 2>LLVM IR (not optimized)@]@.";
+      Codegen_base.dump_value value;
+      printf "@."
+  | None -> exit 1
 
 (* Load compiled modules. *)
 let rec load_runtime jit bclist =
+  List.iter (load_bc jit) bclist; printf "@."
 
 and load_bc jit bc = 
   match jit#load_package bc with
-  | Some pkg -> pkg#dump
+  | Some pkg ->
+      pkg#dump
   | None -> failwith (sprintf "Error reading '%s' file." bc)
 
 (* Load source files to be compiled. *)
@@ -55,16 +60,18 @@ let execute jit =
   and gc_start_fn = jit#lookup_function "gc_start" in
   printf "@.; Initialize garbage collection@.";
   ignore(jit#run_function gc_start_fn [||]);
+  jit#run_static_ctors;
   printf "; Evaluate main function@.";
   ignore(jit#run_function time_start_fn [||]);
   ignore(jit#run_function main_fn [| of_pointer 0 |]);
   ignore(jit#run_function time_stop_fn [||]);
   let diff = Int64.to_int(as_int64(jit#run_function time_diff_fn [||])) in
-  ignore(printf "; Took %d us@." diff)
+  ignore(printf "; Took %d us@." diff);
+  jit#run_static_dtors
 
 let main () =
   let jit = new Codegen_base.execution_engine in
-  load_runtime jit ["vmdata.bc";"runtime.bc";"benchmark.bc"];
+  load_runtime jit ["runtime.bc";"benchmark.bc"];
   load_packages jit (List.tl @@ Array.to_list Sys.argv);
   execute jit;
   jit#dispose

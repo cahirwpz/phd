@@ -41,7 +41,8 @@ let cast_GEN builder v =
   | t when t = void_type ->
       const_pointer_null
   | t ->
-      raise @@ CoerceError (v, "GEN")
+      builder#build_bitcast v gen_type
+      (* raise @@ CoerceError (v, "GEN") *)
 
 let cast_BOOL builder cond =
   match Llvm.type_of cond with
@@ -64,8 +65,11 @@ let cast builder (value, to_type) =
       cast_DF builder value
   | t when t = gen_type ->
       cast_GEN builder value
+  | _ -> value
+(*
   | t -> 
       raise @@ CoerceError (value, Llvm.string_of_lltype to_type)
+*)
 
 let rec translate_type = function
   | Ast.UserType ("CArray", []) -> Llvm.pointer_type gen_type
@@ -107,7 +111,7 @@ let rec codegen builder exp =
   | Ast.String s ->
       Some (const_stringz s)
   | Ast.Var "NIL" ->
-      Some (const_pointer_null)
+      Some (builder#build_call_fn "NIL" [||])
   | Ast.Var name ->
       Some (builder#build_load_var name)
   | Ast.Block (vars, exps) ->
@@ -132,6 +136,23 @@ let rec codegen builder exp =
       let types = List.map Llvm.type_of (Array.to_list @@ Llvm.params fn) in
       let typed_args = Array.of_list (List.combine args types) in
       Some (builder#build_call_fn name (Array.map (cast builder) typed_args))
+  | Ast.Apply (func, args) ->
+      let codegen_cast arg = cast_GEN builder (codegen_some arg) in
+      let fn_ptr = codegen_some func in
+      let arg_types = Array.make (List.length args) gen_type in
+      let fn_type =
+        Llvm.pointer_type @@ Llvm.function_type gen_type arg_types in
+      let fn = builder#build_bitcast fn_ptr fn_type in
+      let args = Array.of_list (List.map codegen_cast args) in
+      (*
+      Array.iter (fun (v) -> dump_type_of v; print_newline ()) args;
+      dump_type_of fn; print_newline ();
+      builder#build_call fn args
+      *)
+      Some (const_pointer_null)
+  | Ast.FunSymbol name ->
+      let fn = builder#lookup_function name in
+      Some (builder#build_bitcast fn gen_type)
   | Ast.IfThenElse (cond, t, f) ->
       codegen_if_then_else builder cond t f
   | Ast.IfThen (cond, t) ->
@@ -146,7 +167,7 @@ let rec codegen builder exp =
       let value_type = Llvm.element_type @@ Llvm.type_of var in
       let value = cast builder (value, value_type) in
       builder#build_store_var value name;
-      None
+      None (* value przed czy po cast ?, ale na pewno Some *)
   | Ast.Assign (Ast.ArrayRef (vector, index), value) ->
       let value = codegen_some value
       and index = codegen_some index
@@ -165,7 +186,7 @@ let rec codegen builder exp =
       builder#position_at_end after_bb;
       None
   | x ->
-      Ast.print x; print_char '\n'; failwith "not handled"
+      (* Ast.print x; print_char '\n'; *) failwith "not handled"
 
 and codegen_var_intro builder (name, atype) =
   ignore(builder#var_intro name atype (translate_type atype))
@@ -394,11 +415,11 @@ let rec codegen_toplevel pkg tree =
         end
     | _ ->
         print_string "Syntax Error: Not a toplevel construction.\n";
-        Ast.print tree;
+        (* Ast.print tree; *)
         None
   with
   | CoerceError (v, t) ->
-      dump_value v;
+      (*dump_value v;*)
       printf "Coerce Error: cannot coerce to '%s'!\n" t;
       Printexc.print_backtrace stderr;
       None
