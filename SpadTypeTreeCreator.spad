@@ -361,6 +361,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       cond := walk(ce.cond, ctx, env)
       trueEnv := createScope cond.env
+      trueEnv := addConstraints(ce.cond, trueEnv)
       truebr := walk(ce.truebr, ctx, trueEnv)
 
       emptyNode? ce.falsebr =>
@@ -369,6 +370,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         this
 
       falseEnv := createScope (case? ce.cond => env; cond.env)
+      falseEnv := addConstraints(nodeApp(['not], [ce.cond]), falseEnv)
       falsebr := walk(ce.falsebr, ctx, falseEnv)
 
       env := mergeEnv(env, trueEnv, falseEnv)

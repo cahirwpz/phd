@@ -44,6 +44,7 @@ SpadEnvironment() : Exports == Implementation where
 
     import SpadNodeFactory
     import SpadTypeEvaluator
+    import SpadLogic
     import TypeUnifier
     import Logger('Env)
     import Printer
@@ -53,19 +54,12 @@ SpadEnvironment() : Exports == Implementation where
 
     coerce (key : KEY) : PF ==
       key case APP => key :: APP :: PF
+      key case "ctrs" => "[constraints]" :: PF
       key :: Symbol :: PF
 
     addConstraints (n : N, env : %) : % ==
-      typeHas? n or typeIs? n =>
-        warn ["new constraint" :: PF, n :: PF]
+      for p in extractPredicates n repeat
         env("ctrs") := n
-      function? n =>
-        app := n :: APP
-        app.function = ['and] =>
-          for arg in app.args repeat
-            env := addConstraints(arg, env)
-          env
-        env
       env
 
     importDomain (ti : TI, dom : N, env : %) : % ==

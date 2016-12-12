@@ -1,0 +1,83 @@
+)abbrev package SLOGIC SpadLogic
+SpadLogic() : Exports == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  TEH ==> SpadTypeHas(N)
+  TEI ==> SpadTypeIs(N)
+  PF ==> PrintableForm
+
+  Exports ==> with
+    extractPredicates : N -> List(N)
+
+  Implementation ==> add
+    import SpadNode
+    import Printer
+    import Logger('Logic)
+
+    invert (n : N) : N ==
+      typeHas? n or typeIs? n =>
+        nodeApp(['not], [n])
+      apply? n =>
+        app := n :: APP 
+        app.function = ['and] =>
+          -- not ((x > 0) and (S has Foo)) => 
+          --   not (x > 0) or not (S has Foo) => nothing useful
+          nodeApp(['or], [invert arg for arg in app.args])
+        app.function = ['or] =>
+          -- not ((x > 0) or (S has Foo)) => 
+          --   not (x > 0) and not (S has Foo) => not (S has Foo)
+          nodeApp(['and], [invert arg for arg in app.args])
+        app.function = ['not] =>
+          n
+        emptyNode()
+      emptyNode()
+
+    extractPredicates (n : N) : List(N) ==
+      typeHas? n or typeIs? n => [n]
+      apply? n =>
+        app := n :: APP
+        app.function = ['and] =>
+          concat [extractPredicates arg for arg in app.args]
+        app.function = ['or] => []
+        app.function = ['not] and #app.args = 1 =>
+          n' := app.args.1
+          typeHas? n' or typeIs? n' => [n]
+          apply? n' => extractPredicates(invert n')
+          []
+        []
+      []
+
+)abbrev package SLOGICT SpadLogicTest
+SpadLogicTest() : Exports == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  PF ==> PrintableForm
+
+  Exports ==> with
+    test1 : () -> Void
+
+  Implementation ==> add
+    import SpadNode
+    import SpadNodeFactory
+    import Printer
+    import MainLogger
+    import SpadLogic
+
+    extract (n : N) : Void ==
+      println pile([spaces [n :: PF, "=>" :: PF],
+                    bracket [p :: PF for p in extractPredicates n]])
+
+    test1 () ==
+      loggerDefaultLevel "info"
+      resetTime()
+
+      a1 := nodeApp(['_>], [['x], [0]])
+      a2 := nodeTypeHas(['S], ['Foo])
+      a3 := nodeTypeIs(['R], ['Integer])
+      n1 := nodeApp(["and" :: Symbol], [a1, a2, a3])
+      n2 := nodeApp(["or" :: Symbol], [a1, a2, a3])
+
+      extract n1
+      extract nodeApp(['not], [n1])
+      extract n2
+      extract nodeApp(['not], [n2])
