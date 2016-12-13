@@ -235,6 +235,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadTypeEvaluator
     import SpadTypeRuleFactory
     import SpadTypeNodeArray
+    import SpadLogic
     import TypeUnifier
     import TypeEvaluator
     import Printer
@@ -453,6 +454,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
         for n in search(fn.name :: Symbol, env') repeat
           candidate := emptyNode()
 
+          if typeGuard? n then
+            tg := n :: TG
+            if true? evaluate(tg.type, env("ctrs")) then
+              candidate := tg.expr
           if typeOrigin? n then
             to := n :: TO
             if to.type = dom and mappingType? to.expr then

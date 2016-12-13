@@ -71,6 +71,7 @@ SpadLogic() : Exports == Implementation where
         app.function = ['not] and #app.args = 1 =>
           n' := evaluate(first app.args, ns)
           true? n' => ['false]
+          false? n' => ['true]
           n
         n
       n
@@ -124,6 +125,9 @@ SpadLogicTest() : Exports == Implementation where
       a3 := nodeTypeIs(['R], ['Integer])
       n1 := nodeApp(["and" :: Symbol], [a1, a2, a3])
       n2 := nodeApp(["or" :: Symbol], [a1, a2, a3])
+
+      eval(a3, [a3])
+      eval(nodeApp(['not], [a3]), [nodeApp(['not], [a3])])
 
       eval(n1, [nodeApp(['not], [a2])])
       eval(n1, [a2])

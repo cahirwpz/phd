@@ -1,15 +1,15 @@
 )abbrev domain TEST11 Test11
-Test11(S : OrderedSet) : Exports == Implementation where
-  I ==> Integer
+Test11(S : OrderedSet, R : BasicType) : Exports == Implementation where
+  NNI ==> NonNegativeInteger
 
   Exports ==> BasicType with
     if S has Integer then
-      foo : List(S) -> List(S)
+      foo : List(S) -> NNI
     else
-      bar : List(S) -> List(S)
+      foo : List(R) -> NNI
 
   Implementation ==> List(S) add
     if S has Integer then
-      foo x == x
+      foo x == #x
     else
-      bar x == x
+      foo x == #x
