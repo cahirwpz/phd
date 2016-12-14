@@ -61,10 +61,15 @@ SpadTypeNode() : Exports == Implementation where
   TR ==> SpadTypeRule
   ENV ==> SpadEnvironment
   N ==> SpadNode
+  CE ==> SpadCondExpr(N)
+  FN ==> SpadFunction(N)
+  FT ==> SpadFunctor(N)
   NR ==> SpadNodeRef(N)
   TD ==> SpadTypeDecl(N)
+  TG ==> SpadTypeGuard(N)
+  TI ==> SpadTypeInfo(N)
   TV ==> SpadTypeVar(N)
-  FN ==> SpadFunction(N)
+  SEQ ==> SpadSequence(N)
 
   Exports ==> CoercibleTo(PF) with
     construct : (PI, PI, N) -> %
@@ -135,6 +140,35 @@ SpadTypeNode() : Exports == Implementation where
     typeRef x ==
       nodeTypeVar(x.m_index.major :: PI, x.m_index.minor :: PI)
 
+    onelineOf (n : N) : PF ==
+      condExpr? n =>
+        c := n :: CE
+        fs : List(PF) :=
+          ["if" :: PF, c.cond :: PF, "then" :: PF, c.truebr :: PF]
+        if not emptyNode? c.falsebr then
+          fs := [:fs, "else" :: PF, c.falsebr :: PF]
+        spaces fs
+      function? n =>
+        f := n :: FN
+        f.name case Symbol =>
+          fargs := [arg :: PF for arg in f.args]
+          rtype : List(PF) :=
+            emptyNode? f.type => []
+            [":" :: PF, f.type :: PF]
+          spaces([f.name :: Symbol :: PF, paren fargs, :rtype,
+                  "==" :: PF, f.body :: PF])
+        n :: PF
+      functor? n =>
+        ft := n :: FT
+        spaces([ft.name :: PF, paren [arg :: PF for arg in ft.args],
+                ":" :: PF, ft.type :: PF, "==" :: PF, ft.extends :: PF,
+                "add" :: PF, ft.capsule :: PF])
+      sequence? n =>
+        ns := [i :: PF for i in (n :: SEQ).list]
+        #ns > 1 => paren sepBy(", " :: PF, ns)
+        first ns
+      n :: PF
+
     coerce x ==
       done : PF :=
         x.m_state case "finished" => green(" (+)" :: PF)
@@ -146,26 +180,23 @@ SpadTypeNode() : Exports == Implementation where
         t := red t
       if emptyNode? x.m_type then
         t := bold yellow("%none" :: PF)
-      t := indent(13, t)
+      t := indent(11, t)
       not empty? x.m_rules =>
-        r := sepBy(" | " :: PF, [(r :: PF) for r in x.m_rules])
-        spaces([prefix, r, "is" :: PF, t])
-      import? x.m_node or typeDecl? x.m_node =>
-        spaces [prefix, bold ("()" :: PF), white(x.m_node :: PF)]
+        rs := sepBy(" | " :: PF, [onelineOf rule.solution for rule in x.m_rules])
+        spaces([prefix, bold cyan(rs), "is" :: PF, t])
       n := stripOrigin x.m_node
+      sequence? n =>
+        pile([spaces [prefix, bold cyan(nodeRef(x) :: PF), "is" :: PF], t])
       pn :=
-        value? n or typeVar? n =>
-          symbol? n => bold cyan(n :: PF)
-          bold(n :: PF)
-        typeDecl? n =>
-          bold cyan((n :: TD).expr :: PF)
-        function? n =>
-          bold cyan(((n :: FN).name :: Symbol) :: PF)
-        lambda? n =>
-          bold cyan("+->" :: PF)
-        sequence? n =>
-          bold("(...)" :: PF)
-        bold yellow("?" :: PF)
+        apply? n or typeDecl? n or symbol? n or import? n =>
+          -- leaves that influence environment contents
+          magenta(n :: PF)
+        typeIs? n or typeHas? n or value? n =>
+          -- leaves that yield a value
+          blue(n :: PF)
+        typeVar? n => 
+          bold cyan(n :: PF)
+        bold yellow(n :: PF)
       spaces [prefix, pn, ":" :: PF, t]
 
 )abbrev category STTCAT SpadTypeTreeCategory
