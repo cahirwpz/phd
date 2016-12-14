@@ -152,7 +152,7 @@ SpadTypeNode() : Exports == Implementation where
         spaces([prefix, r, "is" :: PF, t])
       import? x.m_node or typeDecl? x.m_node =>
         spaces [prefix, bold ("()" :: PF), white(x.m_node :: PF)]
-      n := stripOriginIfCan x.m_node
+      n := stripOrigin x.m_node
       pn :=
         value? n or typeVar? n =>
           symbol? n => bold cyan(n :: PF)

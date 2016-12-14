@@ -9,6 +9,7 @@ SpadNodeFactory() : Exports == Implementation where
   RT ==> SpadRecordType(N)
   UT ==> SpadUnionType(N)
   TD ==> SpadTypeDecl(N)
+  TG ==> SpadTypeGuard(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   mt ==> nodeMappingType
@@ -33,7 +34,8 @@ SpadNodeFactory() : Exports == Implementation where
 
     nodeRef : (PI, PI) -> N
 
-    stripOriginIfCan : N -> N
+    stripOrigin : N -> N
+    stripGuard : N -> N
 
     makeRecordFunList : N -> List(TD)
     makeUnionFunList : N -> List(TD)
@@ -58,8 +60,11 @@ SpadNodeFactory() : Exports == Implementation where
 
     nodeRef(i, j) == [[i, j]$NR]
 
-    stripOriginIfCan t ==
+    stripOrigin t ==
       (typeOrigin? t => (t :: TO).expr; t)
+
+    stripGuard t ==
+      (typeGuard? t => (t :: TG).expr; t)
 
     makeRecordFunList n ==
       r := n :: RT

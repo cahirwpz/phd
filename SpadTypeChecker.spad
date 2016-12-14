@@ -115,7 +115,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       for t in typeOf(ctx, funNode) repeat
         -- 1) Consider signature types with correct number of arguments.
-        t' := stripOriginIfCan t
+        t' := stripOrigin t
         not mappingType? t' => "iterate"
         sig := t' :: MT
         -- replace {constant -> Type} with {() -> Type}
@@ -163,7 +163,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       -- Fetch all inferred mappings.
       mappings : List(MT) := []
       for t in [c.sig for c in candidates] repeat
-        t := stripOriginIfCan t
+        t := stripOrigin t
         not mappingType? t => "iterate"
         mappings := [t :: MT, :mappings]
       -- Propagate function arguments and return type down the tree.
