@@ -75,6 +75,9 @@ TypeUnifier() : Exports == Implementation where
       apply? n =>
         app := n :: APP
         any?(occurs'?, [app.function, :app.args])
+      assign? n =>
+        a := n :: ASS
+        any?(occurs'?, [a.lval, a.rval])
       mappingType? n =>
         mt := n :: MT
         any?(occurs'?, [mt.result, :mt.args])
@@ -99,6 +102,9 @@ TypeUnifier() : Exports == Implementation where
       typeHas? n =>
         te := n :: TEH
         occurs'? te.expr or occurs'? te.type
+      typeIs? n =>
+        te := n :: TEI
+        occurs'? te.expr or occurs'? te.type
       typeVar? n =>
         (n :: TV) = tvar
 
@@ -118,6 +124,9 @@ TypeUnifier() : Exports == Implementation where
       apply? n =>
         app := n :: APP
         unbound? app.function or any?(unbound?, app.args)
+      assign? n =>
+        a := n :: ASS
+        any?(unbound?, [a.lval, a.rval])
       recordType? n =>
         rt := n :: RT
         any?(unbound?, [[f] for f in fields rt])
@@ -141,6 +150,9 @@ TypeUnifier() : Exports == Implementation where
         unbound? tg.expr or unbound? tg.type
       typeHas? n =>
         te := n :: TEH
+        unbound? te.expr or unbound? te.type
+      typeIs? n =>
+        te := n :: TEI
         unbound? te.expr or unbound? te.type
 
       fail ["unbound?: case not handled for" :: PF, n :: PF]

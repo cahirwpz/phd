@@ -74,7 +74,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleFtor (ft, As', E', T', B') ==
       As := [nodeRef(a) for a in As']
       (E, T, B) := (nodeRef(E'), nodeRef(T'), nodeRef(B'))
-      [[:As, E, T, B, nodeSubType(B, T)], nodeFtor(ft.name, ft.args, ft.type, E, B)]
+      [[:As, E, T, B, nodeSubType(B, T)], nodeFtor(ft.name, ft.args, T, E, B)]
 
     ruleLoopIter (var, seq, iter) == 
       (varRef, seqRef, iterRef) := (nodeRef(var), nodeRef(seq), nodeRef(iter))
@@ -93,7 +93,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleRef (deps, body) ==
       depRefs := [nodeRef(dep) for dep in deps]
       bodyRef := nodeRef(body)
-      [[:depRefs, bodyRef], bodyRef]
+      [depRefs, bodyRef]
 
     ruleSeg (start, end, step) ==
       startRef := nodeRef(start)
@@ -780,6 +780,16 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       this.rules := [ruleSubType(expr, this), ruleApply(coerceFun, [expr])]
       this
+
+    walkTypeHas (te : TEH, ctx : CTX, env : ENV) : TN ==
+      this := addNode!(ctx, [te], env)
+      bindNode!(ctx, this, booleanType)
+      this
+
+    walkTypeIs (te : TEI, ctx : CTX, env : ENV) : TN ==
+      this := addNode!(ctx, [te], env)
+      bindNode!(ctx, this, booleanType)
+      this
     
     walkTypeOrigin (to : TO, ctx : CTX, env : ENV) : TN ==
       not symbol? to.expr =>
@@ -859,6 +869,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       symbol? n => walkSym(n :: Symbol, ctx, env)
       typeCoerce? n => walkTypeCoerce(n :: TC, ctx, env)
       typeDecl? n => walkTypeDecl(n :: TD, ctx, env)
+      typeHas? n => walkTypeHas(n :: TEH, ctx, env)
+      typeIs? n => walkTypeIs(n :: TEI, ctx, env)
       typeOrigin? n => walkTypeOrigin(n :: TO, ctx, env)
       typeSelect? n => walkTypeSelect(n :: TS, ctx, env)
       function? n or lambda? n => walkFun(n :: FN, ctx, env)
