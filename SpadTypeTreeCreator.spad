@@ -397,11 +397,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         debug ["Processing function" :: PF, string(funName :: PF)]
 
       funDeclNode := addNode!(ctx, [fn], env)
-
-      if fn.name case Symbol then
-        s := fn.name :: Symbol 
-        if not key?(s, env) then
-          env(s) := funDeclNode.type
+      bindNode!(ctx, funDeclNode, typeUndef)
 
       addSubTree!(ctx)
       env' := createScope env
@@ -500,8 +496,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       leaveSubTree!(ctx)
 
-      funDeclNode.rules := [ruleFunDef(funDefNode, funDeclNode)]
-      funDefNode.rules := [ruleFun(fn, argNodeList, resNode, bodyNode)]
+      funDeclNode.rules := [ruleRef([funDefNode], funDefNode)]
+      funDefNode.rules := [ruleFun(fn, reverse argNodeList, resNode, bodyNode)]
 
       return funDeclNode
 
@@ -551,9 +547,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       bindNode!(ctx, extNode, ft.extends)
 
       bodyNode := walk(ft.capsule, ctx, env)
-
-      warn(ft.capsule :: PF)
-      warn(bodyNode :: PF)
 
       capsuleType := nodeSeq("Join", [extNode.type, bodyNode.type])
 
@@ -761,7 +754,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       env(s) := td.type
       tn := addNode!(ctx, [td], env)
-      setTypeOf!(ctx, tn, [td.type])
+      bindNode!(ctx, tn, typeUndef)
       tn
 
     walkTypeSelect (ts : TS, ctx : CTX, env : ENV) : TN ==
