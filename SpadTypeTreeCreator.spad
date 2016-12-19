@@ -199,6 +199,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
   TC ==> SpadTypeCoerce(N)
   TD ==> SpadTypeDecl(N)
   TG ==> SpadTypeGuard(N)
+  TEH ==> SpadTypeHas(N)
+  TEI ==> SpadTypeIs(N)
   TO ==> SpadTypeOrigin(N)
   TI ==> SpadTypeInfo(N)
   TS ==> SpadTypeSelect(N)
