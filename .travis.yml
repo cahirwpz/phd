@@ -1,0 +1,22 @@
+sudo: required
+dist: trusty
+language: c
+compiler: gcc
+before_install:
+  - export FRICAS_VER="1.3.0"
+  - export FRICAS="fricas-${FRICAS_VER}"
+  - export FRICAS_BIN="${FRICAS}.amd64.tar.bz2"
+  - export FRICAS_SRC="${FRICAS}-full.tar.bz2"
+  - wget -q -O "${FRICAS_BIN}" "https://sourceforge.net/projects/fricas/files/fricas/${FRICAS_VER}/${FRICAS_BIN}/download?use_mirror=netcologne"
+  - wget -q -O "${FRICAS_SRC}" "https://sourceforge.net/projects/fricas/files/fricas/${FRICAS_VER}/${FRICAS_SRC}/download?use_mirror=netcologne"
+  - tar xjf "${FRICAS_BIN}"
+  - tar xjf "${FRICAS_SRC}"
+  - sudo mv usr/local/bin/* /usr/local/bin/
+  - sudo mv usr/local/lib/* /usr/local/lib/
+  - rm -rf usr
+  - cd ${FRICAS}
+  - patch -p0 < ../fricas.patch
+  - cd ..
+  - export FRICAS_PREFIX="/usr/local"
+script:
+  - ./axiom-run compile.input
