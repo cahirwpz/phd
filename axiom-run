@@ -2,7 +2,23 @@
 
 export AXIOM="${FRICAS_PREFIX}/lib/fricas/target/x86_64-unknown-linux"
 
+[ -z "$1" ] && exit 1
+
+if [ "$1" = "--test" ]; then
+  testrun="yes"
+  shift
+fi
+
+if [ -z $testrun ]; then
 "${AXIOM}/bin/AXIOMsys" << EOF
 )lisp (declaim (sb-ext:muffle-conditions cl:warning))
 )read $1
 EOF
+else
+"${AXIOM}/bin/AXIOMsys" << EOF
+)lisp (declaim (sb-ext:muffle-conditions cl:warning))
+)read load.input
+)read testinit.input
+)compile $1
+EOF
+fi

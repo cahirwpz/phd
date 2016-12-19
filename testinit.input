@@ -1,7 +1,3 @@
-)boot $PostParseHookEnable := false
-
-)read compile.input
-
 -- Set up OutputForm renderer.
 )boot $LINELENGTH := 160
 
