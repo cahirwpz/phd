@@ -4,6 +4,7 @@
 )compile SpadNode.spad
 )compile SpadNodeFactory.spad
 )compile SpadDatabase.spad
+)compile SpadLogic.spad
 )compile SpadTreeWalker.spad
 )compile TypeUnifier.spad
 )compile TypeEvaluator.spad
