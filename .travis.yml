@@ -18,5 +18,7 @@ before_install:
   - patch -p0 < ../fricas.patch
   - cd ..
   - export FRICAS_PREFIX="/usr/local"
+  - ln -s "${FRICAS}/src" src
 script:
-  - ./axiom-run compile.input
+  - make build
+  - make check
