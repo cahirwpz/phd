@@ -943,6 +943,8 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
         x.kind case "Capsule" =>
           [convert ("CAPSULE" :: Symbol), :ls]
         x.kind case "Sequence" =>
+          setlast!(ls, convert [convert ("exit" :: Symbol), 
+                                convert(1 :: Integer), last ls])
           [convert ("SEQ" :: Symbol), :ls]
         x.kind case "Tuple" => 
           [convert ("@Tuple" :: Symbol), :ls]
@@ -986,7 +988,11 @@ SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "falsebr") == x.c_false
 
     convert x ==
-      convert [convert ("IF" :: Symbol), convert x.cond, convert x.truebr, convert x.falsebr]
+      xt := convert x.truebr
+      xf := convert x.falsebr
+      convert([convert ("IF" :: Symbol), convert x.cond,
+               (null? xt => convert ("noBranch" :: Symbol); xt),
+               (null? xf => convert ("noBranch" :: Symbol); xf)])
 
     construct(c, tb, fb) == [c, tb, fb]$Rep
 
