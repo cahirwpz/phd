@@ -64,6 +64,7 @@ SpadTypeNode() : Exports == Implementation where
   CE ==> SpadCondExpr(N)
   FN ==> SpadFunction(N)
   FT ==> SpadFunctor(N)
+  LP ==> SpadLoop(N)
   NR ==> SpadNodeRef(N)
   TD ==> SpadTypeDecl(N)
   TG ==> SpadTypeGuard(N)
@@ -163,6 +164,24 @@ SpadTypeNode() : Exports == Implementation where
         spaces([ft.name :: PF, paren [arg :: PF for arg in ft.args],
                 ":" :: PF, ft.type :: PF, "==" :: PF, ft.extends :: PF,
                 "add" :: PF, ft.capsule :: PF])
+
+      loop? n =>
+        lp := n :: LP
+        il := [i :: PF for i in lp.itors]
+        gl := [spaces ["if" :: PF, g :: PF] for g in lp.guards]
+        loopBody := lp.body :: PF
+        lp.kind case "loop" =>
+          loopExpr : List(PF) :=
+            if empty? il then
+              loopCond := sepBy(" and " :: PF, [g :: PF for g in lp.guards])
+              ["while" :: PF, loopCond]
+            else
+              [:il, :gl]
+          spaces [:loopExpr, "repeat" :: PF, loopBody]
+        lp.kind case "collect" =>
+          bracket spaces [loopBody, :concat(il, gl)]
+        lp.kind case "repeat" =>
+          spaces ["repeat" :: PF, loopBody]
       sequence? n =>
         ns := [i :: PF for i in (n :: SEQ).list]
         #ns > 1 => paren sepBy(", " :: PF, ns)
