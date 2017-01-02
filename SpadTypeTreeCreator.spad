@@ -152,9 +152,11 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implemen
   PI ==> PositiveInteger
   N ==> SpadNode
   APP ==> SpadApply(N)
+  ASS ==> SpadAssign(N)
   CE ==> SpadCondExpr(N)
   FN ==> SpadFunction(N)
   NR ==> SpadNodeRef(N)
+  TD ==> SpadTypeDecl(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
   SEQ ==> SpadSequence(N)
@@ -164,24 +166,33 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implemen
     import Logger('Capsule)
 
     rewrite (seq : SEQ) : N ==
-      nodeSeq("Join", [rewrite(coerce(n)@NR) for n in seq.list | nodeRef? n])
+      ns := [rewrite(coerce(n)@NR) for n in seq.list | nodeRef? n]
+      nodeSeq("Join", [n for n in ns | not emptyNode? n])
+
+    rewrite (ass : ASS) : N == emptyNode()
+    rewrite (td : TD) : N == emptyNode()
 
     rewrite (nr : NR) : N ==
       tn := find(nr)
       tn.node = [nr] =>
         fail pile ["Self reference detected:" :: PF, tn :: PF]
         error ""
-      function? tn.node =>
-        fn : FN := coerce(tn.node)
+      -- nodes that have no rules are leaves and we accept them
+      empty? tn.rules => rewrite tn.node
+      n := first(tn.rules).solution
+      -- for functions take definition type
+      function? n =>
+        fn : FN := coerce(n)
         fnName : Symbol := coerce(fn.name)
         nodeTypeDecl([fnName], tn.type)
-      condExpr? tn.node =>
-        ce : CE := coerce(first(tn.rules).solution)
+      -- for conditional expression add type guards to the content of branches
+      condExpr? n =>
+        ce : CE := coerce(n)
         cond := rewrite(ce.cond)
         truebr := nodeTypeGuard(rewrite(ce.truebr), cond)
         falsebr := nodeTypeGuard(rewrite(ce.falsebr), nodeApp(['not], [cond]))
         nodeSeq("Join", [truebr, falsebr])
-      rewrite tn.node
+      rewrite n
 
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
