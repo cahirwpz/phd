@@ -9,6 +9,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
   Exports ==> with
     ruleAssign : (TN, TN) -> TR
+    ruleAssignFresh : (TN, TN, TN) -> TR
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
@@ -39,6 +40,10 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleAssign (L', R') ==
       (L, R) := (nodeRef(L'), nodeRef(R'))
       [[L, R, nodeAssign(L, R)], nodeAssign(L, R)]
+
+    ruleAssignFresh (D', L', R') ==
+      (D, L, R) := (nodeRef(D'), nodeRef(L'), nodeRef(R'))
+      [[D, L, R, nodeAssign(L, R)], nodeSeq("Sequence", [D, nodeAssign(L, R)])]
 
     ruleApply (fun, args) ==
       (funRef, argRefs) := (nodeRef(fun), [nodeRef(arg) for arg in args])
@@ -344,27 +349,35 @@ SpadTypeTreeCreator() : Exports == Implementation where
         this.node := [a]
         this
 
-      this := addNode!(ctx, [a])
-
-      introduced? := false
-      if symbol? a.lval then
-        s := a.lval :: Symbol
-        ts := search(s, env) 
-        if empty? ts or not any?(symbol?, ts)  then
-          debug ["Processing fresh assignment" :: PF, string(s :: PF)]
-          env(s) := this.type
-          introduced? := true
-
-      left := walk(a.lval, ctx, env)
-      -- we know the type of left-value while checking right-value (!?)
+      this := addNode!(ctx, emptyNode())
       right := walk(a.rval, ctx, env)
 
-      if introduced? then
-        left.node := nodeTypeDecl(left.node, typeRef(left))
+      fresh? :=
+        symbol? a.lval =>
+          s := a.lval :: Symbol
+          -- user can overload a symbol of function that belong to any capsule,
+          -- to check if overloading takes place and fresh symbol must be
+          -- introduced we need to filter out mappings with origin
+          ts := [t for t in search(s, env) | not typeOrigin? t]
+          empty? ts
+        false
+
+      decl : TN
+
+      if fresh? then
+        debug ["Processing fresh assignment" :: PF, string(a.lval :: PF)]
+        -- introduce type declaration and propagate type through environment
+        decl := walk(nodeTypeDecl(a.lval, right.type), ctx, env)
+        env := decl.env
+
+      left := walk(a.lval, ctx, env)
 
       -- Only left-value environment is propagated!
       this.env := left.env
-      this.rules := [ruleAssign(left, right)]
+      if fresh? then
+        this.rules := [ruleAssignFresh(decl, left, right)]
+      else
+        this.rules := [ruleAssign(left, right)]
       this
 
     walkCondExpr (ce : CE, ctx : CTX, env : ENV) : TN ==
@@ -401,21 +414,19 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkFun (fn : FN, ctx : CTX, env : ENV) : TN ==
       funName := (fn.name case "lambda" => '_+_-_>; fn.name :: Symbol)
+      funDeclNode := addNode!(ctx, emptyNode(), env)
 
       if fn.name case "lambda" then
         debug ("Processing lambda expression." :: PF)
       else
         debug ["Processing function" :: PF, string(funName :: PF)]
 
-      funDeclNode := addNode!(ctx, [fn], env)
-      bindNode!(ctx, funDeclNode, typeUndef)
-
       addSubTree!(ctx)
       env' := createScope env
 
       -- It's vitally important that result type is represented by "%2" type
       -- variable (e.g. 'return' refers to "%2").
-      funDefNode := addNode!(ctx, [funName], env')
+      funDefNode := addNode!(ctx, emptyNode(), env')
       resNode := addNode!(ctx, emptyNode(), env')
       argNodeList := [addNode!(ctx, emptyNode(), env') for n in fn.args]
 
@@ -507,8 +518,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       leaveSubTree!(ctx)
 
+      -- lambda is an expression so it must have a type (of its definiton)
+      funDeclType := (fn.name case "lambda" => funDefNode.type; typeUndef)
+      bindNode!(ctx, funDeclNode, funDeclType)
+
+      funDeclNode.node := nodeRef(funDefNode)
       funDeclNode.rules := [ruleRef([funDefNode], funDefNode)]
-      funDefNode.rules := [ruleFun(fn, reverse argNodeList, resNode, bodyNode)]
+      funDefNode.rules := [ruleFun(fn, argNodeList, resNode, bodyNode)]
 
       return funDeclNode
 
@@ -753,15 +769,14 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- Type definition for a symbol.
       s := td.expr :: Symbol
-      ts := search(s, env)
+      ts := [t for t in search(s, env) | not typeOrigin? t]
 
-      -- Add it to the environment or crash if already defined, unless it's
-      -- another function declaration (i.e. allow function type overloading).
-      if not mappingType? td.type then
-        (not empty? ts) and (first ts ~= td.type) =>
-          fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
-                "already defined as" :: PF, bracket [t :: PF for t in ts], "!" :: PF])
-          error ""
+      -- Add type to the environment or crash if already defined,
+      -- this behaviour is supressed for mappings that have origin.
+      not empty? ts and not member?(td.type, ts) =>
+        fail([bold red ("Error!" :: PF), "Symbol" :: PF, string(s :: PF),
+              "already defined as" :: PF, bracket [t :: PF for t in ts], "!" :: PF])
+        error ""
 
       env(s) := td.type
       tn := addNode!(ctx, [td], env)

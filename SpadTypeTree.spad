@@ -315,9 +315,13 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
         tn.type := typeUndef
       kill! tn
 
+    needsRewrite? : (TN, TV) -> Boolean
+    needsRewrite? (tn, tv) ==
+      occurs?(tv, tn.type) or (typeDecl? tn.node and occurs?(tv, tn.node))
+
     -- rewrite all nodes with type that contains given variable
     rewriteNodes! (x, tv, term) ==
-      for n in entries x.m_nodes | occurs?(tv, n.type) repeat
+      for n in entries x.m_nodes | needsRewrite?(n, tv) repeat
         n.type := substitute(n.type, tv, term)
         if typeDecl? n.node then
           n.node := substitute(n.node, tv, term)
