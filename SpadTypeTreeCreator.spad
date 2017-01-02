@@ -294,9 +294,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
       error "envAddType"
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TN ==
-      -- rewrite QUOTE(symbol) to value 'symbol
+      -- treat QUOTE(symbol) application as a symbol value
       a.function = ['QUOTE] and #a.args = 1 =>
-        this := addNode!(ctx, first a.args, env)
+        this := addNode!(ctx, [a], env)
         setTypeOf!(ctx, this, [symbolType])
         this
 
