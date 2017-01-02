@@ -116,7 +116,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeSeg(rewrite seg.start, rewrite seg.end, rewrite seg.step)
 
       rewrite (s : SEQ) : N ==
-        nodeSeq(s.kind, [rewrite e for e in s.list])
+        [collapse [s.kind, [rewrite n for n in s.list]]]
 
       rewrite (s : String) : N == [s]
 

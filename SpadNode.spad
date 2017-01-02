@@ -1360,6 +1360,8 @@ SpadNode() : Exports == Implementation where
     nodeUnionType : List(%) -> %
     nodeWhere : (%, %) -> %
 
+    collapse : SEQ -> SEQ
+
   Implementation ==> add
     Rep := Union(dfloat : DF,
                  int : Integer,
@@ -1807,3 +1809,15 @@ SpadNode() : Exports == Implementation where
       ut case "failed" => emptyNode()
       [ut]
     nodeWhere (body, env) == [[body, env]$SW]
+
+    -- merge body of same-type direct child sequence
+    collapse s ==
+      ns : List(%) := []
+      for n in s.list repeat
+        ns :=
+          not sequence? n => [n, :ns]
+          s' := n :: SEQ
+          s'.kind ~= s.kind => [[s'], :ns]
+          concat(reverse s'.list, ns)
+      [s.kind, reverse ns]
+
