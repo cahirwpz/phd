@@ -2,6 +2,8 @@
 SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
+  ASS ==> SpadAssign(N)
+  TD ==> SpadTypeDecl(N)
   FN ==> SpadFunction(N)
 
   Implementation ==> add
@@ -14,6 +16,14 @@ SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
         -- otherwise it's return statement
         nodeApp(['return], args)
       nodeApp(fn, args)
+    rewrite (a : ASS) : N ==
+      -- replace "a : T := b" with "a : T; a := b"
+      lv := rewrite a.lval
+      rv := rewrite a.rval
+      typeDecl? lv =>
+        td : TD := coerce(lv)
+        nodeSeq("Sequence", [lv, nodeAssign(td.expr, rv)])
+      nodeAssign(lv, rv)
 
 )abbrev package SMEXP SpadMacroExpander
 SpadMacroExpander() : Exports == Implementation where
