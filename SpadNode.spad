@@ -1823,7 +1823,8 @@ SpadNode() : Exports == Implementation where
         ns :=
           not sequence? n => [n, :ns]
           s' := n :: SEQ
-          s'.kind ~= s.kind => [[s'], :ns]
-          concat(reverse s'.list, ns)
+          s'.kind = s.kind or (s.kind = "Capsule" and s'.kind = "Sequence") =>
+            concat(reverse s'.list, ns)
+          [[s'], :ns]
       [s.kind, reverse ns]
 
