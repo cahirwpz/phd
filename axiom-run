@@ -12,11 +12,13 @@ fi
 if [ -z $testrun ]; then
 "${AXIOM}/bin/AXIOMsys" << EOF
 )lisp (declaim (sb-ext:muffle-conditions cl:warning))
+)set break quit
 )read $1
 EOF
 else
 "${AXIOM}/bin/AXIOMsys" << EOF
 )lisp (declaim (sb-ext:muffle-conditions cl:warning))
+)set break quit
 )read load.input
 )read testinit.input
 )compile $1
