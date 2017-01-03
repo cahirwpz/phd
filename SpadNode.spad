@@ -1,5 +1,14 @@
+)abbrev category SNBCAT SpadNodeBaseCategory
+SpadNodeBaseCategory() : Category == BasicType with
+    parse : SExpression -> %
+    coerce : % -> PrintableForm
+    convert : % -> SExpression
+  add
+    n = m ==
+      EQUAL(n, m)$Lisp
+
 )abbrev category SNCAT SpadNodeCategory
-SpadNodeCategory() : Category == ParsableCategory with
+SpadNodeCategory() : Category == SpadNodeBaseCategory with
   construct : SpadApply(%) -> %
   construct : SpadAssign(%) -> %
   construct : SpadCase(%) -> %
@@ -124,7 +133,7 @@ SpadNodeCategory() : Category == ParsableCategory with
   parseNonNull : SExpression -> %
 
 )abbrev category STECAT SpadTypeExprCategory
-SpadTypeExprCategory(N : SpadNodeCategory) : Category == ParsableCategory with
+SpadTypeExprCategory(N : SpadNodeCategory) : Category == SpadNodeBaseCategory with
     construct : (N, N) -> %
     elt : (%, "expr") -> N
     elt : (%, "type") -> N
@@ -135,7 +144,7 @@ SpadTypeExprCategory(N : SpadNodeCategory) : Category == ParsableCategory with
 SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     construct : Union("%any", "%undef") -> %
 
   Implementation ==> add
@@ -166,7 +175,7 @@ SpadNodeRef(N : SpadNodeCategory) : Exports == Implementation where
   PI ==> PositiveInteger
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     construct : (PI, PI) -> %
 
     elt : (%, "major") -> PI
@@ -196,7 +205,7 @@ SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
   NNI ==> NonNegativeInteger
   PF ==> PrintableForm
 
-  Exports ==> Join(ParsableCategory, OrderedSet) with
+  Exports ==> Join(SpadNodeBaseCategory, OrderedSet) with
     construct : (NNI, NNI) -> %
 
     elt : (%, "major") -> NNI
@@ -230,7 +239,7 @@ SpadTypeVar(N : SpadNodeCategory) : Exports == Implementation where
 SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "args") -> List(N)
     elt : (%, "result") -> N
     construct : (List(N), N) -> %
@@ -336,7 +345,7 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
   TD ==> SpadTypeDecl(N)
   SEX ==> SExpression
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     construct : List(TD) -> Union(%, "failed")
     fields : % -> List(TD)
     wellFormed? : % -> Boolean
@@ -393,7 +402,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
   SEX ==> SExpression
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     construct : List(N) -> Union(%, "failed")
     variants : % -> List(N)
     wellFormed? : % -> Boolean
@@ -470,7 +479,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
 SpadImport(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "type") -> N
     construct : N -> %
 
@@ -495,7 +504,7 @@ SpadImport(N : SpadNodeCategory) : Exports == Implementation where
 SpadAssign(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "lval") -> N
     elt : (%, "rval") -> N
     construct : (N, N) -> %
@@ -524,7 +533,7 @@ SpadAssign(N : SpadNodeCategory) : Exports == Implementation where
 SpadApply(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "function") -> N
     elt : (%, "args") -> List(N)
     construct : (N, List(N)) -> %
@@ -590,7 +599,7 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
 SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "start") -> N
     elt : (%, "end") -> N
     elt : (%, "step") -> N
@@ -628,7 +637,7 @@ SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
 SpadIterator(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "var") -> Symbol
     elt : (%, "seq") -> N
     construct : (Symbol, N) -> %
@@ -773,7 +782,7 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
   IT ==> SpadIterator(N)
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "kind") -> K
     elt : (%, "itors") -> List(N)
     elt : (%, "guards") -> List(N)
@@ -875,7 +884,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
   K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body")
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "kind") -> K
     elt : (%, "list") -> List(N)
     construct : (K, List(N)) -> %
@@ -972,7 +981,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
 SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "cond") -> N
     elt : (%, "truebr") -> N
     elt : (%, "falsebr") -> N
@@ -1023,7 +1032,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
   SEX ==> SExpression
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "name") -> Union(Symbol, "lambda")
     elt : (%, "args") -> List(N)
     elt : (%, "type") -> N
@@ -1117,7 +1126,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
 SpadMacro(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List Symbol
     elt : (%, "body") -> N
@@ -1154,7 +1163,7 @@ SpadMacro(N : SpadNodeCategory) : Exports == Implementation where
 SpadWhere(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "body") -> N
     elt : (%, "env") -> N
     construct : (N, N) -> %
@@ -1184,7 +1193,7 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
   MT ==> SpadMappingType(N)
   PF ==> PrintableForm
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List(TD)
     elt : (%, "type") -> N
@@ -1254,7 +1263,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
   SEQ ==> SpadSequence(N)
   TD ==> SpadTypeDecl(N)
 
-  Exports ==> ParsableCategory with
+  Exports ==> SpadNodeBaseCategory with
     construct : (Symbol, List TD, List N, List N, SEQ) -> %
 
     elt : (%, "name") -> Symbol
