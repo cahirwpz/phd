@@ -34,7 +34,10 @@ Test3() : Exports == Implementation where
       error "Not implemented!"
 
     barf a ==
-      if a > 0 then
-        return (a :: NNI)
-      else
-        return ((-a) :: NNI)
+      while true repeat
+        -- FriCAS will complain about return statement if following expression
+        -- is at function top level, so let's cheat a bit
+        if a > 0 then
+          return (a :: NNI)
+        else
+          return ((-a) :: NNI)

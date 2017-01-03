@@ -12,6 +12,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleAssignFresh : (TN, TN, TN) -> TR
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
+    ruleCoerce : (TN, List(TN), N) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
     ruleIfThen : (TN, TN) -> TR
     ruleFun : (FN, List(TN), TN, TN) -> TR
@@ -55,6 +56,11 @@ SpadTypeRuleFactory() : Exports == Implementation where
       extraRefs := [nodeRef(extra) for extra in extras]
       [[:extraRefs, funRef, :argRefs, nodeApp(funRef, argRefs)],
        nodeApp(funRef, argRefs)]
+
+    ruleCoerce (fun, args, rtyp) ==
+      (funRef, argRefs) := (nodeRef(fun), [nodeRef(arg) for arg in args])
+      [[funRef, :argRefs, nodeApp(funRef, argRefs)],
+       nodeTypeSelect(nodeApp(funRef, argRefs), rtyp)]
 
     ruleCondExpr (C', T', F') ==
       (C, T, F) := (nodeRef(C'), nodeRef(T'), nodeRef(F'))
@@ -571,7 +577,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       bindNode!(ctx, resNode, nodeSeq("Join", (ftRealType :: TI).body.list))
 
       extNode := addNode!(ctx, ft.extends, env)
-      bindNode!(ctx, extNode, ft.extends)
+      bindNode!(ctx, extNode,
+                (emptyNode? ft.extends => typeUndef(); ft.extends))
 
       bodyNode := walk(ft.capsule, ctx, env)
 
@@ -807,23 +814,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       expr := walk(tc.expr, ctx, env)
       coerceFun := walk(['coerce], ctx, env)
-
-      -- [WORKAROUND]
-      -- NonNegativeInteger should have:
-      --   coerce : I -> % 
-      --   retractIfCan : I -> Union(%, "failed")
-      -- PositiveInteger should have:
-      --   coerce : I -> % 
-      --   coerce : NNI -> % 
-      --   retractIfCan : I -> Union(%, "failed")
-      --   retractIfCan : NNI -> Union(%, "failed")
-      -- ... but they don't and compiler is able to perfom those coercions.
-      extendTypeOf!(ctx, coerceFun, [
-        nodeMappingType([integerType], nonNegativeIntegerType),
-        nodeMappingType([integerType], positiveIntegerType),
-        nodeMappingType([nonNegativeIntegerType], positiveIntegerType)])
-
-      this.rules := [ruleSubType(expr, this), ruleApply(coerceFun, [expr])]
+      qcoerceFun := walk(['qcoerce], ctx, env)
+      this.rules := ([ruleSubType(expr, this), 
+                      ruleCoerce(coerceFun, [expr], tc.type),
+                      ruleCoerce(qcoerceFun, [expr], tc.type)])
       this
 
     walkTypeHas (te : TEH, ctx : CTX, env : ENV) : TN ==

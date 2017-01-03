@@ -4,6 +4,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
   PI ==> PositiveInteger
   N ==> SpadNode
   APP ==> SpadApply(N)
+  FT ==> SpadFunctor(N)
   NR ==> SpadNodeRef(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
@@ -11,10 +12,12 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
 
   Implementation ==> add
     import Logger('Fill)
+    import FT
 
     rewrite (to : TO) : N ==
       (e, t) := (rewrite to.expr, rewrite to.type)
       t = ['_$] => e
+      t = appform(find(1, 1).node :: FT) => e
       typeAny? t => e
       mappingType? t => e
       nodeTypeOrigin(e, t)

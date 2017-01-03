@@ -391,7 +391,9 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
       error ""
 
     convert x ==
-      convert [convert ("Record" :: Symbol), :[convert f for f in fields x]]
+      fs := [convert [convert '_:, convert f.expr, convert f.type] 
+             for f in fields x]
+      convert [convert ("Record" :: Symbol), :fs]
 
     coerce x ==
       hconcat ["Record" :: PF, paren [f :: PF for f in fields x]]
@@ -1201,6 +1203,7 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
     elt : (%, "capsule") -> N
     construct : (Symbol, List(TD), N, N, N) -> %
     signature : % -> TD
+    appform : % -> N
 
   Implementation ==> add
     Rep := Record(f_name : Symbol,
@@ -1233,7 +1236,7 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
       fargs := [[[symbol s], parse t]$TD for s in argNames for t in argTypes]
       fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
       fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
-      fextends' := (null? fextends => [[['Type], []]$APP]; parse fextends)
+      fextends' := (null? fextends => emptyNode(); parse fextends)
       [fname, fargs, parse car ex.3, fextends', parse fcapsule]
 
     convert x ==
@@ -1242,6 +1245,8 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
       insideCapsule true
       caps := convert x.capsule
       insideCapsule false
+      if not emptyNode? x.extends then
+        caps := convert [convert ("add" :: Symbol), convert x.extends, caps]
       convert([convert 'DEF,
                convert [convert x.name, :argNames],
                convert [convert x.type, :argTypes],
@@ -1255,6 +1260,9 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
 
     signature ft ==
       [[ft.name], [[[arg.type for arg in ft.args], ft.type]$MT]]
+
+    appform ft ==
+      [[[ft.name], [arg.expr for arg in ft.args]]$APP]
 
 )abbrev domain STINFO SpadTypeInfo
 SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
