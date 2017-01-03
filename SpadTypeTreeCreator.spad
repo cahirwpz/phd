@@ -288,6 +288,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       unionType? t =>
         ut := t :: UT
         for v in variants ut repeat
+          if typeDecl? v then
+            v := (v :: TD).type
           env := envAddType(v, env)
         for f in makeUnionFunList t repeat
           env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
@@ -583,8 +585,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       bodyNode := walk(ft.capsule, ctx, env)
 
       capsuleType := nodeSeq("Join", [extNode.type, bodyNode.type])
-
-      warn(nodeTypeInfo(ft.name, ft.args, [], [], capsuleType :: SEQ) :: PF)
 
       leaveSubTree!(ctx)
 

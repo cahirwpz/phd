@@ -6,11 +6,14 @@ Test10 : Exports == Implementation where
     blah : String -> Union(String, Integer)
     blah : Integer -> Union(String, Integer)
     blah : NonNegativeInteger -> Integer
-    blah : Union(String, Integer) -> Union(String, Integer, Float)
-    blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
+    -- blah : Union(String, Integer) -> Union(String, Integer, Float)
+    -- blah : Record(a : NonNegativeInteger, b : String) -> Record(a : Integer, b : String)
 
     baz : NonNegativeInteger -> Integer
     foo : PositiveInteger -> Float
+
+    orZero : Union(Integer, "failed") -> Integer
+    orOne : Union(val : Integer, msg : String) -> Integer
 
     triplet : (PositiveInteger, PositiveInteger, NonNegativeInteger) -> List(Integer)
 
@@ -31,10 +34,18 @@ Test10 : Exports == Implementation where
     foo x ==
       bar x
 
+    orZero x ==
+      x case Integer => x
+      0
+
+    orOne x ==
+      x case val => x
+      1
+
     -- Arbitrary list construction.
     triplet (x, y, z) ==
       [x, y, z] -- not a call to construct(...) !
 
     -- These are not supported by original compiler.
-    blah (x : Union(String, Integer)) == x
-    blah (x : Record(a : NonNegativeInteger, b : String)) == x
+    -- blah (x : Union(String, Integer)) == x
+    -- blah (x : Record(a : NonNegativeInteger, b : String)) == x
