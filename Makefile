@@ -11,13 +11,16 @@ TESTS = Test1.spad \
 	Test10.spad \
 	Test11.spad
 
-all: load.input
+all: build load.input
 
 load.input: compile.input
 	rm -f $@
 	for spad in `cut -f 2 -d ' ' $<`; do			\
 	  for lib in `grep '^)abbrev' $$spad | cut -f 3 -d ' '`; do	\
 	    echo ")library $$lib" >> $@;				\
+	    if [ -d $$lib-.NRLIB ]; then				\
+	      echo ")library $$lib-" >> $@;				\
+	    fi								\
 	  done								\
 	done
 
@@ -26,11 +29,11 @@ build: compile.input
 
 check: load.input 
 	for test in $(TESTS); do					\
-	  ./axiom-run --test $$test;					\
+	  ./axiom-run --compile $$test;					\
 	done
 
 clean:
-	rm -f load.input *.fasl *~
+	rm -f load.input *.clisp *.fasl *~
 	rm -rf *.NRLIB
 	rm -rf *.erlib
 
