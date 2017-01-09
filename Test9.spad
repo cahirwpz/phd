@@ -1,11 +1,33 @@
 )abbrev package TEST9 Test9
 Test9 : Exports == Implementation where
+  I ==> Integer
+  NNI ==> NonNegativeInteger
+  S ==> String
+  U0 ==> Union(I, S)
+  U1 ==> Union(foo : I, bar : S)
+
   Exports ==> with
-    check : (Integer, Integer, Integer) -> Union(Integer, "failed")
-    addZero : Union(Integer, String) -> Union(Integer, String)
-    mycoerce : Integer -> Union(NonNegativeInteger, "failed")
+    getI : U0 -> Union(I, "failed")
+    getI : U1 -> Union(I, "failed")
+    coerce : U0 -> U1
+
+    check : (I, I, I) -> Union(I, "failed")
+    addZero : Union(I, S) -> Union(I, S)
+    mycoerce : I -> Union(NNI, "failed")
 
   Implementation ==> add
+    getI u0 ==
+      u0 case I => u0 :: I
+      "failed"
+
+    getI u1 ==
+      u1 case foo => u1.foo
+      "failed"
+
+    coerce u0 ==
+      u0 case I => foo(u0 :: I)
+      u0 case S => bar(u0 :: S)
+
     -- Subtyping => return union variants.
     check (x, min, max) ==
       x < min => "failed"
@@ -14,9 +36,9 @@ Test9 : Exports == Implementation where
 
     -- Subtyping => checking union variants.
     addZero x ==
-      x case Integer => x * 10
-      x case String => concat(x, "0")
+      x case I => (x :: I) * 10
+      x case S => concat(x :: S, "0")
 
     mycoerce x ==
-      x >= 0 => qcoerce(x)
+      x >= 0 => x :: NNI
       "failed"

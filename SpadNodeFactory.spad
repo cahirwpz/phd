@@ -78,10 +78,9 @@ SpadNodeFactory() : Exports == Implementation where
          [['construct], mt([f.type for f in fields r], n)]
         ])
       for f in fields r repeat
-        s : N := f.expr
+        s : N := [string(f.expr :: Symbol)]
         r : N := f.type
-        funs := ([[f.expr, mt([['constant]$N], s)],
-                  [f.expr, s],
+        funs := ([[f.expr, s],
                   [['elt], mt([n, s], r)],
                   [['setelt!], mt([n, s, r], r)], :funs])
       funs
@@ -94,7 +93,14 @@ SpadNodeFactory() : Exports == Implementation where
          [['coerce], mt([n], outputFormType())]
         ])
       vs := variants u
-      if not typeDecl? vs.1 then
+      if typeDecl? vs.1 then
+        for v in vs repeat
+          td := v :: TD
+          s : N := [string(td.expr :: Symbol)]
+          -- PARSER BUG: split into three lines and the parser will fail
+          funs := [[td.expr, mt([td.type], n)], [td.expr, s],
+                   [['elt], mt([n, s], td.type)], :funs]
+      else
         for v in vs repeat
           funs := [[['construct], mt([v], n)], 
                    [['coerce], mt([n], v)], :funs]

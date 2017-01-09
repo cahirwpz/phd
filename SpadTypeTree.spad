@@ -210,7 +210,7 @@ SpadTypeNode() : Exports == Implementation where
         apply? n or typeDecl? n or symbol? n or import? n =>
           -- leaves that influence environment contents
           magenta(n :: PF)
-        typeIs? n or typeHas? n or value? n =>
+        case? n or typeIs? n or typeHas? n or value? n =>
           -- leaves that yield a value
           blue(n :: PF)
         typeVar? n => 

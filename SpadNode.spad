@@ -1095,8 +1095,17 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
 
       x.name case Symbol =>
         fname := x.name :: Symbol
-        argNames := [convert ((arg :: TD).expr :: Symbol) for arg in x.args]
-        types := [convert (arg :: TD).type for arg in x.args]
+        argNames : List(SEX) := []
+        types : List(SEX) := []
+        for arg in x.args repeat
+          typeDecl? arg =>
+            td := arg :: TD
+            argNames := [:argNames, convert (td.expr :: Symbol)]
+            types := [:types, convert td.type]
+          string? arg =>
+            argNames := [:argNames, convert arg]
+            types := [:types, convert []]
+          error "unexpected argument format"
         convert([convert ("DEF" :: Symbol),
                  convert [convert fname, :argNames],
                  convert [convert x.type, :types],

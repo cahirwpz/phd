@@ -153,9 +153,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       candidates := dropSubTypeSignatures candidates
 
-      info pile ["Valid signatures:" :: PF, :[coerce c for c in candidates]]
+      empty? candidates =>
+        info ["No valid signatures found!" :: PF]
+        false
 
-      empty? candidates => false
+      info pile ["Valid signatures:" :: PF, :[coerce c for c in candidates]]
 
       if typeVar? funNode.type then
         limitNodeType!(ctx, funNode, [c.sig for c in candidates])
@@ -316,11 +318,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
           fs := rest fs
         empty? fs => break
         rules := rest rules
+      n.rules := rules
       empty? rules => false
       -- Immediately remove rules that fail to apply.
       for victim in setDifference(references n.rules, references rules) repeat
         killNode!(ctx, node(ctx, victim))
-      n.rules := rules
       true
 
     checkAndMarkIfDone! (ctx : TT, n : TN) : Boolean ==

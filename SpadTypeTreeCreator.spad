@@ -327,11 +327,11 @@ SpadTypeTreeCreator() : Exports == Implementation where
             eltFunTypeList := [eltFunType, :eltFunTypeList]
 
       if not empty? eltFunList then
-        argExprList' := [funExpr, :argExprList]
         eltFunExpr := addNode!(ctx, ['elt], env)
         eltFunExpr.node := nodeTypeOrigin(eltFunExpr.node, typeRef(eltFunExpr))
         setTypeOf!(ctx, eltFunExpr, eltFunList)
-        this.rules := [ruleApply(eltFunExpr, argExprList'), :this.rules]
+        this.rules :=
+          [ruleApply(eltFunExpr, [funExpr, :argExprList]), :this.rules]
 
       -- Add origin to function expression.
       if not(funExpr.node = ['return] or funExpr.node = ['error]) then
@@ -440,7 +440,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       resNode.node := resNode.type
       for argNode in argNodeList for n in fn.args repeat
-        argNode.node := nodeTypeDecl((n :: TD).expr, argNode.type)
+        argNode.node :=
+          typeDecl? n => nodeTypeDecl((n :: TD).expr, argNode.type)
+          string? n => n
+          error "walkApp: unexpected argument format"
 
       -- Take the type of function and replace those components, that were not
       -- specified, with type variables.
@@ -519,8 +522,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
               "to be a local function!" :: PF])
 
       for n in fn.args for argNode in argNodeList repeat
-        arg := n :: TD
-        env'(arg.expr :: Symbol) := argNode.type
+        typeDecl? n =>
+          td := n :: TD
+          env'(td.expr :: Symbol) := argNode.type
+        string? n =>
+          s := n :: String
+          env'(s :: Symbol) := n
+        error "walkFun: unexpected argument format"
 
       bodyNode := walk(fn.body, ctx, env')
 
@@ -816,11 +824,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
       setTypeOf!(ctx, this, [tc.type])
 
       expr := walk(tc.expr, ctx, env)
-      coerceFun := walk(['coerce], ctx, env)
-      qcoerceFun := walk(['qcoerce], ctx, env)
-      this.rules := ([ruleSubType(expr, this), 
-                      ruleCoerce(coerceFun, [expr], tc.type),
-                      ruleCoerce(qcoerceFun, [expr], tc.type)])
+
+      rs : List(TR) := []
+      if not empty? search('qcoerce, env) then
+        qcoerceFun := walk(['qcoerce], ctx, env)
+        rs := [ruleCoerce(qcoerceFun, [expr], tc.type), :rs]
+      if not empty? search('coerce, env) then
+        coerceFun := walk(['coerce], ctx, env)
+        rs := [ruleCoerce(coerceFun, [expr], tc.type), :rs]
+      this.rules := [ruleSubType(expr, this), :rs]
       this
 
     walkTypeHas (te : TEH, ctx : CTX, env : ENV) : TN ==
@@ -855,19 +867,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       this := addNode!(ctx, [c], env)
       setTypeOf!(ctx, this, [booleanType])
-
-      if symbol? c.expr then
-        s := c.expr :: Symbol
-        reset!(env, s)
-        this.env := (env(s) := c.type)
-
-      exprType := addNode!(ctx, c.type, env)
-      setTypeOf!(ctx, exprType, [c.type])
-
-      expr := walk(c.expr, ctx, env)
-      exprType.rules := [ruleSuperType(exprType, expr)]
-
-      this.rules := [[[nodeRef(exprType)], [c]]]
       this
 
     walkInt (i : Integer, ctx : CTX, env : ENV) : TN ==
