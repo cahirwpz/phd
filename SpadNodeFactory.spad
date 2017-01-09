@@ -25,6 +25,7 @@ SpadNodeFactory() : Exports == Implementation where
     symbolType : () -> N
     voidType : () -> N
     categoryType : () -> N
+    baseType : () -> N
 
     typeAny : () -> N
     typeUndef : () -> N
@@ -51,6 +52,7 @@ SpadNodeFactory() : Exports == Implementation where
     symbolType () == nodeApp(['Symbol], [])
     voidType () == nodeApp(['Void], [])
     categoryType () == nodeApp(['Category], [])
+    baseType () == nodeApp(['Type], [])
 
     typeAny() == [["%any"]$MR]
     typeUndef() == [["%undef"]$MR]

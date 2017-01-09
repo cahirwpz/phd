@@ -1,0 +1,6 @@
+)abbrev category TEST12 Test12 
+Test12() : Category == with
+      "=": (%,%) -> Boolean    ++ x = y tests if x and y are equal.
+      "~=": (%,%) -> Boolean   ++ x~=y tests if x and y are not equal.
+   add
+      _~_=(x : %, y : %) : Boolean == not(x = y)

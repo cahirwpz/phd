@@ -575,8 +575,11 @@ SpadTypeTreeCreator() : Exports == Implementation where
       ti := getTypeInfo ft
       env := addDomain(ftType :: APP, env)
       ftRealType := substitute(first env(ftType :: APP), typeVar() :: TV, ftType)
-      -- FIXME: Functor's return type is not of "Join" node!
-      bindNode!(ctx, resNode, nodeSeq("Join", (ftRealType :: TI).body.list))
+      ftRes :=
+        ft.type = categoryType => categoryType()
+        -- FIXME: Functor's return type is not of "Join" node!
+        nodeSeq("Join", (ftRealType :: TI).body.list)
+      bindNode!(ctx, resNode, ftRes)
 
       extNode := addNode!(ctx, ft.extends, env)
       bindNode!(ctx, extNode,

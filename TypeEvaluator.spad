@@ -223,7 +223,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       args := [[typeVar(i :: PI), t]$TD for t in types for i in 1..]
 
       body := 
-        ft.type = nodeApp(['Category], []) => ft.capsule
+        ft.type = categoryType() => ft.extends
         nodeSeq("Domain", (ft.type :: SEQ).list)
       body := rewrite(body)$SpadTreeSymbolReplace(ctx)
       body := rewrite(body)$FlattenDatabaseType
