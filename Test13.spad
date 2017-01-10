@@ -1,0 +1,5 @@
+)abbrev category TEST13 Test13 
+Test13() : Category == BasicType with
+  1 : constant ->  %
+  "*": (%, %) -> %
+  "^": (%, PositiveInteger) -> %

@@ -1241,12 +1241,14 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
       argNames := destruct cdr ex.2
       argTypes := destruct cdr ex.3
       fname := symbol car ex.2
+      ftype := car ex.3
       fbody := ex.5
       fargs := [[[symbol s], parse t]$TD for s in argNames for t in argTypes]
-      fcapsule := if symbol(car fbody) = 'add then fbody.3 else fbody
-      fextends := if symbol(car fbody) = 'add then fbody.2 else convert []
-      fextends' := (null? fextends => emptyNode(); parse fextends)
-      [fname, fargs, parse car ex.3, fextends', parse fcapsule]
+      cat? := symbol(car ftype) = 'Category
+      add? := symbol(car fbody) = 'add
+      fcapsule := (add? => fbody.3; cat? => convert []; fbody)
+      fextends := (add? => fbody.2; cat? => fbody; convert [])
+      [fname, fargs, parse ftype, parse fextends, parse fcapsule]
 
     convert x ==
       argNames := [convert (arg.expr :: Symbol) for arg in x.args]
