@@ -8,6 +8,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
   NR ==> SpadNodeRef(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
+  TVL ==> SpadTypeValue(N)
   TN ==> SpadTypeNode
 
   Implementation ==> add
@@ -21,6 +22,9 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
       typeAny? t => e
       mappingType? t => e
       nodeTypeOrigin(e, t)
+
+    rewrite (tv : TVL) : N ==
+      rewrite tv.type
 
     rewrite (app : APP) : N ==
       -- WORKAROUND! Remove origin qualifier from first argument of implicit

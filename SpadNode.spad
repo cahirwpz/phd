@@ -32,6 +32,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   construct : SpadTypeHas(%) -> %
   construct : SpadTypeIs(%) -> %
   construct : SpadTypeInfo(%) -> %
+  construct : SpadTypeValue(%) -> %
   construct : SpadTypeOrigin(%) -> %
   construct : SpadTypePretend(%) -> %
   construct : SpadTypeSelect(%) -> %
@@ -83,6 +84,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   typeOrigin? : % -> Boolean
   typeSelect? : % -> Boolean
   typeUndef?: % -> Boolean
+  typeValue? : % -> Boolean
   typeVar? : % -> Boolean
   unionType? : % -> Boolean
   where? : % -> Boolean
@@ -119,6 +121,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   coerce : % -> SpadTypeHas(%)
   coerce : % -> SpadTypeInfo(%)
   coerce : % -> SpadTypeIs(%)
+  coerce : % -> SpadTypeValue(%)
   coerce : % -> SpadTypeOrigin(%)
   coerce : % -> SpadTypePretend(%)
   coerce : % -> SpadTypeSelect(%)
@@ -773,6 +776,24 @@ SpadTypeGuard(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
   convert x == convert [convert '_|, convert x.expr, convert x.type]
   coerce ex == spaces [ex.expr :: PF,  '_| :: PF, ex.type :: PF]
 
+)abbrev domain STVAL SpadTypeValue
+SpadTypeValue(N : SpadNodeCategory) : Exports == Implementation where
+  PF ==> PrintableForm
+
+  Exports ==> SpadNodeBaseCategory with
+    construct : (N, N) -> %
+    elt : (%, "type") -> N
+    elt : (%, "value") -> N
+
+  Implementation ==> add
+    Rep := Record(t_type : N, t_value : N)
+
+    elt(x,"type") == x.t_type
+    elt(x,"value") == x.t_value
+
+    construct(t, v) == [t, v]$Rep
+    coerce ex == hconcat [ex.type :: PF, brace(ex.value :: PF)]
+
 )abbrev domain STORIGIN SpadTypeOrigin
 SpadTypeOrigin(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
   PF ==> PrintableForm
@@ -1363,6 +1384,7 @@ SpadNode() : Exports == Implementation where
   TEH ==> SpadTypeHas(%)
   TEI ==> SpadTypeIs(%)
   TEP ==> SpadTypePretend(%)
+  TVL ==> SpadTypeValue(%)
   TI ==> SpadTypeInfo(%)
   TG ==> SpadTypeGuard(%)
   TO ==> SpadTypeOrigin(%)
@@ -1399,6 +1421,7 @@ SpadNode() : Exports == Implementation where
     nodeTypePretend : (%, %) -> %
     nodeTypeOrigin : (%, %) -> %
     nodeTypeSelect : (%, %) -> %
+    nodeTypeValue : (%, %) -> %
     nodeTypeVar : (NNI, NNI) -> %
     nodeUnionType : List(%) -> %
     nodeWhere : (%, %) -> %
@@ -1437,6 +1460,7 @@ SpadNode() : Exports == Implementation where
                  t_origin: TO,
                  t_pretend : TEP,
                  t_select : TS,
+                 t_value : TVL,
                  typevar : TV,
                  union : UT,
                  empty : "$EmptyNode")
@@ -1484,6 +1508,7 @@ SpadNode() : Exports == Implementation where
     typePretend? n == n case t_pretend
     typeOrigin? n == n case t_origin
     typeSelect? n == n case t_select
+    typeValue? n == n case t_value
     subType? n == n case subtype
     unionType? n == n case union
     where? n == n case s_where
@@ -1598,6 +1623,10 @@ SpadNode() : Exports == Implementation where
     coerce (n : %) : TEP ==
       typePretend? n => n.t_pretend
       CoerceError("SpadTypePretend")
+
+    coerce (n : %) : TVL ==
+      typeValue? n => n.t_value
+      CoerceError("SpadTypeValue")
   
     coerce (n : %) : TI ==
       typeInfo? n => n.t_info
@@ -1669,6 +1698,7 @@ SpadNode() : Exports == Implementation where
     construct (n : TEH) : % == [n]$Rep
     construct (n : TEI) : % == [n]$Rep
     construct (n : TEP) : % == [n]$Rep
+    construct (n : TVL) : % == [n]$Rep
     construct (n : TI) : % == [n]$Rep
     construct (n : TO) : % == [n]$Rep
     construct (n : TS) : % == [n]$Rep
@@ -1770,6 +1800,7 @@ SpadNode() : Exports == Implementation where
       typeIs? n => (n :: TEI) :: PF
       typeInfo? n => (n :: TI) :: PF
       typePretend? n => (n :: TEP) :: PF
+      typeValue? n => (n :: TVL) :: PF
       typeOrigin? n => (n :: TO) :: PF
       typeSelect? n => (n :: TS) :: PF
       typeVar? n => (n :: TV) :: PF
@@ -1807,6 +1838,7 @@ SpadNode() : Exports == Implementation where
       typeHas? n => convert(n :: TEH)
       typeIs? n => convert(n :: TEI)
       typePretend? n => convert(n :: TEP)
+      -- typeValue is not recognized by original compiler
       typeOrigin? n => convert(n :: TO)
       typeSelect? n => convert(n :: TS)
       typeVar? n => convert(n :: TV)
@@ -1846,6 +1878,7 @@ SpadNode() : Exports == Implementation where
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeVar (major, minor) == [[major, minor]$TV]
     nodeTypeSelect (expr, type) == [[expr, type]$TS]
+    nodeTypeValue (type, value) == [[type, value]$TVL]
     nodeSubType (type1, type2) == [[type1, type2]$ST]
     nodeUnionType variants ==
       ut := [variants]$UT

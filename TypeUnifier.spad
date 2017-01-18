@@ -15,8 +15,10 @@ TypeUnifier() : Exports == Implementation where
   TI ==> SpadTypeInfo(N)
   TEH ==> SpadTypeHas(N)
   TEI ==> SpadTypeIs(N)
+  TVL ==> SpadTypeValue(N)
   TO ==> SpadTypeOrigin(N)
   TV ==> SpadTypeVar(N)
+  TVL ==> SpadTypeValue(N)
   UT ==> SpadUnionType(N)
   SEQ ==> SpadSequence(N)
   FT ==> SpadFunctor(N)
@@ -105,6 +107,9 @@ TypeUnifier() : Exports == Implementation where
       typeIs? n =>
         te := n :: TEI
         occurs'? te.expr or occurs'? te.type
+      typeValue? n =>
+        tv := n :: TVL
+        occurs'? tv.type or occurs'? tv.value
       typeVar? n =>
         (n :: TV) = tvar
 
@@ -154,6 +159,9 @@ TypeUnifier() : Exports == Implementation where
       typeIs? n =>
         te := n :: TEI
         unbound? te.expr or unbound? te.type
+      typeValue? n =>
+        tv := n :: TVL
+        unbound? tv.type or unbound? tv.value
 
       fail ["unbound?: case not handled for" :: PF, n :: PF]
       error ""
@@ -189,6 +197,9 @@ TypeUnifier() : Exports == Implementation where
       typeOrigin? n =>
         to := n :: TO
         containsWildcard? to.expr or containsWildcard? to.type
+      typeValue? n =>
+        tv := n :: TVL
+        containsWildcard? tv.type or containsWildcard? tv.value
 
       fail ["containsWildcard?: case not handled for" :: PF, n :: PF]
       error ""
@@ -265,7 +276,7 @@ TypeUnifier() : Exports == Implementation where
 
       apply? n =>
         app := n :: APP
-        lst := [substitute(k, var, term) for k in [app.function, :app.args]]
+        lst := [stripType substitute(k, var, term) for k in [app.function, :app.args]]
         nodeApp(first lst, rest lst)
       assign? n =>
         ass := n :: ASS
@@ -328,6 +339,10 @@ TypeUnifier() : Exports == Implementation where
         to := n :: TO
         nodeTypeOrigin(substitute(to.expr, var, term),
                        substitute(to.type, var, term))
+      typeValue? n =>
+        tv := n :: TVL
+        nodeTypeValue(substitute(tv.type, var, term),
+                      substitute(tv.value, var, term))
       typeVar? n =>
         if (n :: TV) = var then term else n
 
@@ -390,6 +405,12 @@ TypeUnifier() : Exports == Implementation where
 
       -- type wildcard found? => leave without generating a substitution
       typeAny? n1 or typeAny? n2 => [[]]
+
+      -- use type value instead
+      typeValue? n1 =>
+        unifyType'((n1 :: TVL).value, n2)
+      typeValue? n2 =>
+        unifyType'(n1, (n2 :: TVL).value)
 
       -- both nodes can be represented as lists of terms and variables
       -- so convert them to a pair of lists and perform unification
@@ -536,6 +557,14 @@ TypeUnifier() : Exports == Implementation where
       typeOrigin? n2 =>
         to2 := n2 :: TO
         isSubType'(n1, to2.expr)
+
+      typeValue? n1 =>
+        tv := n1 :: TVL
+        isSubType'(tv.value, n2)
+
+      typeValue? n2 =>
+        tv := n2 :: TVL
+        isSubType'(n1, tv.value)
 
       typeUndef? n1 or typeUndef? n2 => "false"
       typeAny? n1 or typeAny? n2 => "false"

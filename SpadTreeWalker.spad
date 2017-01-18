@@ -27,6 +27,7 @@ SpadTreeWalkerCategory() : Category == Definition where
   TI ==> SpadTypeInfo(N)
   TO ==> SpadTypeOrigin(N)
   TS ==> SpadTypeSelect(N)
+  TVL ==> SpadTypeValue(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
   W ==> SpadWhere(N)
@@ -62,6 +63,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : TI -> N
       rewrite : TO -> N
       rewrite : TS -> N
+      rewrite : TVL -> N
       rewrite : TV -> N
       rewrite : UT -> N
       rewrite : W -> N
@@ -158,6 +160,9 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (te : TS) : N ==
         nodeTypeSelect(rewrite te.expr, rewrite te.type)
 
+      rewrite (tv : TVL) : N ==
+        nodeTypeValue(rewrite tv.type, rewrite tv.value)
+
       rewrite (tv : TV) : N == [tv]
 
       rewrite (ut : UT) : N ==
@@ -195,6 +200,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         typePretend? n => rewrite (n :: TEP)
         typeOrigin? n => rewrite (n :: TO)
         typeSelect? n => rewrite (n :: TS)
+        typeValue? n => rewrite (n :: TVL)
         typeVar? n => rewrite (n :: TV)
         unionType? n => rewrite (n :: UT)
         where? n => rewrite (n :: W)
