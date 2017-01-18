@@ -61,6 +61,7 @@ TypeUnifier() : Exports == Implementation where
     import Logger('Unify)
     import SpadNode
     import SpadNodeFactory
+    import SpadDatabase
 
     occurs? (tvar, n) ==
       import List(N)
@@ -594,15 +595,12 @@ TypeUnifier() : Exports == Implementation where
         -- {T0(T1, T2, ..., Tk)} <: {S0(S1, S2, ..., Sk)}
         -- AFAIK functors in SPAD are invariant (!) for the time being.
         -- Handle built-in subtyping relations.
-        n1 = positiveIntegerType =>
-          n2 = positiveIntegerType => "true"
-          isSubType'(nonNegativeIntegerType, n2)
-        n1 = nonNegativeIntegerType =>
-          n2 = nonNegativeIntegerType => "true"
-          isSubType'(integerType, n2)
         app1 := n1 :: APP
         app2 := n2 :: APP
-        app1.function ~= app2.function => "false"
+        fn1 := app1.function :: Symbol
+        fn2 := app2.function :: Symbol
+        #app1.args = 0 and #app2.args = 0 and isSubDomain?(fn1, fn2) => "true"
+        fn1 ~= fn2 => "false"
         #app1.args ~= #app2.args => "false"
         ts : List(N) := []
         for arg1 in app1.args for arg2 in app2.args repeat
