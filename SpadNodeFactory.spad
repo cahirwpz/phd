@@ -98,7 +98,7 @@ SpadNodeFactory() : Exports == Implementation where
           td := v :: TD
           s : N := [string(td.expr :: Symbol)]
           -- PARSER BUG: split into three lines and the parser will fail
-          funs := [[td.expr, mt([td.type], n)], [td.expr, s],
+          funs := [[['construct], mt([td.type], n)], [td.expr, s],
                    [['elt], mt([n, s], td.type)], :funs]
       else
         for v in vs repeat

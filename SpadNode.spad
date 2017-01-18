@@ -282,7 +282,7 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
 
   Exports ==> SpadTypeExprCategory(N) with
     construct : (N, N, Boolean) -> %
-    insideCapsule : Boolean -> Void
+    insideCapsule : Boolean -> Boolean
 
   Implementation ==> add
     import ParserTools
@@ -322,8 +322,10 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
 
     insideCapsule? := false
 
-    insideCapsule (x : Boolean) : Void ==
+    insideCapsule (x : Boolean) : Boolean ==
+      old := insideCapsule?
       insideCapsule? := x
+      old
 
     convert x ==
       insideCapsule? => 
@@ -391,9 +393,11 @@ SpadRecordType(N : SpadNodeCategory) : Exports == Implementation where
       error ""
 
     convert x ==
-      fs := [convert [convert '_:, convert f.expr, convert f.type] 
-             for f in fields x]
-      convert [convert ("Record" :: Symbol), :fs]
+      cap? := insideCapsule(true)
+      res := convert([convert ("Record" :: Symbol),
+                     :[convert f for f in fields x]])
+      insideCapsule(cap?)
+      res
 
     coerce x ==
       hconcat ["Record" :: PF, paren [f :: PF for f in fields x]]
@@ -413,6 +417,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
     Rep := List(N)
 
     import ParserTools
+    import SpadTypeDecl(N)
     import SExpression
     import Logger('Parser)
 
@@ -450,7 +455,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
           return false
         not (recordType? t or unionType? t or mappingType? t or
              apply? t or string? t or symbol? t or typeVar? t or marker? t) =>
-          warn ["Union has a variant with wrong type:" :: PF, t :: PF]
+          warn ["Union has a variant with wrong type:" :: PF, x :: PF, t :: PF]
           return false
         member?(t, types) =>
           warn ["Union has two variants with the same type:" :: PF, t :: PF]
@@ -471,7 +476,11 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
       error ""
 
     convert x ==
-      convert [convert ("Union" :: Symbol), :[convert v for v in variants x]]
+      cap? := insideCapsule(true)
+      res := convert([convert ("Union" :: Symbol),
+                      :[convert v for v in variants x]])
+      insideCapsule(cap?)
+      res
 
     coerce x ==
       hconcat ["Union" :: PF, paren [v :: PF for v in variants x]]
@@ -671,7 +680,7 @@ SpadTypeSelect(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
 
   construct(e, t) == [e, t]$Rep
   convert x == convert [convert '_@, convert x.expr, convert x.type]
-  coerce ex == spaces [ex.expr :: PF, '_@ :: PF, ex.type :: PF]
+  coerce ex == paren spaces [ex.expr :: PF, '_@ :: PF, ex.type :: PF]
 
 )abbrev domain SSUBTYPE SpadSubType
 SpadSubType(N : SpadNodeCategory) : SpadTypeExprCategory(N) == add
