@@ -1324,7 +1324,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
   TD ==> SpadTypeDecl(N)
 
   Exports ==> SpadNodeBaseCategory with
-    construct : (Symbol, List TD, List N, List N, SEQ) -> %
+    construct : (Symbol, List TD, List N, List N, N, SEQ) -> %
 
     elt : (%, "name") -> Symbol
     elt : (%, "args") -> List TD
@@ -1333,15 +1333,17 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     elt : (%, "body") -> SEQ
     elt : (%, "self") -> APP
     elt : (%, "type") -> N
+    elt : (%, "superType") -> N
 
   Implementation ==> add
     Rep := Record(ti_name : Symbol,
                   ti_args : List TD,
                   ti_hasList : List N,
                   ti_constraints : List N,
+                  ti_superType : N,
                   ti_body : SEQ)
 
-    construct(n, al, hl, ct, st) == [n, al, hl, ct, st]$Rep
+    construct(n, as, hs, cs, st, b) == [n, as, hs, cs, st, b]$Rep
 
     elt(x, "name") == x.ti_name
     elt(x, "args") == x.ti_args
@@ -1350,6 +1352,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "body") == x.ti_body
     elt(x, "self") == [[x.ti_name], [[arg] for arg in x.ti_args]]$APP
     elt(x, "type") == [[[x.ti_name], [arg.expr for arg in x.ti_args]]$APP]
+    elt(x, "superType") == x.ti_superType
 
     coerce x ==
       args := [arg :: PF for arg in x.ti_args]
@@ -1359,7 +1362,10 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
         x.ti_body.kind case "Domain" => "Domain"
         x.ti_body.kind case "Package" => "Package"
         error x.ti_body.kind
-      pile([spaces [app, bold("is" :: PF), k :: PF],
+      l : List(PF) :=
+        emptyNode? x.ti_superType => []
+        [bold("subtype of" :: PF), x.ti_superType :: PF]
+      pile([spaces [app, :l, bold("is" :: PF), k :: PF],
             pile [bold("defined as:" :: PF), x.ti_body :: PF],
             pile [bold("has relation:" :: PF), :[h :: PF for h in x.ti_hasList]],
             pile [bold("constraints:" :: PF), :[c :: PF for c in x.ti_constraints]]])
@@ -1427,7 +1433,7 @@ SpadNode() : Exports == Implementation where
     nodeTypeDecl : (%, %) -> %
     nodeTypeGuard : (%, %) -> %
     nodeTypeHas : (%, %) -> %
-    nodeTypeInfo : (Symbol, List TD, List(%), List(%), SEQ) -> %
+    nodeTypeInfo : (Symbol, List TD, List(%), List(%), %, SEQ) -> %
     nodeTypeIs : (%, %) -> %
     nodeTypePretend : (%, %) -> %
     nodeTypeOrigin : (%, %) -> %
@@ -1884,8 +1890,8 @@ SpadNode() : Exports == Implementation where
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeHas (expr, type) == [[expr, type]$TEH]
     nodeTypeIs (expr, type) == [[expr, type]$TEI]
-    nodeTypeInfo (name, args, hasList, constraints, body) ==
-      [[name, args, hasList, constraints, body]$TI]
+    nodeTypeInfo (name, args, hasList, constraints, supertype, body) ==
+      [[name, args, hasList, constraints, supertype, body]$TI]
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeVar (major, minor) == [[major, minor]$TV]
     nodeTypeSelect (expr, type) == [[expr, type]$TS]

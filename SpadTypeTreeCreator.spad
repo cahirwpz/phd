@@ -12,6 +12,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleAssignFresh : (TN, TN, TN) -> TR
     ruleApply : (TN, List(TN)) -> TR
     ruleApply : (TN, List(TN), List(TN)) -> TR
+    ruleCase : (TN, TN) -> TR
     ruleCoerce : (TN, List(TN), N) -> TR
     ruleCondExpr : (TN, TN, TN) -> TR
     ruleIfThen : (TN, TN) -> TR
@@ -28,7 +29,9 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
                      "Tuple", "Body"), TN, List(TN)) -> TR
     ruleCapsule : List(TN) -> TR
-    ruleTypeOrigin : (TN, N) -> TR
+    ruleTypeCoerce : (TN, TN) -> TR
+    ruleTypeSelect : (TN, TN) -> TR
+    ruleTypeOrigin : (TN, TN) -> TR
     ruleSubType : (TN, TN) -> TR
     ruleSubType : (List(TN), TN, TN) -> TR
     ruleSuperType : (TN, TN) -> TR
@@ -56,6 +59,10 @@ SpadTypeRuleFactory() : Exports == Implementation where
       extraRefs := [nodeRef(extra) for extra in extras]
       [[:extraRefs, funRef, :argRefs, nodeApp(funRef, argRefs)],
        nodeApp(funRef, argRefs)]
+
+    ruleCase (S', T') ==
+      (S, T) := (nodeRef(S'), nodeRef(T'))
+      [[S, T, nodeCase(S, T)], nodeCase(S, T)]
 
     ruleCoerce (fun, args, rtyp) ==
       (funRef, argRefs) := (nodeRef(fun), [nodeRef(arg) for arg in args])
@@ -130,9 +137,17 @@ SpadTypeRuleFactory() : Exports == Implementation where
       [exprRefList, nodeSeq("Capsule", exprRefList)]
 
     ruleTypeOrigin (expr, origin) ==
-      exprRef := nodeRef(expr)
-      [[exprRef, nodeTypeOrigin(exprRef, origin)],
-       nodeTypeOrigin(exprRef, origin)]
+      (exprRef, originRef) := (nodeRef(expr), nodeRef(origin))
+      [[exprRef, originRef, nodeTypeOrigin(exprRef, originRef)],
+       nodeTypeOrigin(exprRef, originRef)]
+
+    ruleTypeCoerce (S', T') ==
+      (S, T) := (nodeRef(S'), nodeRef(T'))
+      [[S, T, nodeTypeCoerce(S, T)], nodeTypeCoerce(S, T)]
+
+    ruleTypeSelect (S', T') ==
+      (S, T) := (nodeRef(S'), nodeRef(T'))
+      [[S, T, nodeTypeSelect(S, T)], nodeTypeSelect(S, T)]
 
     ruleSuperType (superType, type) ==
       (superTypeRef, typeRef) := (nodeRef(superType), nodeRef(type))
@@ -236,6 +251,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
   TI ==> SpadTypeInfo(N)
   TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
+  TVL ==> SpadTypeValue(N)
   UT ==> SpadUnionType(N)
   SW ==> SpadWhere(N)
 
@@ -813,34 +829,30 @@ SpadTypeTreeCreator() : Exports == Implementation where
       debug(["Expression" :: PF, ts.expr :: PF,
              "has to return type" :: PF, ts.type :: PF])
 
-      not apply? ts.expr =>
-        fail ["Type cut operator works only for function application!" :: PF]
+      not symbol? ts.expr =>
+        fail ["Type cut operator works only for function symbols!" :: PF]
         error ""
 
       env := envAddType(ts.type, env)
       this := addNode!(ctx, [ts], env)
-      expr := walk(ts.expr, ctx, env)
-      setTypeOf!(ctx, this, [ts.type])
-      this.rules := [ruleSubType(expr, this)]
+      ntype := walk(ts.type, ctx, env)
+      nexpr := walk(ts.expr, ctx, ntype.env)
+      this.rules := [ruleTypeSelect(nexpr, ntype)]
       this
 
     walkTypeCoerce (tc : TC, ctx : CTX, env : ENV) : TN ==
       debug ["Expression" :: PF, tc.expr :: PF, "have to coerce to" :: PF, tc.type :: PF]
+
       env := envAddType(tc.type, env)
-
       this := addNode!(ctx, [tc], env)
-      setTypeOf!(ctx, this, [tc.type])
+      ntype := walk(tc.type, ctx, env)
+      nexpr := walk(tc.expr, ctx, ntype.env)
 
-      expr := walk(tc.expr, ctx, env)
-
-      rs : List(TR) := []
-      if not empty? search('qcoerce, env) then
-        qcoerceFun := walk(['qcoerce], ctx, env)
-        rs := [ruleCoerce(qcoerceFun, [expr], tc.type), :rs]
+      rs := [ruleTypeCoerce(nexpr, ntype)]$List(TR)
       if not empty? search('coerce, env) then
         coerceFun := walk(['coerce], ctx, env)
-        rs := [ruleCoerce(coerceFun, [expr], tc.type), :rs]
-      this.rules := [ruleSubType(expr, this), :rs]
+        rs := [:rs, ruleApply(coerceFun, [nexpr])]
+      this.rules := rs
       this
 
     walkTypeHas (te : TEH, ctx : CTX, env : ENV) : TN ==
@@ -864,17 +876,23 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       env := envAddType(to.type, env)
       this := addNode!(ctx, [to], env)
-
-      expr := walk(to.expr, ctx, env)
-
-      this.rules := [ruleTypeOrigin(expr, to.type)]
+      ntype := walk(to.type, ctx, env)
+      nexpr := walk(to.expr, ctx, ntype.env)
+      bindNode!(ctx, this, nexpr.type)
+      this.rules := [ruleTypeOrigin(nexpr, ntype)]
+      this.env := ntype.env
       this
 
-    walkCase (c : SC, ctx : CTX, env : ENV) : TN ==
-      env := envAddType(c.type, env)
+    walkCase (sc : SC, ctx : CTX, env : ENV) : TN ==
+      env := envAddType(sc.type, env)
 
-      this := addNode!(ctx, [c], env)
+      this := addNode!(ctx, [sc], env)
+      ntype := walk(sc.type, ctx, env)
+      nexpr := walk(sc.expr, ctx, ntype.env)
+
       setTypeOf!(ctx, this, [booleanType])
+      this.rules := [ruleCase(nexpr, ntype)]
+      this.env := ntype.env
       this
 
     walkInt (i : Integer, ctx : CTX, env : ENV) : TN ==

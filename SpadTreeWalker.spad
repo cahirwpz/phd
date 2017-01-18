@@ -152,7 +152,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeTypeInfo(ti.name, [rewrite(arg) :: TD for arg in ti.args],
                      [rewrite hasItem for hasItem in ti.hasList],
                      [rewrite constraint for constraint in ti.constraints],
-                     rewrite(ti.body) :: SEQ)
+                     rewrite ti.superType, rewrite(ti.body) :: SEQ)
 
       rewrite (te : TO) : N ==
         nodeTypeOrigin(rewrite te.expr, rewrite te.type)

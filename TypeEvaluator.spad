@@ -207,7 +207,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       body := rewrite(body)$SpadTreeSymbolReplace(ctx)
       body := rewrite(body)$FlattenDatabaseType
 
-      [cmm.name, args, [], [], body :: SEQ]
+      [cmm.name, args, [], [], getSuperDomain(t), body :: SEQ]
 
     fromFunctor (ft : FT) : Union(TI, "failed") ==
       debug ["fromFunctor:" :: PF, bold(ft :: PF)]
@@ -228,7 +228,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       body := rewrite(body)$SpadTreeSymbolReplace(ctx)
       body := rewrite(body)$FlattenDatabaseType
 
-      [ft.name, args, [], [], body :: SEQ]
+      [ft.name, args, [], [], getSuperDomain(ft.name), body :: SEQ]
 
     DelVer := SpadTreeTypeVarSetMajor(0)
     AddVer := SpadTreeTypeVarSetMajor(1)
@@ -275,7 +275,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       --if symbol? val and typ ~= symbolType() then
       --  val := nodeApp(val, [])
 
-      [ti.name, args', hasList', constraints', body' :: SEQ]
+      [ti.name, args', hasList', constraints', ti.superType, body' :: SEQ]
 
     flatten(ti : TI) : TI ==
       info ["Flatten" :: PF, bold(ti.self :: PF)]
@@ -395,7 +395,7 @@ SpadTypeEvaluator() : Exports == Implementation where
         hasLst' := [h, :hasLst']
 
       [ti.name, ti.args, hasLst', removeDuplicates constraints,
-       [ti.body.kind, reverse flatBody]]
+       ti.superType, [ti.body.kind, reverse flatBody]]
 
     has?(t0 : N, t1 : N, ti : TI) : Boolean ==
       -- debug [t0 :: PF, "has" :: PF, t1 :: PF, "?" :: PF]
@@ -499,7 +499,7 @@ SpadTypeEvaluator() : Exports == Implementation where
 
         error ""
 
-      [ti.name, ti.args, ti.hasList, constraints', ti.body]
+      [ti.name, ti.args, ti.hasList, constraints', ti.superType, ti.body]
 
     evalTypeGuards(ti : TI) : TI ==
       info ["Evaluate type guards for:" :: PF, bold(ti.self :: PF)]
@@ -519,7 +519,8 @@ SpadTypeEvaluator() : Exports == Implementation where
             nodeTypeGuard(tg.expr, type')
           newHasList := [n', :newHasList]
 
-        ti := [ti.name, ti.args, reverse newHasList, ti.constraints, ti.body]
+        ti := [ti.name, ti.args, reverse newHasList, ti.constraints,
+               ti.superType, ti.body]
 
       eval(n : N) : N ==
         not typeGuard? n => n
@@ -530,7 +531,8 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       body := map(eval, ti.body.list)
 
-      [ti.name, ti.args, ti.hasList, ti.constraints, [ti.body.kind, body]]
+      [ti.name, ti.args, ti.hasList, ti.constraints, ti.superType,
+       [ti.body.kind, body]]
 
 )abbrev package TEVALT TypeEvaluatorTest
 TypeEvaluatorTest() : Exports == Implementation where

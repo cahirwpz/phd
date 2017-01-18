@@ -318,6 +318,7 @@ TypeUnifier() : Exports == Implementation where
                      [substitute([arg], var, term) :: TD for arg in ti.args],
                      [substitute(hasItem, var, term) for hasItem in ti.hasList],
                      [substitute(c, var, term) for c in ti.constraints],
+                     substitute(ti.superType, var, term),
                      substitute([ti.body], var, term) :: SEQ)
       typeDecl? n =>
         td := n :: TD

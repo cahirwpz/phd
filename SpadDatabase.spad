@@ -104,6 +104,7 @@ SpadDatabase() : with
     safeGetCtorModeMap : Symbol -> Union(SpadCtorModeMap, "failed")
     getAbbrev : Symbol -> Symbol
     getSourceFile : Symbol -> String
+    getSuperDomain : Symbol -> SpadNode
   == add
     import SExpression
     import SpadNode
@@ -165,6 +166,11 @@ SpadDatabase() : with
       sex : SExpression := GETDATABASE(t, 'SOURCEFILE)$Lisp
       null? sex => error "Unknown constructor!"
       sex pretend String
+
+    getSuperDomain t == 
+      sex : SExpression := GETDATABASE(t, 'SUPERDOMAIN)$Lisp
+      null? sex => emptyNode()
+      parse car sex
 
 )abbrev domain SPDBT SpadDatabaseTest
 SpadDatabaseTest() : Exports == Implementation where
