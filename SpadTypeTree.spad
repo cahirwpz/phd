@@ -189,11 +189,11 @@ SpadTypeNode() : Exports == Implementation where
       n :: PF
 
     coerce x ==
-      done : PF :=
+      state : PF :=
         x.m_state case "finished" => green(" (+)" :: PF)
         x.m_state case "pending" => red(" (-)" :: PF)
-        white(" (x)" :: PF)
-      prefix := hconcat [right(6, x.m_index:: PF), done]
+        white(" (_)" :: PF)
+      prefix := hconcat [right(6, x.m_index:: PF), state]
       t := bold (x.m_type :: PF)
       if typeVar? x.m_type then
         t := red t
@@ -205,7 +205,9 @@ SpadTypeNode() : Exports == Implementation where
         spaces([prefix, bold cyan(rs), "is" :: PF, t])
       n := stripOrigin x.m_node
       sequence? n =>
-        pile([spaces [prefix, bold cyan(nodeRef(x) :: PF), "is" :: PF], t])
+        pile([spaces [prefix, bold blue(nodeRef(x) :: PF), "is" :: PF], t])
+      recordType? n or unionType? n =>
+        spaces [prefix, blue(n :: PF)]
       pn :=
         apply? n or typeDecl? n or symbol? n or import? n =>
           -- leaves that influence environment contents
@@ -215,7 +217,9 @@ SpadTypeNode() : Exports == Implementation where
           blue(n :: PF)
         typeVar? n => 
           bold cyan(n :: PF)
-        bold yellow(n :: PF)
+        nodeRef? n =>
+          bold blue(n :: PF)
+        bold yellow(onelineOf(n))
       spaces [prefix, pn, ":" :: PF, t]
 
 )abbrev category STTCAT SpadTypeTreeCategory
