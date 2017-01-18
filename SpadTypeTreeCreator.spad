@@ -530,6 +530,11 @@ SpadTypeTreeCreator() : Exports == Implementation where
           env'(s :: Symbol) := n
         error "walkFun: unexpected argument format"
 
+      if fn.name case Symbol then
+        -- add the type to environment visible inside function's body
+        -- to enable recursion
+        env'(fn.name :: Symbol) := funDefNode.type
+
       bodyNode := walk(fn.body, ctx, env')
 
       leaveSubTree!(ctx)
@@ -540,6 +545,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       funDeclNode.node := nodeRef(funDefNode)
       funDeclNode.rules := [ruleRef([funDefNode], funDefNode)]
+      if fresh? and fn.name case Symbol then
+        -- propagate function's declaration
+        (funDeclNode.env)(fn.name :: Symbol) := funDefNode.type
       funDefNode.rules := [ruleFun(fn, argNodeList, resNode, bodyNode)]
 
       return funDeclNode
