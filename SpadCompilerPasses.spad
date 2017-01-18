@@ -4,6 +4,8 @@ SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
   TD ==> SpadTypeDecl(N)
+  TO ==> SpadTypeOrigin(N)
+  TS ==> SpadTypeSelect(N)
   FN ==> SpadFunction(N)
 
   Implementation ==> add
@@ -24,6 +26,20 @@ SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
         td : TD := coerce(lv)
         nodeSeq("Sequence", [lv, nodeAssign(td.expr, rv)])
       nodeAssign(lv, rv)
+    rewrite (to : TO) ==
+      to := [rewrite(to.expr), rewrite(to.type)]$TO
+      -- replace "fn(a, b, ...) $ T" with "(fn $ T)(a, b, ...)"
+      apply? to.expr =>
+        a : APP := coerce(to.expr)
+        nodeApp(nodeTypeOrigin(a.function, to.type), a.args)
+      nodeTypeOrigin(to.expr, to.type)
+    rewrite (ts : TS) ==
+      ts := [rewrite(ts.expr), rewrite(ts.type)]$TS
+      -- replace "fn(a, b, ...) @ T" with "(fn @ T)(a, b, ...)"
+      apply? ts.expr =>
+        a : APP := coerce(ts.expr)
+        nodeApp(nodeTypeSelect(a.function, ts.type), a.args)
+      nodeTypeOrigin(ts.expr, ts.type)
 
 )abbrev package SMEXP SpadMacroExpander
 SpadMacroExpander() : Exports == Implementation where
