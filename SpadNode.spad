@@ -415,6 +415,7 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
     construct : List(N) -> Union(%, "failed")
     variants : % -> List(N)
     wellFormed? : % -> Boolean
+    hasVariant? : (%, N) -> Boolean
 
   Implementation ==> add
     Rep := List(N)
@@ -465,6 +466,16 @@ SpadUnionType(N : SpadNodeCategory) : Exports == Implementation where
           return false
         types := [t, :types]
       true
+
+    hasVariant? (x, n) ==
+      for v in variants x repeat
+        typeDecl? v =>
+          td := v :: TD
+          td.expr = n or td.type = n =>
+            return true
+        v = n =>
+          return true
+      false
 
     parseVariant (s : SEX) : N ==
       var? s => [[[symbol s.2], parse s.3]$TD]
