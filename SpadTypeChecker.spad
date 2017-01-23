@@ -19,7 +19,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
       (e, t) := (rewrite to.expr, rewrite to.type)
       t = ['_$] => e
       t = appform(find(1, 1).node :: FT) => e
-      typeAny? t => e
+      typeUndef? t => e
       mappingType? t => e
       nodeTypeOrigin(e, t)
 
@@ -64,6 +64,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   ASS ==> SpadAssign(N)
+  SC ==> SpadCase(N)
   CE ==> SpadCondExpr(N)
   ENV ==> SpadEnvironment
   FN ==> SpadFunction(N)
@@ -71,14 +72,19 @@ SpadTypeTreeChecker() : Exports == Implementation where
   NR ==> SpadNodeRef(N)
   SEQ ==> SpadSequence(N)
   ST ==> SpadSubType(N)
+  TC ==> SpadTypeCoerce(N)
   TEI ==> SpadTypeIs(N)
   TO ==> SpadTypeOrigin(N)
+  TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
   UT ==> SpadUnionType(N)
 
   SUBS ==> AssociationList(TV, List(N))
   URES ==> Union(SUBS, "failed")
   SIG ==> Record(sig : N, subs : SUBS)
+
+  PR ==> Record(a : NNI, b : NNI)
+  WR ==> Union("progress", "stuck", "error", "done")
 
   TT ==> SpadTypeTree
   TNA ==> SpadTypeNodeArray(SpadTypeTree)
@@ -144,7 +150,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         not argsOk? => "iterate"
         -- 3) Check if result type is correct for given signature.
         resOk? := true
-        if sig.result ~= typeUndef and sig.result ~= typeAny then
+        if sig.result ~= typeUndef then
           res := sig.result
           resTypes := typeOf(ctx, n)
           ures := unifyType(res, resTypes)
@@ -197,13 +203,43 @@ SpadTypeTreeChecker() : Exports == Implementation where
       not nodeSubType!(ctx, rn, ln) and not nodesTypeMatch!(ctx, ln, rn) => false
       limitNodeType!(ctx, n, [ln.type])
 
+    evalCase(ctx : TT, sc : SC, n : TN) : Boolean ==
+      un := node(ctx, sc.expr :: NR) -- union node
+      vn := node(ctx, sc.type :: NR) -- variant node
+      -- a) {%u[?]} case {%v[v1, v2, ...] | V}
+      --    {%u[u1, u2, ...] | U} case {%v[?]}
+      -- wait for a union type / variant to propagate up
+      hasUnknownType?(ctx, un) or hasUnknownType?(ctx, vn) => true
+      -- b) {%u[u1, u2, ...] | U} case {%v[v1, v2, ...] | V}
+      us : List(N) := []
+      vs : List(N) := []
+      for u in typeOf(ctx, un) | unionType? u repeat
+        for v in typeOf(ctx, vn) repeat
+          -- BUG: move variant? into if statement to reproduce
+          variant? := 
+            typeValue? v or apply? v =>
+              -- select variant by type
+              hasVariant? (u :: UT, stripType v)
+            typeOrigin? v =>
+              -- select variant by name
+              -- the origin of variant must match with the type of union
+              (unify?(u, (v :: TO).type) and
+               hasVariant? (u :: UT, [stripOrigin(v) :: String :: Symbol]))
+            false
+          if variant? then
+            us := [u, :us]
+            vs := [stripType v, :vs]
+      us := removeDuplicates us
+      vs := removeDuplicates vs
+      setTypeOf!(ctx, un, us) and setTypeOf!(ctx, vn, vs)
+
     evalCondExpr(ctx : TT, r : CE, n : TN) : Boolean ==
       cn := node(ctx, r.cond :: NR) -- condition node
       not limitNodeType!(ctx, cn, [booleanType]) => false
 
       tn := node(ctx, r.truebr :: NR) -- true branch node
       emptyNode? r.falsebr =>
-        hasAnyType?(ctx, tn) =>
+        hasUndefinedType?(ctx, tn) =>
           bindNode!(ctx, n, typeUndef)
           bindNode!(ctx, tn, typeUndef)
           done! n
@@ -218,26 +254,11 @@ SpadTypeTreeChecker() : Exports == Implementation where
         done! n
         true
 
-      hasAnyType?(ctx, tn) and hasAnyType?(ctx, fn) =>
-        hasAnyType?(ctx, n) =>
-          bindNode!(ctx, n, typeAny)
-          done! n
-          true
-        hasUnknownType?(ctx, n) =>
-          setTypeOf!(ctx, n, [typeAny])
-        limitNodeType!(ctx, tn, [n.type]) and limitNodeType!(ctx, fn, [n.type])
-
       hasUndefinedType?(ctx, tn) =>
-        limitNodeType!(ctx, n, [fn.type, nodeUnionType [fn.type, typeUndef]])
-
-      hasAnyType?(ctx, tn) =>
-        limitNodeType!(ctx, n, [fn.type]) and limitNodeType!(ctx, tn, [fn.type])
+        limitNodeType!(ctx, n, [fn.type])
 
       hasUndefinedType?(ctx, fn) =>
-        limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
-
-      hasAnyType?(ctx, fn) =>
-        limitNodeType!(ctx, n, [tn.type]) and limitNodeType!(ctx, fn, [tn.type])
+        limitNodeType!(ctx, n, [tn.type])
 
       t1 := tn.type
       t2 := fn.type
@@ -253,61 +274,88 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
       nodeSubTypeOf!(ctx, tn, ts) and nodeSubTypeOf!(ctx, fn, ts)
 
-    evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
-      s := node(ctx, r.expr :: NR)
-      t := node(ctx, r.type :: NR)
-      hasAnyType?(ctx, s) => limitNodeType!(ctx, s, [t.type])
-      hasUndefinedType?(ctx, s) => true
-      nodeSubType!(ctx, s, t)
-
     evalTypeIs(ctx : TT, r : TEI, n : TN) : Boolean ==
-      s := node(ctx, r.expr :: NR)
-      t := node(ctx, r.type :: NR)
-      -- %s[? | %any] is (%t[?] | %t[t1, t2, ...] | T)
-      hasUnknownType?(ctx, s) =>
-        setTypeOf!(ctx, s, [t.type])
-      -- (%s[t1, t2, ...] | S) is %t[%any]
-      hasAnyType?(ctx, t)  =>
-        setTypeOf!(ctx, t, [s.type])
-      -- %s[%any] is (%t[?] | %t[t1, t2, ...] | T)
-      hasAnyType?(ctx, s) =>
-        -- %s[%any] is %t[?]
-        hasUnknownType?(ctx, t) =>
-          setTypeOf!(ctx, t, [typeAny])
-        -- %s[%any] is %t[%undef]
-        hasUndefinedType?(ctx, t) =>
-          bindNode!(ctx, s, typeUndef)
-          done! s
-          true
-        -- %s[%any] is (%t[t1, t2, ...] | T)
-        any := first typeOf(ctx, t)
-        setTypeOf!(ctx, s, [any])
-        setTypeOf!(ctx, t, [any])
-      nodesTypeMatch!(ctx, s, t)
+      sn := node(ctx, r.expr :: NR)
+      tn := node(ctx, r.type :: NR)
+      -- a) {%s[?]} is {%t[%undef]} | {%s[%undef]} is {%t[?]}
+      ---   do not propagate %undef up or down
+      hasUndefinedType?(ctx, sn) => true
+      hasUndefinedType?(ctx, tn) => true
+      -- b) {%s[?]} is {%t[t1, t2, ...] | T}
+      --    propagate the type down
+      hasUnknownType?(ctx, sn) => setTypeOf!(ctx, sn, [tn.type])
+      -- c) {%s[s1, s2, ...] | S} is {%t[?]}
+      --    propagate the type up
+      hasUnknownType?(ctx, tn) => setTypeOf!(ctx, tn, [sn.type])
+      nodesTypeMatch!(ctx, sn, tn)
+
+    evalSubType(ctx : TT, r : ST, n : TN) : Boolean ==
+      sn := node(ctx, r.expr :: NR)
+      tn := node(ctx, r.type :: NR)
+      -- a) {%s[?]} is {%t[%undef]} | {%s[%undef]} is {%t[?]}
+      ---   do not propagate %undef up or down
+      hasUndefinedType?(ctx, sn) => true
+      hasUndefinedType?(ctx, tn) => true
+      -- b) {%s[?]} <: {%t[t1, t2, ...] | T} | {%s[s1, s2, ...] | S} <: {%t[?]}
+      --    wait for a subtype to propagate up or down
+      hasUnknownType?(ctx, sn) or hasUnknownType?(ctx, tn) => true
+      nodeSubType!(ctx, sn, tn)
+
+    evalTypeCoerce(ctx : TT, r : TC, n : TN) : Boolean ==
+      sn := node(ctx, r.expr :: NR)
+      tn := node(ctx, r.type :: NR)
+      hasUndefinedType?(ctx, sn) => true
+      not nodeSubType!(ctx, tn, sn) => false
+      limitNodeType!(ctx, n, [stripType t for t in typeOf(ctx, tn)])
 
     evalTypeOrigin(ctx : TT, r : TO, n : TN) : Boolean ==
-      fun := node(ctx, r.expr :: NR)
-      limitNodeType!(ctx, n, [fun.type])
+      fn := node(ctx, r.expr :: NR)
+      tn := node(ctx, r.type :: NR)
+      ts : List(N) := []
+      for f in typeOf(ctx, fn) repeat
+        if typeOrigin? f then
+          to := f :: TO
+          if unify?(tn.type, to.type) then
+            ts := [f, :ts]
+      ts := reverse ts
+      empty? ts => false
+      limitNodeType!(ctx, n, ts) and limitNodeType!(ctx, fn, ts)
+
+    evalTypeSelect(ctx : TT, r : TS, n : TN) : Boolean ==
+      sn := node(ctx, r.expr :: NR)
+      tn := node(ctx, r.type :: NR)
+      hasUndefinedType?(ctx, sn) => true
+      ts : List(N) := []
+      for t in typeOf(ctx, tn) repeat
+        for s in typeOf(ctx, sn) repeat
+          s' := stripOrigin s
+          t' := stripType t
+          if mappingType? s' then
+            mt := s' :: MT
+            if unify?(mt.result, t') then
+              ts := [s, :ts]
+      empty? ts => false
+      limitNodeType!(ctx, n, ts) and nodesTypeMatch!(ctx, n, sn)
+
 
     -- evaluates single rule; note that it can happen that nothing was changed
     -- even if no type error was detected (result "true" means yes or maybe)
     evalFormula(ctx : TT, f : N, n : TN) : Boolean ==
       emptyNode? f => true
-      nodeRef? f =>
-        nr := f :: NR
-        n.index.major ~= nr.major =>
-          walk'(ctx, nr.major)
-        true
+      nodeRef? f => true
 
       debug (["Running type inference for" :: PF, bold(n.index :: PF),
-              "of" :: PF, n.type :: PF, "type." :: PF])
+              "of" :: PF, bold(n.type :: PF), "type." :: PF])
 
       apply? f => evalApply(ctx, f :: APP, n)
       assign? f => evalAssign(ctx, f :: ASS, n)
+      case? f => evalCase(ctx, f :: SC, n)
       condExpr? f => evalCondExpr(ctx, f :: CE, n)
       subType? f => evalSubType(ctx, f :: ST, n)
       typeIs? f => evalTypeIs(ctx, f :: TEI, n)
+      typeCoerce? f => evalTypeCoerce(ctx, f :: TC, n)
       typeOrigin? f => evalTypeOrigin(ctx, f :: TO, n)
+      typeSelect? f => evalTypeSelect(ctx, f :: TS, n)
 
       fail ["evalFormula: case not handled for" :: PF, f :: PF]
       error "Internal error!"
@@ -322,22 +370,29 @@ SpadTypeTreeChecker() : Exports == Implementation where
           fs := rest fs
         empty? fs => break
         rules := rest rules
+      empty? rules => 
+        poisonNode!(ctx, n)
+        false
       n.rules := rules
-      empty? rules => false
       -- Immediately remove rules that fail to apply.
       for victim in setDifference(references n.rules, references rules) repeat
         killNode!(ctx, node(ctx, victim))
       true
 
     checkAndMarkIfDone! (ctx : TT, n : TN) : Boolean ==
+      done? n => true
+      killed? n or poisoned? n => false
       unbound? n.type => false
+      nodeRef? n.node =>
+        checkAndMarkIfDone!(ctx, node(ctx, n.node :: NR)) =>
+          done! n
+          return true
+        return false
       if not empty? n.rules then
         -- We only care about first rule, because it produced actual solution.
         rule := first n.rules
         for ref in references rule repeat
-          cn := node(ctx, ref :: NR)
-          import? cn.node or typeDecl? cn.node => "iterate"
-          if unbound? cn.type then
+          if not done? node(ctx, ref :: NR) then
             return false
         -- Remove leftovers from other alternative rules.
         for victim in setDifference(references n.rules, references rule) repeat
@@ -346,27 +401,30 @@ SpadTypeTreeChecker() : Exports == Implementation where
         n.node := rule.solution
       done! n; true
 
-    countProgress (ctx : TT, i : PI) : Record(a : NNI, b : NNI) ==
+    countProgress (ctx : TT, i : PI) : PR ==
       -- a = number of type variables and nodes to be processed
       --     (empty type variable counts twice)
       -- b = sum of types assigned to each type variable
       x := members(ctx).i
       p := [#listTypeVars(x), 0]
-      for n in members x | not done? n repeat
+      for n in members x repeat
+        done? n or killed? n => "iterate"
         p.a := p.a + 1
-        if hasUnknownType?(ctx, n) or hasAnyType?(ctx, n)
+        if hasUnknownType?(ctx, n)
           then p.a := p.a + 1
           else p.b := p.b + #typeOf(ctx, n)
       p
 
-    walk' (ctx : TT, i : PI) : Boolean ==
+    walk' (ctx : TT, i : PI) : WR ==
       q : Queue(TN) := empty()
 
-      for n in listPostOrder(ctx, i) | not done? n repeat 
+      for n in listPostOrder(ctx, i) | pending? n repeat 
         enqueue!(n, q)
 
+      empty? q => "done"
+
       p := countProgress(ctx, i)
-      s := 1 :: NNI
+      step := 1 :: NNI
 
       while p.a > 0 or p.b > 0 repeat
         newQ : Queue(TN) := empty()
@@ -377,19 +435,13 @@ SpadTypeTreeChecker() : Exports == Implementation where
         while not empty? q repeat
           n := dequeue! q
           done? n => "iterate"
+          poisoned? n => return "error"
 
-          --debug([number(s) :: PF, "Queue state" :: PF, "=>" :: PF,
+          --debug([number(step) :: PF, "Queue state" :: PF, "=>" :: PF,
           --       n.index :: PF, ":" :: PF,
           --       bracket [m.index :: PF for m in members q]])
 
-          not evalAnyRule(ctx, n) =>
-            fail vconcat([
-              pile([spaces ["Type error for node:" :: PF, n.index :: PF],
-                    red (n.node :: PF)]),
-              pile(["of type:" :: PF,
-                    red bracket [x :: PF for x in typeOf(ctx, n)]])])
-            poisonNode!(ctx, n)
-            return false
+          evalAnyRule(ctx, n)
 
           -- Check if we're done with processing type variable tied to this node.
           rewriteIfInferred!(ctx, n)
@@ -409,16 +461,17 @@ SpadTypeTreeChecker() : Exports == Implementation where
           newP.a = p.a and newP.b < p.b => true
           false
         not progress? =>
-          warn(["Type checker does not progress in" :: PF,
-                number(i :: Integer) :: PF, "tree !" :: PF])
-          return true
+          step = 1 => return "stuck"
+          return "progress"
 
         -- setup new meta-step
         p := newP
         q := newQ
-        s := s + 1
+        step := step + 1
 
-      true
+      info(["Type checking completed in" :: PF,
+            bold(number(i :: Integer) :: PF), "tree !" :: PF])
+      "done"
 
     walk ctx ==
       info vconcat ["Tree ready for type checking..." :: PF, ctx :: PF]
@@ -427,20 +480,33 @@ SpadTypeTreeChecker() : Exports == Implementation where
         for n in members na repeat 
           rewriteIfInferred!(ctx, n)
 
-      success := walk'(ctx, 1)
+      continue? := true
+      success? := false
+      failure? := false
+      count := #(members ctx)
 
-      if success then -- Rewrite the tree if succeeded !
+      while continue? and not (success? or failure?) repeat
+        status := [walk'(ctx, k :: PI) for k in 1..count]
+        continue? := any?((x : WR) : Boolean +-> x = "progress", status)
+        success? := every?((x : WR) : Boolean +-> x = "done", status)
+        failure? := any?((x : WR) : Boolean +-> x = "error", status)
+
+      info(["Finished type checking with" :: PF,
+            bold(success? => green("success" :: PF); red("failure" :: PF)),
+            "!" :: PF])
+
+      if success? then -- Rewrite the tree if succeeded !
         -- capture x in closure, so that we don't need to expose SpadTypeTree 
         -- type to SpadTreeFillInTypes
         for na in members ctx repeat
-          findTypeNode := ((i : PI, j : PI) : TN +-> node(ctx, [i, j]$NR))
+          findTypeNode := ((i : PI, j : PI) : TN +-> node(ctx, i, j))
           root(na).node := rewrite(root(na).node)$SpadTreeRemoveReferences(findTypeNode)
       else
-        for na in members ctx repeat
-          for n in members na repeat 
+        for na in reverse members ctx repeat
+          for n in reverse members na repeat 
             rewriteIfInferred!(ctx, n)
             checkAndMarkIfDone!(ctx, n)
 
-      info (ctx :: PF)
+      debug (ctx :: PF)
 
-      success
+      success?

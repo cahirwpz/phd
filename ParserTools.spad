@@ -113,7 +113,7 @@ ParserTools() : with
     record? ex == list_of_ge?(ex, 'Record, 3)
     repeat? ex == list_of_eq?(ex, 'REPEAT, 2)
     select? ex == list_of_eq?(ex, '@, 3)
-    segment? ex == list_of_eq?(ex, 'SEGMENT, 3)
+    segment? ex == list_of_eq?(ex, 'SEGMENT, 2) or list_of_eq?(ex, 'SEGMENT, 3)
     seq? ex == list_of_ge?(ex, 'SEQ, 2)
     signature? ex == list_of_eq?(ex, 'SIGNATURE, 3) or list_of_eq?(ex, 'SIGNATURE, 4)
     step? ex == list_of_eq?(ex, 'STEP, 4) or list_of_eq?(ex, 'STEP, 5)

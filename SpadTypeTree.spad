@@ -86,10 +86,13 @@ SpadTypeNode() : Exports == Implementation where
     setelt! : (%, "node", N) -> N
     setelt! : (%, "env", ENV) -> ENV
 
+    pending? : % -> Boolean
     done? : % -> Boolean
     done! : % -> %
     killed? : % -> Boolean
     kill! : % -> %
+    poisoned? : % -> Boolean
+    poison! : % -> %
 
     references : % -> List(NR)
 
@@ -107,7 +110,7 @@ SpadTypeNode() : Exports == Implementation where
                   m_rules : List(TR),
                   m_type : N,
                   m_env : ENV,
-                  m_state : Union("finished", "pending", "killed"))
+                  m_state : Union("finished", "pending", "poisoned", "killed"))
 
     construct (i, j, n) ==
       [[i, j]$NR, n, [], emptyNode(), new(), "pending"]$Rep
@@ -127,10 +130,13 @@ SpadTypeNode() : Exports == Implementation where
     setelt! (x, "env", env) ==
       x.m_env := env
 
-    done? x == not x.m_state case "pending"
+    pending? x == x.m_state case "pending"
+    done? x == x.m_state case "finished"
     done! x == (x.m_state := "finished"; x)
     killed? x == x.m_state case "killed"
     kill! x == (x.m_state := "killed"; x)
+    poisoned? x == x.m_state case "poisoned"
+    poison! x == (x.m_state := "poisoned"; x)
 
     references x ==
       references x.m_rules
@@ -192,6 +198,7 @@ SpadTypeNode() : Exports == Implementation where
       state : PF :=
         x.m_state case "finished" => green(" (+)" :: PF)
         x.m_state case "pending" => red(" (-)" :: PF)
+        x.m_state case "poisoned" => bold yellow(" (x)" :: PF)
         white(" (_)" :: PF)
       prefix := hconcat [right(6, x.m_index:: PF), state]
       t := bold (x.m_type :: PF)
@@ -299,10 +306,8 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
 
     poisonNode! (x : %, tn : TN) ==
       info ["Poisoning" :: PF, tn.index :: PF, "node!" :: PF]
-      if typeVar? tn.type then
-        unregisterNode!(x.m_tree, tn, emptyNode())
-      else
-        tn.type := emptyNode()
+      -- leave node's type as is for error reporting
+      poison! tn
 
     bindNode! (x : %, tn : TN, t : N) ==
       info ["Binding" :: PF, tn.index :: PF, "node type to" :: PF, t :: PF]
@@ -376,12 +381,12 @@ SpadTypeTree() : Exports == Implementation where
     listPostOrder : (%, PI) -> List(TN)
 
     node : (%, PI) -> TN
+    node : (%, PI, PI) -> TN
     node : (%, NR) -> TN
     addNode! : (%, N) -> TN
     addNode! : (%, N, ENV) -> TN
     hasUnknownType? : (%, TN) -> Boolean
     hasUndefinedType? : (%, TN) -> Boolean
-    hasAnyType? : (%, TN) -> Boolean
     typeOf : (%, TN) -> List(N)
     extendTypeOf! : (%, TN, List(N)) -> Void
     setTypeOf! : (%, TN, List(N)) -> Boolean
@@ -436,6 +441,9 @@ SpadTypeTree() : Exports == Implementation where
     node (x : %, i : PI) : TN ==
       node(top x.m_current, i)
 
+    node (x : %, i : PI, j : PI) : TN ==
+      node((x.m_nodes)(i), j)
+
     node (x : %, nr : NR) : TN ==
       node((x.m_nodes)(nr.major), nr.minor :: PI)
 
@@ -450,9 +458,6 @@ SpadTypeTree() : Exports == Implementation where
 
     poisonType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeUndef?(first terms)
-
-    anyType? (terms : List(N)) : Boolean ==
-      #terms = 1 and typeAny?(first terms)
 
     aliasType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeVar?(first terms)
@@ -490,11 +495,6 @@ SpadTypeTree() : Exports == Implementation where
       not typeVar? tn.type =>
         tn.type = typeUndef
       undefinedType? (x.m_typevars)(tn.type :: TV)
-
-    hasAnyType? (x : %, tn : TN) : Boolean ==
-      not typeVar? tn.type =>
-        tn.type = typeAny
-      anyType? (x.m_typevars)(tn.type :: TV)
 
     typeOf (x : %, n : TN) : List(N) ==
       not typeVar? n.type => [n.type] 
@@ -561,7 +561,6 @@ SpadTypeTree() : Exports == Implementation where
       terms := (x.m_typevars)(tv)
       #terms ~= 1 => false
       unknownType? terms => false
-      anyType? terms => false
       term := first terms
       typeVar? term =>
         removeAlias!(x, tv, term)
@@ -587,7 +586,7 @@ SpadTypeTree() : Exports == Implementation where
              bracket [bold(t :: PF) for t in terms]])
       -- 1) typevars(%x) = [?]
       ts := (x.m_typevars)(tv)
-      unknownType? ts or anyType? ts =>
+      unknownType? ts =>
         -- a) %x = %y => alias removal
         -- b) %x = [t1, t2, t3, ...]
         if aliasType? terms
@@ -642,13 +641,6 @@ SpadTypeTree() : Exports == Implementation where
         ures := unifyType(ln.type, rn.type)
         ures case "failed" => false
         limitTypeVar!(x, ures :: SUBS)
-      -- %a[%any] ~ %b[...]
-      hasAnyType?(x, ln) and not hasAnyType?(x, rn) =>
-        bindNode!(x, ln, first typeOf(x, rn))
-        true
-      not hasAnyType?(x, ln) and hasAnyType?(x, rn) =>
-        bindNode!(x, rn, first typeOf(x, ln))
-        true
       -- %a[?] ~ (%b[t1, t2, ...] | T)
       hasUnknownType?(x, ln) and not hasUnknownType?(x, rn) =>
         limitTypeVar!(x, ln.type :: TV, [rn.type])
@@ -670,7 +662,7 @@ SpadTypeTree() : Exports == Implementation where
       hasUnknownType?(x, n) =>
         limitTypeVar!(x, n.type :: TV, types)
       -- (%a[t1, t2, ...] | T) ~ [s1, s2, ...]
-      anyType? types => true
+      undefinedType? types => true
       ms := findMatches(typeOf(x, n), types)
       empty? ms.terms => false
       if not aliasType? ms.terms then
@@ -717,8 +709,8 @@ SpadTypeTree() : Exports == Implementation where
           sl := [s, :sl]
       empty? sl => false
       sl := removeDuplicates sl
-      -- {%s[s1, s2, ...] | S) <: %any
-      anyType? types =>
+      -- {%s[s1, s2, ...] | S) <: %undef
+      undefinedType? types =>
         -- let's choose a type that is super type of [s1, s2, ...]
         setTypeOf!(x, sn, [(#sl = 1 => first sl; nodeUnionType sl)])
         true

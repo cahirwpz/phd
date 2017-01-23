@@ -25,8 +25,8 @@ Test9 : Exports == Implementation where
       "failed"
 
     coerce u0 ==
-      u0 case I => foo(u0 :: I)
-      u0 case S => bar(u0 :: S)
+      u0 case I => [u0 :: I]
+      u0 case S => [u0 :: S]
 
     -- Subtyping => return union variants.
     check (x, min, max) ==

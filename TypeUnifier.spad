@@ -405,9 +405,6 @@ TypeUnifier() : Exports == Implementation where
         occurs? (n2 :: TV, n1) => "failed"
         [[[n2 :: TV, [n1]]]]
 
-      -- type wildcard found? => leave without generating a substitution
-      typeAny? n1 or typeAny? n2 => [[]]
-
       -- use type value instead
       typeValue? n1 =>
         unifyType'((n1 :: TVL).value, n2)
@@ -569,7 +566,6 @@ TypeUnifier() : Exports == Implementation where
         isSubType'(n1, tv.value)
 
       typeUndef? n1 or typeUndef? n2 => "false"
-      typeAny? n1 or typeAny? n2 => "false"
 
       n2 = nodeApp(['Type], []) => "true"
 
@@ -594,7 +590,6 @@ TypeUnifier() : Exports == Implementation where
       apply? n1 and apply? n2 =>
         -- {T0(T1, T2, ..., Tk)} <: {S0(S1, S2, ..., Sk)}
         -- AFAIK functors in SPAD are invariant (!) for the time being.
-        -- Handle built-in subtyping relations.
         app1 := n1 :: APP
         app2 := n2 :: APP
         fn1 := app1.function :: Symbol

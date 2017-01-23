@@ -28,7 +28,6 @@ SpadNodeFactory() : Exports == Implementation where
     categoryType : () -> N
     baseType : () -> N
 
-    typeAny : () -> N
     typeUndef : () -> N
     typeVar : () -> N
     typeVar : PI -> N
@@ -56,7 +55,6 @@ SpadNodeFactory() : Exports == Implementation where
     categoryType () == nodeApp(['Category], [])
     baseType () == nodeApp(['Type], [])
 
-    typeAny() == [["%any"]$MR]
     typeUndef() == [["%undef"]$MR]
     typeVar() == [[0, 0]$TV]
     typeVar(j) == [[0, j]$TV]
@@ -109,4 +107,6 @@ SpadNodeFactory() : Exports == Implementation where
         for v in vs repeat
           funs := [[['construct], mt([v], n)], 
                    [['coerce], mt([n], v)], :funs]
+          if string? v then
+            funs := [[[v :: String :: Symbol], v], :funs]
       funs

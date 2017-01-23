@@ -641,8 +641,8 @@ TypeEvaluatorTest() : Exports == Implementation where
       printTypeInfoCache()
 
     -- Should I consider following case:
-    -- typeAny() "%any" passed as a parameter to a functor prevents contraint
-    -- evaluation that involves the parameter
+    -- typeUndef() "%undef" passed as a parameter to a functor prevents
+    -- contraint evaluation that involves the parameter
 
     test6 ==
       initTest()

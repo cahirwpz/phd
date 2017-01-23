@@ -72,7 +72,6 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   string? : % -> Boolean
   subType? : % -> Boolean
   symbol? : % -> Boolean
-  typeAny? : % -> Boolean
   typeCoerce? : % -> Boolean
   typeDecl? : % -> Boolean
   typeExpr? : % -> Boolean
@@ -606,8 +605,8 @@ SpadApply(N : SpadNodeCategory) : Exports == Implementation where
         "break" :: PF
       sym = 'exit =>
         hconcat ["exit" :: PF, brace(first argl), paren(rest argl)]
-      sym = 'return =>
-        hconcat ["return" :: PF, brace(first argl), paren(rest argl)]
+      sym = 'return and #argl = 1 =>
+        hconcat ["return" :: PF, paren(first argl)]
       #argl = 0 and sym = 'Zero => "0" :: PF
       #argl = 0 and sym = 'One => "1" :: PF
       #argl = 2 and member?(sym, binop) =>
@@ -644,11 +643,15 @@ SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
     construct(f, s) == [f, emptyNode(), s]$Rep
 
     parse ex ==
-      -- (SEGMENT first last)
-      [parse ex.2, parse ex.3]
+      -- (SEGMENT m n) -> 'm..n'
+      -- (SEGMENT m)   -> 'm..'
+      #ex = 2 => [parse ex.2, emptyNode, emptyNode]
+      #ex = 3 => [parse ex.2, parse ex.3, emptyNode]
+      error "unrecognized SEGMENT node"
 
     convert x ==
-      convert [convert x.start, convert x.step, convert x.end]
+      emptyNode? x.end => convert [convert 'SEGMENT, convert x.start]
+      convert [convert 'SEGMENT, convert x.start, convert x.end]
 
     coerce n ==
       form : List(PF) := [".." :: PF, n.start :: PF]
@@ -674,11 +677,13 @@ SpadIterator(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "seq") == x.i_seq
 
     construct(v, s) == [v, s]$Rep
+ 
+    parse ex ==
+      -- (INBY symbol segment step) is not handled
+      [symbol ex.2, parse ex.3]
 
     convert x ==
-      if segment? x.seq 
-        then convert [convert ("STEP" :: Symbol), convert x.var, :(destruct convert x.seq)]
-        else convert [convert ("IN" :: Symbol), convert x.var, convert x.seq]
+      convert [convert ("IN" :: Symbol), convert x.var, convert x.seq]
 
     coerce itor ==
       spaces ["for" :: PF, itor.var :: PF, "in" :: PF, itor.seq :: PF]
@@ -858,7 +863,6 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
 
       -- println [convert(car ex), paren [convert e for e in lst]]
 
-      range : SpadSegment(N)
       l_itors : List(N) := []
       l_guards : List(N) := []
 
@@ -868,14 +872,7 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
         -- 2) a while statement can occur inside collect statement
         itor? e =>
           -- (IN item sequence)
-          l_itors := [[[symbol e.2, parse e.3]$IT], :l_itors]
-        step? e =>
-          -- (STEP i m k n) -> i := m..n by k
-          -- (STEP i m k) -> i := m.. by k
-          range : SpadSegment(N) := if #e = 4
-            then [parse e.3, parse e.4]
-            else [parse e.3, parse e.5, parse e.4]
-          l_itors := [[[symbol e.2, [range]]$IT], :l_itors]
+          l_itors := [[parse(e)$IT], :l_itors]
         guard? e or while? e =>
           -- should they be mixed together ?
           -- ('| cond)
@@ -1529,9 +1526,6 @@ SpadNode() : Exports == Implementation where
     subType? n == n case subtype
     unionType? n == n case union
     where? n == n case s_where
-    typeAny? n ==
-      not n case marker => false
-      n :: MR = ["%any"]
     typeVar? n == n case typevar
     typeUndef? n ==
       not n case marker => false
@@ -1758,6 +1752,7 @@ SpadNode() : Exports == Implementation where
       coerce? ex => [parse(ex)$TC]
       origin? ex => [parse(ex)$TO]
       select? ex => [parse(ex)$TS]
+      segment? ex => [parse(ex)$SEG]
 
       let? ex => [parse(ex)$ASS]
 

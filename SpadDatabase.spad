@@ -90,13 +90,19 @@ SpadOperation() : Exports == Implementation where
       pile [x.signature :: PF, spaces [bold("when" :: PF), cond :: PF]]
 
 )abbrev domain SPDB SpadDatabase
-SpadDatabase() : with
+SpadDatabase() : Exports == Implementation where
+  N ==> SpadNode
+  APP ==> SpadApply(N)
+  TG ==> SpadTypeGuard(N)
+  SEX ==> SExpression
+
+  Exports ==> with
     getOperationList : Symbol -> List SpadOperation
     getCtorArgs : Symbol -> List Symbol
       ++ returns constructor argument names
     getCtorArgsKind : Symbol -> List Boolean
       ++ returns constructor argument kind: true when a type, false when a value
-    getCtorCategory : Symbol -> SpadNode
+    getCtorCategory : Symbol -> N
     getCtorKind : Symbol -> Union("domain", "category", "package")
       ++ returns constructor kind
     inDatabase? : Symbol -> Boolean
@@ -104,37 +110,38 @@ SpadDatabase() : with
     safeGetCtorModeMap : Symbol -> Union(SpadCtorModeMap, "failed")
     getAbbrev : Symbol -> Symbol
     getSourceFile : Symbol -> String
-    getSuperDomain : Symbol -> SpadNode
+    getSuperDomain : Symbol -> N
     isSubDomain? : (Symbol, Symbol) -> Boolean
-  == add
+
+  Implementation ==> add
     import SExpression
     import SpadNode
     import Logger('Daase)
 
     getOperationList t ==
       -- Integer
-      sex : SExpression := GETDATABASE(t, 'OPERATIONALIST)$Lisp
+      sex : SEX := GETDATABASE(t, 'OPERATIONALIST)$Lisp
       null? sex => error "Unknown constructor!"
-      opList := sex pretend List(SExpression)
+      opList := sex pretend List(SEX)
       [convert op for op in reverse opList |
        not(list? op and symbol? op.1 and (symbol op.1) = '_$unique)]
 
     getCtorArgsKind t ==
-      sex : SExpression := GETDATABASE(t,'COSIG)$Lisp
+      sex : SEX := GETDATABASE(t,'COSIG)$Lisp
       null? sex => error "Unknown constructor!"
       (cdr sex) pretend List(Boolean)
 
     getCtorCategory t ==
-      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORCATEGORY)$Lisp
+      sex : SEX := GETDATABASE(t, 'CONSTRUCTORCATEGORY)$Lisp
       null? sex => error "Unknown constructor!"
       parse(sex)
 
     inDatabase? t ==
-      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
+      sex : SEX := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
       not null? sex
 
     safeGetCtorModeMap t ==
-      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
+      sex : SEX := GETDATABASE(t, 'CONSTRUCTORMODEMAP)$Lisp
       null? sex => "failed"
       convert(sex)
 
@@ -146,11 +153,11 @@ SpadDatabase() : with
       cmm
 
     getCtorArgs t ==
-      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORARGS)$Lisp
+      sex : SEX := GETDATABASE(t, 'CONSTRUCTORARGS)$Lisp
       sex pretend List(Symbol)
 
     getCtorKind t ==
-      sex : SExpression := GETDATABASE(t, 'CONSTRUCTORKIND)$Lisp
+      sex : SEX := GETDATABASE(t, 'CONSTRUCTORKIND)$Lisp
       null? sex => error "Unknown constructor!"
       kind := symbol sex
       kind = 'domain => "domain"
@@ -159,27 +166,27 @@ SpadDatabase() : with
       error "Unknown constructor kind!"
 
     getAbbrev t ==
-      sex : SExpression := GETDATABASE(t, 'ABBREVIATION)$Lisp
+      sex : SEX := GETDATABASE(t, 'ABBREVIATION)$Lisp
       null? sex => error "Unknown constructor!"
       sex pretend Symbol
 
     getSourceFile t ==
-      sex : SExpression := GETDATABASE(t, 'SOURCEFILE)$Lisp
+      sex : SEX := GETDATABASE(t, 'SOURCEFILE)$Lisp
       null? sex => error "Unknown constructor!"
       sex pretend String
 
     getSuperDomain t == 
-      sex : SExpression := GETDATABASE(t, 'SUPERDOMAIN)$Lisp
+      sex : SEX := GETDATABASE(t, 'SUPERDOMAIN)$Lisp
       null? sex => emptyNode()
-      parse car sex
-
-    APP ==> SpadApply(SpadNode)
+      (domain, guard) := (sex.1, sex.2)
+      nodeTypeGuard(parse domain, parse guard.2)
 
     isSubDomain?(s, t) ==
       s = t => true
       type := getSuperDomain(s)
       while not emptyNode? type repeat
-        s := (type :: APP).function :: Symbol
+        dom := (type :: TG).expr :: APP
+        s := dom.function :: Symbol
         s = t => return true
         type := getSuperDomain(s)
       false
