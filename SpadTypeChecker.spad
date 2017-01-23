@@ -7,6 +7,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
   FT ==> SpadFunctor(N)
   NR ==> SpadNodeRef(N)
   TO ==> SpadTypeOrigin(N)
+  TS ==> SpadTypeSelect(N)
   TV ==> SpadTypeVar(N)
   TVL ==> SpadTypeValue(N)
   TN ==> SpadTypeNode
@@ -29,11 +30,13 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
     rewrite (app : APP) : N ==
       -- WORKAROUND! Remove origin qualifier from first argument of implicit
       -- call to 'elt' added in walkApp $ SpadTypeChecker.
-      to : TO
       fun := rewrite app.function
       args := [rewrite a for a in app.args]
+      typeSelect? fun =>
+        ts : TS := coerce(rewrite fun)
+        nodeTypeSelect(nodeApp(ts.expr, args), ts.type)
       if typeOrigin? fun then 
-        to := coerce(fun)
+        to : TO := coerce(fun)
         if to.expr = ['elt] and #args > 0 and typeOrigin? first args then
           to := coerce(first args)
           args := cons(to.expr, rest args)
