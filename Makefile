@@ -25,7 +25,7 @@ load.input: compile.input
 	done
 
 build: compile.input
-	./axiom-run $<
+	./axiom-run --read $<
 
 check: load.input 
 	for test in $(TESTS); do					\
