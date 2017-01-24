@@ -1,36 +1,6 @@
 )abbrev category STWALKC SpadTreeWalkerCategory
 SpadTreeWalkerCategory() : Category == Definition where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  SC ==> SpadCase(N)
-  FN ==> SpadFunction(N)
-  FT ==> SpadFunctor(N)
-  IM ==> SpadImport(N)
-  IT ==> SpadIterator(N)
-  LP ==> SpadLoop(N)
-  M ==> SpadMacro(N)
-  MR ==> SpadMarker(N)
-  NR ==> SpadNodeRef(N)
-  MT ==> SpadMappingType(N)
-  RT ==> SpadRecordType(N)
-  SEG ==> SpadSegment(N)
-  SEQ ==> SpadSequence(N)
-  ST ==> SpadSubType(N)
-  TC ==> SpadTypeCoerce(N)
-  TD ==> SpadTypeDecl(N)
-  TG ==> SpadTypeGuard(N)
-  TEH ==> SpadTypeHas(N)
-  TEI ==> SpadTypeIs(N)
-  TEP ==> SpadTypePretend(N)
-  TI ==> SpadTypeInfo(N)
-  TO ==> SpadTypeOrigin(N)
-  TS ==> SpadTypeSelect(N)
-  TVL ==> SpadTypeValue(N)
-  TV ==> SpadTypeVar(N)
-  UT ==> SpadUnionType(N)
-  W ==> SpadWhere(N)
+)include SpadTypeDefs.inc
 
   Definition ==> with
       gensym : () -> Symbol
@@ -44,7 +14,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : IM -> N
       rewrite : IT -> N
       rewrite : LP -> N
-      rewrite : M -> N
+      rewrite : SM -> N
       rewrite : MR -> N
       rewrite : MT -> N
       rewrite : NR -> N
@@ -66,7 +36,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite : TVL -> N
       rewrite : TV -> N
       rewrite : UT -> N
-      rewrite : W -> N
+      rewrite : SW -> N
       rewrite : N -> N 
     add
       gensym() ==
@@ -101,7 +71,7 @@ SpadTreeWalkerCategory() : Category == Definition where
                  [rewrite guard for guard in lp.guards],
                  rewrite lp.body)
 
-      rewrite (m : M) : N ==
+      rewrite (m : SM) : N ==
         nodeMacro(m.name, m.args, rewrite m.body)
 
       rewrite (mr : MR) : N == [mr]
@@ -168,7 +138,7 @@ SpadTreeWalkerCategory() : Category == Definition where
       rewrite (ut : UT) : N ==
         nodeUnionType [rewrite v for v in variants ut]
 
-      rewrite (w : W) : N ==
+      rewrite (w : SW) : N ==
         nodeWhere(rewrite w.body, rewrite w.env)
 
       rewrite (n : N) : N ==
@@ -181,7 +151,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         import? n => rewrite (n :: IM)
         iterator? n => rewrite (n :: IT)
         loop? n => rewrite (n :: LP)
-        macro? n => rewrite (n :: M)
+        macro? n => rewrite (n :: SM)
         mappingType? n => rewrite (n :: MT)
         marker? n => rewrite(n :: MR)
         nodeRef? n => rewrite (n :: NR)
@@ -203,7 +173,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         typeValue? n => rewrite (n :: TVL)
         typeVar? n => rewrite (n :: TV)
         unionType? n => rewrite (n :: UT)
-        where? n => rewrite (n :: W)
+        where? n => rewrite (n :: SW)
         -- skip integer, float and empty node
         integer? n or float? n or emptyNode? n => n
         error "rewrite: variant not handled"

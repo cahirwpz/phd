@@ -5,8 +5,7 @@
 ++ Description:
 ++ Experimental type checker with bottom-up approach.
 SpadCompilerTest() : Exports == Implementation where
-  PF ==> PrintableForm
-  SEX ==> SExpression
+)include SpadTypeDefs.inc
 
   Exports ==> with
     run : SEX -> SEX

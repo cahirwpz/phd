@@ -1370,42 +1370,9 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
 )abbrev domain SNODE SpadNode
 ++ SPAD generic expression
 SpadNode() : Exports == Implementation where
-  DF ==> DoubleFloat
-  NNI ==> NonNegativeInteger
-  PI ==> PositiveInteger
-  PF ==> PrintableForm
+  N ==> %
 
-  APP ==> SpadApply(%)
-  ASS ==> SpadAssign(%)
-  CE ==> SpadCondExpr(%)
-  SC ==> SpadCase(%)
-  FN ==> SpadFunction(%)
-  FT ==> SpadFunctor(%)
-  IM ==> SpadImport(%)
-  IT ==> SpadIterator(%)
-  LP ==> SpadLoop(%)
-  MP ==> SpadMarkerPath
-  MR ==> SpadMarker(%)
-  MT ==> SpadMappingType(%)
-  SM ==> SpadMacro(%)
-  NR ==> SpadNodeRef(%)
-  RT ==> SpadRecordType(%)
-  SEG ==> SpadSegment(%)
-  SEQ ==> SpadSequence(%)
-  ST ==> SpadSubType(%)
-  TC ==> SpadTypeCoerce(%)
-  TD ==> SpadTypeDecl(%)
-  TEH ==> SpadTypeHas(%)
-  TEI ==> SpadTypeIs(%)
-  TEP ==> SpadTypePretend(%)
-  TVL ==> SpadTypeValue(%)
-  TI ==> SpadTypeInfo(%)
-  TG ==> SpadTypeGuard(%)
-  TO ==> SpadTypeOrigin(%)
-  TS ==> SpadTypeSelect(%)
-  TV ==> SpadTypeVar(%)
-  UT ==> SpadUnionType(%)
-  SW ==> SpadWhere(%)
+)include SpadTypeDefs.inc
   
   Exports ==> SpadNodeCategory with
     nodeApp : (%, List(%)) -> %

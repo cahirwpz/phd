@@ -23,12 +23,7 @@ SpadTreeTypeVarSetMajor(major : NNI) : WALKER == Implementation where
 
 )abbrev package FLATDBT FlattenDatabaseType
 FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
-  PF ==> PrintableForm
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  CE ==> SpadCondExpr(N)
-  TG ==> SpadTypeGuard(N)
-  SEQ ==> SpadSequence(N)
+)include SpadTypeDefs.inc
 
   Implementation ==> add
     import SpadNode
@@ -74,22 +69,10 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
 
 )abbrev domain STEVAL SpadTypeEvaluator
 SpadTypeEvaluator() : Exports == Implementation where
-  PF ==> PrintableForm
-  PI ==> PositiveInteger
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  FT ==> SpadFunctor(N)
-  MT ==> SpadMappingType(N)
-  SEQ ==> SpadSequence(N)
-  TD ==> SpadTypeDecl(N)
-  TG ==> SpadTypeGuard(N)
-  TEH ==> SpadTypeHas(N)
-  TI ==> SpadTypeInfo(N)
-  TO ==> SpadTypeOrigin(N)
-  TV ==> SpadTypeVar(N)
+)include SpadTypeDefs.inc
+
   CACHE ==> Table(APP, TI)
   DAASE ==> Table(Symbol, TI)
-  SUBST ==> AssociationList(TV, List(N))
 
   Exports ==> CoercibleTo(PF) with
     typeInfoCacheInit : () -> Void
@@ -256,7 +239,7 @@ SpadTypeEvaluator() : Exports == Implementation where
         error ""
 
       -- solution for functor argument application problem
-      subst := res :: SUBST
+      subst := res :: SUBS
 
       args' := [substitute([arg], subst) :: TD for arg in ti.args]
       body' := substitute([ti.body], subst)
@@ -537,13 +520,7 @@ SpadTypeEvaluator() : Exports == Implementation where
 
 )abbrev package TEVALT SpadTypeEvaluatorTest
 SpadTypeEvaluatorTest() : Exports == Implementation where
-  PF ==> PrintableForm
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  TD ==> SpadTypeDecl(N)
-  TV ==> SpadTypeVar(N)
-  FN ==> SpadFunction(N)
-  TI ==> SpadTypeInfo(N)
+)include SpadTypeDefs.inc
 
   Exports ==> with
     test1 : () -> Void

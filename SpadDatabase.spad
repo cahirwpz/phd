@@ -1,9 +1,6 @@
 )abbrev domain SPCMM SpadCtorModeMap
 SpadCtorModeMap() : Exports == Implementation where
-  N ==> SpadNode
-  TD ==> SpadTypeDecl(N)
-  PF ==> PrintableForm
-  SEX ==> SExpression
+)include SpadTypeDefs.inc
 
   Exports ==> Join(CoercibleTo(N), CoercibleTo(PF)) with
     convert : SEX -> %
@@ -36,11 +33,7 @@ SpadCtorModeMap() : Exports == Implementation where
 
 )abbrev domain SPOP SpadOperation
 SpadOperation() : Exports == Implementation where
-  N ==> SpadNode
-  PF ==> PrintableForm
-  MT ==> SpadMappingType(N)
-  TD ==> SpadTypeDecl(N)
-  SEX ==> SExpression
+)include SpadTypeDefs.inc
 
   Exports ==> CoercibleTo(PF) with
     convert : SEX -> %
@@ -91,10 +84,7 @@ SpadOperation() : Exports == Implementation where
 
 )abbrev domain SPDB SpadDatabase
 SpadDatabase() : Exports == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  TG ==> SpadTypeGuard(N)
-  SEX ==> SExpression
+)include SpadTypeDefs.inc
 
   Exports ==> with
     getOperationList : Symbol -> List SpadOperation
@@ -193,7 +183,7 @@ SpadDatabase() : Exports == Implementation where
 
 )abbrev domain SPDBT SpadDatabaseTest
 SpadDatabaseTest() : Exports == Implementation where
-  PF ==> PrintableForm
+)include SpadTypeDefs.inc
 
   Exports ==> with
     test1 : () -> Void

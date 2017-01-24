@@ -1,12 +1,6 @@
 )abbrev package STCLEAN SpadTreeCleanUp
 SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  TD ==> SpadTypeDecl(N)
-  TO ==> SpadTypeOrigin(N)
-  TS ==> SpadTypeSelect(N)
-  FN ==> SpadFunction(N)
+)include SpadTypeDefs.inc
 
   Implementation ==> add
     rewrite (a : APP) : N ==
@@ -43,10 +37,9 @@ SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
 
 )abbrev package SMEXP SpadMacroExpander
 SpadMacroExpander() : Exports == Implementation where
-  N ==> SpadNode
-  M ==> SpadMacro(N)
-  AL ==> Table(Symbol, M)
-  PF ==> PrintableForm
+)include SpadTypeDefs.inc
+
+  AL ==> Table(Symbol, SM)
 
   Exports ==> SpadTreeWalkerCategory with 
     init : () -> Void
@@ -66,12 +59,12 @@ SpadMacroExpander() : Exports == Implementation where
     discardCtx : () -> AL
     discardCtx () == pop! env
 
-    addMacro : M -> Void
+    addMacro : SM -> Void
     addMacro m ==
       ctx := top env
       ctx(m.name) := m
 
-    findMacro : Symbol -> Union(M, "failed")
+    findMacro : Symbol -> Union(SM, "failed")
     findMacro name ==
       for ctx in parts env repeat
         if key?(name, ctx) then
@@ -98,7 +91,7 @@ SpadMacroExpander() : Exports == Implementation where
     rewrite (app : SpadApply(N)) : N ==
       if symbol? app.function then
         m := findMacro (app.function :: Symbol)
-        m case M and #m.args > 0 =>
+        m case SM and #m.args > 0 =>
           #app.args ~= #m.args =>
             fail (["Wrong number of arguments" :: PF, number(#app.args) :: PF,
                    "passed to macro" :: PF, string (m.name :: PF),
@@ -108,17 +101,17 @@ SpadMacroExpander() : Exports == Implementation where
           for m_arg in m.args for arg in app.args repeat
             -- skip argument rewriting if it doesn't require renaming
             if not(symbol? arg and (arg :: Symbol) = m_arg) then
-              addMacro(nodeMacro(m_arg, [], arg) :: M)
+              addMacro(nodeMacro(m_arg, [], arg) :: SM)
           app' := rewrite m.body
           discardCtx()
           return app'
       nodeApp(rewrite app.function, [rewrite arg for arg in app.args])
 
-    rewrite (m : SpadMacro(N)) : N ==
+    rewrite (m : SM) : N ==
       addMacro m
       emptyNode()
 
-    rewrite (w : SpadWhere(N)) : N ==
+    rewrite (w : SW) : N ==
       wenv := rewrite w.env
       -- because w.env is always (?) a sequence it produces a valid lastCtx environment
       addCtx lastCtx

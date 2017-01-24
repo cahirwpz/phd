@@ -1,18 +1,7 @@
 )abbrev package SNFAC SpadNodeFactory
 SpadNodeFactory() : Exports == Implementation where
-  PI ==> PositiveInteger
-  MP ==> SpadMarkerPath
-  N ==> SpadNode
-  MR ==> SpadMarker(N)
-  MT ==> SpadMappingType(N)
-  NR ==> SpadNodeRef(N)
-  RT ==> SpadRecordType(N)
-  UT ==> SpadUnionType(N)
-  TD ==> SpadTypeDecl(N)
-  TG ==> SpadTypeGuard(N)
-  TO ==> SpadTypeOrigin(N)
-  TV ==> SpadTypeVar(N)
-  TVL ==> SpadTypeValue(N)
+)include SpadTypeDefs.inc
+
   mt ==> nodeMappingType
 
   Exports ==> with

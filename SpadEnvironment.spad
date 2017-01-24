@@ -1,15 +1,7 @@
 )abbrev domain SPENV SpadEnvironment
 SpadEnvironment() : Exports == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  TD ==> SpadTypeDecl(N)
-  TEH ==> SpadTypeHas(N)
-  TEI ==> SpadTypeIs(N)
-  TG ==> SpadTypeGuard(N)
-  TI ==> SpadTypeInfo(N)
-  TO ==> SpadTypeOrigin(N)
-  TV ==> SpadTypeVar(N)
-  PF ==> PrintableForm
+)include SpadTypeDefs.inc
+
   KEY ==> Union("ctrs", Symbol, APP)
   MEMBER ==> Record(key : KEY, entry : List(N))
   SCOPE ==> HashTable(KEY, List(N), "UEQUAL")
@@ -184,9 +176,7 @@ SpadEnvironment() : Exports == Implementation where
 
 )abbrev domain SPENVT SpadEnvironmentTest
 SpadEnvironmentTest() : Exports == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  PF ==> PrintableForm
+)include SpadTypeDefs.inc
 
   Exports ==> with
     test1 : () -> Void

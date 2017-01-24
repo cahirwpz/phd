@@ -1,30 +1,6 @@
 )abbrev package SNTOOLS SpadNodeTools
 SpadNodeTools() : Exports == Implementation where
-  PF ==> PrintableForm
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  IM ==> SpadImport(N)
-  MT ==> SpadMappingType(N)
-  NR ==> SpadNodeRef(N)
-  SEQ ==> SpadSequence(N)
-  RT ==> SpadRecordType(N)
-  TD ==> SpadTypeDecl(N)
-  TG ==> SpadTypeGuard(N)
-  TI ==> SpadTypeInfo(N)
-  TEH ==> SpadTypeHas(N)
-  TEI ==> SpadTypeIs(N)
-  TVL ==> SpadTypeValue(N)
-  TO ==> SpadTypeOrigin(N)
-  TV ==> SpadTypeVar(N)
-  TVL ==> SpadTypeValue(N)
-  UT ==> SpadUnionType(N)
-  SEQ ==> SpadSequence(N)
-  FT ==> SpadFunctor(N)
-  FN ==> SpadFunction(N)
-
-  SUBS ==> AssociationList(TV, List(N))
+)include SpadTypeDefs.inc
 
   Exports ==> with
     occurs? : (TV, N) -> Boolean

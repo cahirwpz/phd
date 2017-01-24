@@ -1,10 +1,6 @@
 )abbrev package SLOGIC SpadLogic
 SpadLogic() : Exports == Implementation where
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  TEH ==> SpadTypeHas(N)
-  TEI ==> SpadTypeIs(N)
-  PF ==> PrintableForm
+)include SpadTypeDefs.inc
 
   Exports ==> with
     extractPredicates : N -> List(N)

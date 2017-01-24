@@ -1,10 +1,7 @@
 )abbrev package STRFAC SpadTypeRuleFactory
 SpadTypeRuleFactory() : Exports == Implementation where
-  N ==> SpadNode
-  FN ==> SpadFunction(N)
-  FT ==> SpadFunctor(N)
-  TR ==> SpadTypeRule
-  TN ==> SpadTypeNode
+)include SpadTypeDefs.inc
+
   OTN ==> Union(TN, "none")
 
   Exports ==> with
@@ -174,19 +171,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
 )abbrev package STEXCAPT SpadTreeExtractCapsuleType
 SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implementation where
-  PF ==> PrintableForm
-  PI ==> PositiveInteger
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  FN ==> SpadFunction(N)
-  NR ==> SpadNodeRef(N)
-  TD ==> SpadTypeDecl(N)
-  TO ==> SpadTypeOrigin(N)
-  TV ==> SpadTypeVar(N)
-  SEQ ==> SpadSequence(N)
-  TN ==> SpadTypeNode
+)include SpadTypeDefs.inc
 
   Implementation ==> add
     import Logger('Capsule)
@@ -222,45 +207,7 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implemen
 
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
-  PF ==> PrintableForm
-  PI ==> PositiveInteger
-
-  N ==> SpadNode
-  APP ==> SpadApply(N)
-  ASS ==> SpadAssign(N)
-  CE ==> SpadCondExpr(N)
-  FN ==> SpadFunction(N)
-  FT ==> SpadFunctor(N)
-  IM ==> SpadImport(N)
-  IT ==> SpadIterator(N)
-  LAM ==> SpadLambda(N)
-  LP ==> SpadLoop(N)
-  MT ==> SpadMappingType(N)
-  NR ==> SpadNodeRef(N)
-  RT ==> SpadRecordType(N)
-  SC ==> SpadCase(N)
-  SEG ==> SpadSegment(N)
-  SEQ ==> SpadSequence(N)
-  SM ==> SpadMacro(N)
-  TC ==> SpadTypeCoerce(N)
-  TD ==> SpadTypeDecl(N)
-  TEH ==> SpadTypeHas(N)
-  TEI ==> SpadTypeIs(N)
-  TG ==> SpadTypeGuard(N)
-  TO ==> SpadTypeOrigin(N)
-  TI ==> SpadTypeInfo(N)
-  TS ==> SpadTypeSelect(N)
-  TV ==> SpadTypeVar(N)
-  TVL ==> SpadTypeValue(N)
-  UT ==> SpadUnionType(N)
-  SW ==> SpadWhere(N)
-
-  SUBS ==> AssociationList(TV, List(N))
-
-  ENV ==> SpadEnvironment
-  TN ==> SpadTypeNode
-  TR ==> SpadTypeRule
-  CTX ==> SpadTypeTree
+)include SpadTypeDefs.inc
 
   Exports ==> with
     walk : (N, CTX, ENV) -> TN
@@ -277,7 +224,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadTypeUnifier
     import SpadTypeEvaluator
     import Printer
-    import Logger('Create)
+    import Logger('Creator)
 
     envAddType (t : N, env : ENV) : ENV ==
       apply? t =>

@@ -1,15 +1,8 @@
 )abbrev domain STRULE SpadTypeRule
 SpadTypeRule() : Exports == Implementation where
-  N ==> SpadNode
-  CE ==> SpadCondExpr(N)
-  NR ==> SpadNodeRef(N)
-  TD ==> SpadTypeDecl(N)
-  TV ==> SpadTypeVar(N)
-  SEQ ==> SpadSequence(N)
+)include SpadTypeDefs.inc
 
-  PF ==> PrintableForm
-
-  Exports ==> CoercibleTo(PrintableForm) with
+  Exports ==> CoercibleTo(PF) with
     construct : (List(N), N) -> %
 
     elt : (%, "formulas") -> List(N)
@@ -56,21 +49,7 @@ SpadTypeRule() : Exports == Implementation where
 
 )abbrev domain STNODE SpadTypeNode
 SpadTypeNode() : Exports == Implementation where
-  PF ==> PrintableForm
-  PI ==> PositiveInteger
-  TR ==> SpadTypeRule
-  ENV ==> SpadEnvironment
-  N ==> SpadNode
-  CE ==> SpadCondExpr(N)
-  FN ==> SpadFunction(N)
-  FT ==> SpadFunctor(N)
-  LP ==> SpadLoop(N)
-  NR ==> SpadNodeRef(N)
-  TD ==> SpadTypeDecl(N)
-  TG ==> SpadTypeGuard(N)
-  TI ==> SpadTypeInfo(N)
-  TV ==> SpadTypeVar(N)
-  SEQ ==> SpadSequence(N)
+)include SpadTypeDefs.inc
 
   Exports ==> CoercibleTo(PF) with
     construct : (PI, PI, N) -> %
@@ -231,9 +210,7 @@ SpadTypeNode() : Exports == Implementation where
 
 )abbrev category STTCAT SpadTypeTreeCategory
 SpadTypeTreeCategory() : Category == Definition where
-  PF ==> PrintableForm
-  TN ==> SpadTypeNode
-  N ==> SpadNode
+)include SpadTypeDefs.inc
 
   Definition ==> CoercibleTo(PF) with
     registerNode! : (%, TN) -> Void
@@ -241,16 +218,7 @@ SpadTypeTreeCategory() : Category == Definition where
 
 )abbrev package STNARR SpadTypeNodeArray
 SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
-  PI ==> PositiveInteger
-  PF ==> PrintableForm
-
-  N ==> SpadNode
-  NR ==> SpadNodeRef(N)
-  TV ==> SpadTypeVar(N)
-
-  ENV ==> SpadEnvironment
-  TN ==> SpadTypeNode
-  TR ==> SpadTypeRule
+)include SpadTypeDefs.inc
 
   Exports ==> CoercibleTo(PF) with
     construct : (TT, PI) -> %
@@ -356,21 +324,10 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
 
 )abbrev package STTREE SpadTypeTree
 SpadTypeTree() : Exports == Implementation where
-  PI ==> PositiveInteger
-  NNI ==> NonNegativeInteger
-  PF ==> PrintableForm
-
-  N ==> SpadNode
-  NR ==> SpadNodeRef(N)
-  TV ==> SpadTypeVar(N)
-
-  SUBS ==> AssociationList(TV, List(N))
-
-  ENV ==> SpadEnvironment
-  TN ==> SpadTypeNode
-  TNA ==> SpadTypeNodeArray(%)
-  TR ==> SpadTypeRule
+  CTX ==> %
   TVS ==> List(Record(key : TV, entry : List(N)))
+
+)include SpadTypeDefs.inc
 
   Exports ==> SpadTypeTreeCategory with
     construct : () -> %
