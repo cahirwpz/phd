@@ -27,8 +27,8 @@ SpadNodeFactory() : Exports == Implementation where
     voidType : () -> N
     categoryType : () -> N
     baseType : () -> N
+    undefinedType : () -> N
 
-    typeUndef : () -> N
     typeVar : () -> N
     typeVar : PI -> N
     typeVar : (PI, PI) -> N
@@ -54,8 +54,8 @@ SpadNodeFactory() : Exports == Implementation where
     voidType () == nodeApp(['Void], [])
     categoryType () == nodeApp(['Category], [])
     baseType () == nodeApp(['Type], [])
+    undefinedType() == [["%undef"]$MR]
 
-    typeUndef() == [["%undef"]$MR]
     typeVar() == [[0, 0]$TV]
     typeVar(j) == [[0, j]$TV]
     typeVar(i, j) == [[i, j]$TV]

@@ -20,7 +20,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SpadTreeWalkerCategory == Impl
       (e, t) := (rewrite to.expr, rewrite to.type)
       t = ['_$] => e
       t = appform(find(1, 1).node :: FT) => e
-      typeUndef? t => e
+      undefinedType? t => e
       mappingType? t => e
       nodeTypeOrigin(e, t)
 
@@ -153,7 +153,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         not argsOk? => "iterate"
         -- 3) Check if result type is correct for given signature.
         resOk? := true
-        if sig.result ~= typeUndef then
+        if sig.result ~= undefinedType then
           res := sig.result
           resTypes := typeOf(ctx, n)
           ures := unifyType(res, resTypes)
@@ -243,17 +243,17 @@ SpadTypeTreeChecker() : Exports == Implementation where
       tn := node(ctx, r.truebr :: NR) -- true branch node
       emptyNode? r.falsebr =>
         hasUndefinedType?(ctx, tn) =>
-          bindNode!(ctx, n, typeUndef)
-          bindNode!(ctx, tn, typeUndef)
+          bindNode!(ctx, n, undefinedType)
+          bindNode!(ctx, tn, undefinedType)
           done! n
           done! tn
           true
-        limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, typeUndef]])
+        limitNodeType!(ctx, n, [tn.type, nodeUnionType [tn.type, undefinedType]])
 
       fn := node(ctx, r.falsebr :: NR) -- false branch node
 
       hasUndefinedType?(ctx, fn) and hasUndefinedType?(ctx, tn) =>
-        bindNode!(ctx, n, typeUndef)
+        bindNode!(ctx, n, undefinedType)
         done! n
         true
 

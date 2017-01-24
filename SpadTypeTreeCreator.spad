@@ -568,7 +568,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       leaveSubTree!(ctx)
 
       -- lambda is an expression so it must have a type (of its definiton)
-      funDeclType := (fn.name case "lambda" => funDefNode.type; typeUndef)
+      funDeclType := (fn.name case "lambda" => funDefNode.type; undefinedType)
       bindNode!(ctx, funDeclNode, funDeclType)
 
       funDeclNode.node := nodeRef(funDefNode)
@@ -628,7 +628,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       extNode := addNode!(ctx, ft.extends, env)
       bindNode!(ctx, extNode,
-                (emptyNode? ft.extends => typeUndef(); ft.extends))
+                (emptyNode? ft.extends => undefinedType(); ft.extends))
 
       bodyNode := walk(ft.capsule, ctx, env)
 
@@ -643,7 +643,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       debug ["Importing" :: PF, im.type :: PF]
       env := envAddType(im.type, env)
       tn := addNode!(ctx, [im], env)
-      bindNode!(ctx, tn, typeUndef)
+      bindNode!(ctx, tn, undefinedType)
       done! tn
 
     walkLoop (lp : LP, ctx : CTX, env : ENV) : TN ==
@@ -671,7 +671,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         -- but is also known to guards.
         env'(itor.var) := varExpr.type
 
-        bindNode!(ctx, itorExpr, typeUndef)
+        bindNode!(ctx, itorExpr, undefinedType)
 
         itorExpr.rules := [ruleLoopIter(varExpr, seqType, itorExpr)]
         itorList := [itorExpr, :itorList]
@@ -697,8 +697,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
       else
         body := walk(lp.body, ctx, env')
         if hasUnknownType?(ctx, body) then
-          bindNode!(ctx, body, typeUndef)
-        bindNode!(ctx, this, typeUndef)
+          bindNode!(ctx, body, undefinedType)
+        bindNode!(ctx, this, undefinedType)
 
       this.rules := 
         [ruleLoop(lp.kind, itorList, guardList, maybeBodyType, body)]
@@ -761,14 +761,14 @@ SpadTypeTreeCreator() : Exports == Implementation where
       if s = '_$NoValue then
         types := [voidType, :types]
       if s = 'leave then
-        leaveType := nodeMappingType([integerType, voidType], typeUndef) 
+        leaveType := nodeMappingType([integerType, voidType], undefinedType) 
         types := [leaveType, :types]
       if s = 'error then
-        errorType := nodeMappingType([stringType], typeUndef)
+        errorType := nodeMappingType([stringType], undefinedType)
         types := [errorType, :types]
       if s = 'return then
         resType := node(ctx, 2).type
-        returnType := nodeMappingType([resType], typeUndef)
+        returnType := nodeMappingType([resType], undefinedType)
         types := [returnType, :types]
 
       -- handle a symbol which is a type constructor
@@ -839,7 +839,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       env(s) := td.type
       tn := addNode!(ctx, [td], env)
-      bindNode!(ctx, tn, typeUndef)
+      bindNode!(ctx, tn, undefinedType)
       tn
 
     walkTypeSelect (ts : TS, ctx : CTX, env : ENV) : TN ==
@@ -944,7 +944,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkEmpty (e : N, ctx : CTX, env : ENV) : TN ==
       this := addNode!(ctx, e, env)
-      bindNode!(ctx, this, typeUndef)
+      bindNode!(ctx, this, undefinedType)
       done! this
 
     walk (n, ctx, env) ==

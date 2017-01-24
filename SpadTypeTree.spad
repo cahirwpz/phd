@@ -319,9 +319,9 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
     killNode! (x : %, tn : TN) ==
       info ["Killing" :: PF, tn.index :: PF, "node!" :: PF]
       if typeVar? tn.type then
-        unregisterNode!(x.m_tree, tn, typeUndef)
+        unregisterNode!(x.m_tree, tn, undefinedType)
       else
-        tn.type := typeUndef
+        tn.type := undefinedType
       kill! tn
 
     needsRewrite? : (TN, TV) -> Boolean
@@ -454,10 +454,10 @@ SpadTypeTree() : Exports == Implementation where
       #terms = 1 and emptyNode?(first terms)
 
     undefinedType? (terms : List(N)) : Boolean ==
-      #terms = 1 and typeUndef?(first terms)
+      #terms = 1 and undefinedType?(first terms)
 
     poisonType? (terms : List(N)) : Boolean ==
-      #terms = 1 and typeUndef?(first terms)
+      #terms = 1 and undefinedType?(first terms)
 
     aliasType? (terms : List(N)) : Boolean ==
       #terms = 1 and typeVar?(first terms)
@@ -493,7 +493,7 @@ SpadTypeTree() : Exports == Implementation where
 
     hasUndefinedType? (x : %, tn : TN) : Boolean ==
       not typeVar? tn.type =>
-        tn.type = typeUndef
+        tn.type = undefinedType
       undefinedType? (x.m_typevars)(tn.type :: TV)
 
     typeOf (x : %, n : TN) : List(N) ==

@@ -641,7 +641,7 @@ TypeEvaluatorTest() : Exports == Implementation where
       printTypeInfoCache()
 
     -- Should I consider following case:
-    -- typeUndef() "%undef" passed as a parameter to a functor prevents
+    -- undefinedType() "%undef" passed as a parameter to a functor prevents
     -- contraint evaluation that involves the parameter
 
     test6 ==

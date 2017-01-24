@@ -82,7 +82,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   typePretend? : % -> Boolean
   typeOrigin? : % -> Boolean
   typeSelect? : % -> Boolean
-  typeUndef?: % -> Boolean
+  undefinedType?: % -> Boolean
   typeValue? : % -> Boolean
   typeVar? : % -> Boolean
   unionType? : % -> Boolean
@@ -1527,7 +1527,7 @@ SpadNode() : Exports == Implementation where
     unionType? n == n case union
     where? n == n case s_where
     typeVar? n == n case typevar
-    typeUndef? n ==
+    undefinedType? n ==
       not n case marker => false
       n :: MR = ["%undef"]
 

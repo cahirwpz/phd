@@ -565,7 +565,7 @@ TypeUnifier() : Exports == Implementation where
         tv := n2 :: TVL
         isSubType'(n1, tv.value)
 
-      typeUndef? n1 or typeUndef? n2 => "false"
+      undefinedType? n1 or undefinedType? n2 => "false"
 
       n2 = nodeApp(['Type], []) => "true"
 
