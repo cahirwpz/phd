@@ -268,14 +268,14 @@ SpadTypeTreeCreator() : Exports == Implementation where
   Implementation ==> add
     import SpadNode
     import SpadNodeFactory
+    import SpadNodeTools
     import SpadDatabase
     import SpadEnvironment
-    import SpadTypeEvaluator
     import SpadTypeRuleFactory
     import SpadTypeNodeArray
     import SpadLogic
-    import TypeUnifier
-    import TypeEvaluator
+    import SpadTypeUnifier
+    import SpadTypeEvaluator
     import Printer
     import Logger('Create)
 

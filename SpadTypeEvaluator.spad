@@ -104,10 +104,11 @@ SpadTypeEvaluator() : Exports == Implementation where
   Implementation ==> add
     import SpadNode
     import SpadNodeFactory
+    import SpadNodeTools
     import SpadDatabase
     import SpadCtorModeMap
     import Logger('TypeInfo)
-    import TypeUnifier
+    import SpadTypeUnifier
     import Printer
 
     fromDatabase : Symbol -> Union(TI, "failed")
@@ -534,8 +535,8 @@ SpadTypeEvaluator() : Exports == Implementation where
       [ti.name, ti.args, ti.hasList, ti.constraints, ti.superType,
        [ti.body.kind, body]]
 
-)abbrev package TEVALT TypeEvaluatorTest
-TypeEvaluatorTest() : Exports == Implementation where
+)abbrev package TEVALT SpadTypeEvaluatorTest
+SpadTypeEvaluatorTest() : Exports == Implementation where
   PF ==> PrintableForm
   N ==> SpadNode
   APP ==> SpadApply(N)

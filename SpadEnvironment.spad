@@ -42,12 +42,13 @@ SpadEnvironment() : Exports == Implementation where
   Implementation ==> add
     Rep := List SCOPE
 
+    import Printer
+    import Logger('Env)
     import SpadNodeFactory
+    import SpadNodeTools
     import SpadTypeEvaluator
     import SpadLogic
-    import TypeUnifier
-    import Logger('Env)
-    import Printer
+    import SpadTypeUnifier
 
     -- create empty environment
     new() == [empty()$SCOPE]

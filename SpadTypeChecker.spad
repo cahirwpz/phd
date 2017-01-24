@@ -99,8 +99,9 @@ SpadTypeTreeChecker() : Exports == Implementation where
 
   Implementation ==> add
     import Logger('Check)
-    import TypeUnifier
     import SpadNodeFactory
+    import SpadNodeTools
+    import SpadTypeUnifier
     import SpadTypeNode
     import SpadTypeTree
     import SpadTypeNodeArray(SpadTypeTree)

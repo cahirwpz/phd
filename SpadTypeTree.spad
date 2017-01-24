@@ -102,7 +102,7 @@ SpadTypeNode() : Exports == Implementation where
   Implementation ==> add
     import SpadNode
     import Printer
-    import TypeUnifier
+    import SpadTypeUnifier
     import SpadNodeFactory
 
     Rep := Record(m_index : NR,
@@ -275,7 +275,8 @@ SpadTypeNodeArray(TT : SpadTypeTreeCategory) : Exports == Implementation where
 
     import SpadNode
     import SpadNodeFactory
-    import TypeUnifier
+    import SpadNodeTools
+    import SpadTypeUnifier
     import Printer
     import Logger('TNArray)
 
@@ -411,7 +412,8 @@ SpadTypeTree() : Exports == Implementation where
   Implementation ==> add
     import SpadNode
     import SpadNodeFactory
-    import TypeUnifier
+    import SpadNodeTools
+    import SpadTypeUnifier
     import SpadTypeNode
     import SpadTypeNodeArray(%)
     import Printer
