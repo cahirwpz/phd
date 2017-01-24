@@ -1440,6 +1440,10 @@ SpadNode() : Exports == Implementation where
     nodeUnionType : List(%) -> %
     nodeWhere : (%, %) -> %
 
+    stripOrigin : % -> %
+    stripGuard : % -> %
+    stripType : % -> %
+
     collapse : SEQ -> SEQ
 
   Implementation ==> add
@@ -1897,6 +1901,15 @@ SpadNode() : Exports == Implementation where
       ut case "failed" => emptyNode()
       [ut]
     nodeWhere (body, env) == [[body, env]$SW]
+
+    stripOrigin t ==
+      (typeOrigin? t => (t :: TO).expr; t)
+
+    stripGuard t ==
+      (typeGuard? t => (t :: TG).expr; t)
+
+    stripType t ==
+      (typeValue? t => (t :: TVL).value; t)
 
     -- merge body of same-type direct child sequence
     collapse s ==
