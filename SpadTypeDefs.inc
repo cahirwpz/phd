@@ -1,5 +1,6 @@
   -- vim:ft=axiom:
 
+  I ==> Integer
   DF ==> DoubleFloat
   NNI ==> NonNegativeInteger
   PI ==> PositiveInteger
@@ -44,6 +45,9 @@
   URES ==> Union(SUBS, "failed")
 
   ENV ==> SpadEnvironment
+  EKEY ==> Union(Symbol, APP)
+  EVAL ==> Record(types : List(N), info : N, facts : List(N))
+
   TN ==> SpadTypeNode
   TNA ==> SpadTypeNodeArray(CTX)
   TR ==> SpadTypeRule

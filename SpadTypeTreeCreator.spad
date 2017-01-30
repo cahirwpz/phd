@@ -221,50 +221,60 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import Printer
     import Logger('Creator)
 
-    envAddType (t : N, env : ENV) : ENV ==
+    envAddType (t : N, env : ENV) : Void ==
       apply? t =>
         app := t :: APP
-        env := addDomain(app, env)
+        addDomain(app, env)
         for k in app.args repeat
-          env := envAddType(k, env)
-        env
+          envAddType(k, env)
 
       mappingType? t =>
         mt := t :: MT
         for k in [mt.result, :mt.args] repeat
-          env := envAddType(k, env)
-        env
+          envAddType(k, env)
 
       recordType? t =>
         rt := t :: RT
         for f in fields rt repeat
-          env := envAddType(f.type, env)
+          envAddType(f.type, env)
         for f in makeRecordFunList t repeat
-          env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
-        env
+          addTypeOf(f.expr :: Symbol, nodeTypeOrigin(f.type, t), env)
 
       unionType? t =>
         ut := t :: UT
         for v in variants ut repeat
           if typeDecl? v then
             v := (v :: TD).type
-          env := envAddType(v, env)
+          envAddType(v, env)
         for f in makeUnionFunList t repeat
-          env(f.expr :: Symbol) := nodeTypeOrigin(f.type, t)
-        env
+          addTypeOf(f.expr :: Symbol, nodeTypeOrigin(f.type, t), env)
 
       symbol? t =>
         -- BUG! this is not correct but will do for time being
-        ts := search(t :: Symbol, env)
+        ts := typesOf(t :: Symbol, env)
         -- detect type alias
         #ts = 1 and typeValue? ts.1 =>
           tv := ts.1 :: TVL
           envAddType(tv.value, env)
-        env
-      string? t => env
+
+      string? t => void
 
       fail ["Type" :: PF, bold(t :: PF), "not handled!" :: PF]
       error "envAddType"
+
+    keyOf (n : N) : EKEY ==
+      symbol? n => n :: Symbol
+      apply? n => n :: APP
+      typeHas? n => keyOf((n :: TEH).expr)
+      typeIs? n => keyOf((n :: TEI).expr)
+      case? n => keyOf((n :: SC).expr)
+      fail ["not a valid environment key:" :: PF, bold(n :: PF)]
+      error ""
+
+    envAddFacts (n : N, env : ENV) : Void ==
+      for p in extractPredicates n repeat
+        if typeHas? p or typeIs? p or case? p then
+          addFactAbout(keyOf p, p, env)
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TN ==
       -- treat QUOTE(symbol) application as a symbol value
@@ -285,7 +295,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       eltFunList : List(N) := []
       eltFunTypeList : List(MT) := []
       if a.function ~= ['elt] and a.function ~= ['return] then
-        for n in search('elt, env) | typeOrigin? n repeat
+        for n in typesOf('elt, env) | typeOrigin? n repeat
           eltFunType := (n :: TO).expr :: MT
           if #eltFunType.args = #a.args + 1 then
             eltFunList := [n, :eltFunList]
@@ -333,7 +343,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
           -- user can overload a symbol of function that belong to any capsule,
           -- to check if overloading takes place and fresh symbol must be
           -- introduced we need to filter out mappings with origin
-          ts := [t for t in search(s, env) | not typeOrigin? t]
+          ts := [t for t in typesOf(s, env) | not typeOrigin? t]
           empty? ts
         false
 
@@ -361,7 +371,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       cond := walk(ce.cond, ctx, env)
       trueEnv := createScope cond.env
-      trueEnv := addConstraints(ce.cond, trueEnv)
+      envAddFacts(ce.cond, trueEnv)
       truebr := walk(ce.truebr, ctx, trueEnv)
 
       emptyNode? ce.falsebr =>
@@ -370,7 +380,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         this
 
       falseEnv := createScope (case? ce.cond => env; cond.env)
-      falseEnv := addConstraints(nodeApp(['not], [ce.cond]), falseEnv)
+      envAddFacts(nodeApp(['not], [ce.cond]), falseEnv)
       falsebr := walk(ce.falsebr, ctx, falseEnv)
 
       env := mergeEnv(env, trueEnv, falseEnv)
@@ -442,15 +452,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- the type calculated above.
       candidateList : List(MT) := []
 
-      dom := first env("$" :: Symbol)
+      dom := first typesOf("$" :: Symbol, env)
 
       if fn.name case Symbol then
-        for n in search(fn.name :: Symbol, env') repeat
+        for n in typesOf(fn.name :: Symbol, env') repeat
           candidate := emptyNode()
 
           if typeGuard? n then
             tg := n :: TG
-            if true? evaluate(tg.type, env("ctrs")) then
+            if true? evaluate(tg.type, factsAbout(keyOf n, env)) then
               candidate := tg.expr
           if typeOrigin? n then
             to := n :: TO
@@ -467,9 +477,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       for c in candidateList repeat 
         for type in c.args | not unbound? type repeat
-          env' := envAddType(type, env')
+          envAddType(type, env')
         if not unbound? c.result then
-          env' := envAddType(c.result, env')
+          envAddType(c.result, env')
 
       -- TODO: Filter out function which have been already defined.
       if not empty? candidateList then
@@ -491,16 +501,16 @@ SpadTypeTreeCreator() : Exports == Implementation where
       for n in fn.args for argNode in argNodeList repeat
         typeDecl? n =>
           td := n :: TD
-          env'(td.expr :: Symbol) := argNode.type
+          addTypeOf(td.expr :: Symbol, argNode.type, env')
         string? n =>
           s := n :: String
-          env'(s :: Symbol) := n
+          addTypeOf(s :: Symbol, n, env')
         error "walkFun: unexpected argument format"
 
       if fresh? and fn.name case Symbol then
         -- add the type to environment visible inside function's body
         -- to enable recursion
-        env'(fn.name :: Symbol) := funDefNode.type
+        addTypeOf(fn.name :: Symbol, funDefNode.type, env')
 
       bodyNode := walk(fn.body, ctx, env')
 
@@ -513,7 +523,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       funDeclNode.node := nodeRef(funDefNode)
       if fresh? and fn.name case Symbol then
         -- propagate function's declaration
-        (funDeclNode.env)(fn.name :: Symbol) := funDefNode.type
+        addTypeOf(fn.name :: Symbol, funDefNode.type, funDeclNode.env)
       funDefNode.rules := [ruleFun(fn, argNodeList, resNode, bodyNode)]
       funDefNode.node := funDefNode.rules.1.solution
 
@@ -542,23 +552,24 @@ SpadTypeTreeCreator() : Exports == Implementation where
         name := arg.expr :: Symbol
         argNode := addNode!(ctx, arg.expr, env)
         bindNode!(ctx, argNode, arg.type)
-        env(name) := argNode.type
+        addTypeOf(name, argNode.type, env)
         -- Test5 depends on following line
-        env := addDomainAs(arg.type :: APP, name, env)
+        addDomainAs(arg.type :: APP, name, env)
         argSub(name) := argNode.type
         argNodeList := [argNode, :argNodeList]
 
       argNodeList := reverse argNodeList
       argList := [argNode.node for argNode in argNodeList]
       ftType := nodeApp([ft.name], argList)
-      env("$" :: Symbol) := ftType
+      addTypeOf("$" :: Symbol, ftType, env)
       bindNode!(ctx, this, nodeMappingType(argList, resType))
 
       -- add functor's type info to the environment
       invalidateTypeInfo(ft.name)
       ti := getTypeInfo ft
-      env := addDomain(ftType :: APP, env)
-      ftRealType := substitute(first env(ftType :: APP), typeVar() :: TV, ftType)
+      addDomain(ftType :: APP, env)
+      ftRealType := 
+        substitute(first typesOf(ftType :: APP, env), typeVar() :: TV, ftType)
       ftRes :=
         ft.type = categoryType => categoryType()
         -- FIXME: Functor's return type is not of "Join" node!
@@ -580,7 +591,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkImport (im : IM, ctx : CTX, env : ENV) : TN ==
       debug ["Importing" :: PF, im.type :: PF]
-      env := envAddType(im.type, env)
+      envAddType(im.type, env)
       tn := addNode!(ctx, [im], env)
       bindNode!(ctx, tn, undefinedType)
       done! tn
@@ -608,7 +619,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
         -- Iterator variable is added to loop's body environment,
         -- but is also known to guards.
-        env'(itor.var) := varExpr.type
+        addTypeOf(itor.var, varExpr.type, env')
 
         bindNode!(ctx, itorExpr, undefinedType)
 
@@ -684,7 +695,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       this := addNode!(ctx, [s], env)
 
-      types := search(s, env)
+      types := typesOf(s, env)
 
       -- BUG: parseTran uses true and false as "Boolean" and not as "() -> Boolean"
       -- workaround for Boolean constants
@@ -733,7 +744,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         ftorResType := nodeTypeValue(baseType, nodeApp([s], ftorArgList))
         ftorType := nodeMappingType(reverse ftorArgList, ftorResType)
         -- BUG? ftorType should be nodeTypeValue(baseType, ftorType)
-        env(s) := ftorType
+        addTypeOf(s, ftorType, env)
         types := [ftorType, :types]
 
         if not empty? ftorArgNodeList then
@@ -760,7 +771,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- Type definition for a symbol.
       s := td.expr :: Symbol
-      ts := [t for t in search(s, env) | not typeOrigin? t]
+      ts := [t for t in typesOf(s, env) | not typeOrigin? t]
 
       -- Add type to the environment or crash if already defined,
       -- this behaviour is supressed for mappings that have origin.
@@ -769,7 +780,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
               "already defined as" :: PF, bracket [t :: PF for t in ts], "!" :: PF])
         error ""
 
-      env(s) := td.type
+      addTypeOf(s, td.type, env)
       tn := addNode!(ctx, [td], env)
       bindNode!(ctx, tn, undefinedType)
       tn
@@ -782,7 +793,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         fail ["Type cut operator works only for function symbols!" :: PF]
         error ""
 
-      env := envAddType(ts.type, env)
+      envAddType(ts.type, env)
       this := addNode!(ctx, [ts], env)
       ntype := walk(ts.type, ctx, env)
       nexpr := walk(ts.expr, ctx, ntype.env)
@@ -792,13 +803,13 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkTypeCoerce (tc : TC, ctx : CTX, env : ENV) : TN ==
       debug ["Expression" :: PF, tc.expr :: PF, "have to coerce to" :: PF, tc.type :: PF]
 
-      env := envAddType(tc.type, env)
+      envAddType(tc.type, env)
       this := addNode!(ctx, [tc], env)
       ntype := walk(tc.type, ctx, env)
       nexpr := walk(tc.expr, ctx, ntype.env)
 
       rs := [ruleTypeCoerce(nexpr, ntype)]$List(TR)
-      if not empty? search('coerce, env) then
+      if not empty? typesOf('coerce, env) then
         coerceFun := walk(['coerce], ctx, env)
         rs := [:rs, ruleApply(coerceFun, [nexpr])]
       this.rules := rs
@@ -823,7 +834,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
              "must originate from" :: PF, bold(to.type :: PF),
              "type!" :: PF])
 
-      env := envAddType(to.type, env)
+      envAddType(to.type, env)
       this := addNode!(ctx, [to], env)
       ntype := walk(to.type, ctx, env)
       nexpr := walk(to.expr, ctx, ntype.env)
@@ -833,7 +844,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this
 
     walkCase (sc : SC, ctx : CTX, env : ENV) : TN ==
-      env := envAddType(sc.type, env)
+      envAddType(sc.type, env)
 
       this := addNode!(ctx, [sc], env)
       ntype := walk(sc.type, ctx, env)
@@ -860,7 +871,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkStr (s : String, ctx : CTX, env : ENV) : TN ==
       this := addNode!(ctx, [s], env)
-      ts := search(s :: Symbol, env)
+      ts := typesOf(s :: Symbol, env)
       setTypeOf!(ctx, this, [stringType, :map(stripOrigin, ts)])
       this
 

@@ -2,34 +2,33 @@
 SpadEnvironment() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
-  KEY ==> Union("ctrs", Symbol, APP)
-  MEMBER ==> Record(key : KEY, entry : List(N))
-  SCOPE ==> HashTable(KEY, List(N), "UEQUAL")
+  MEMBER ==> Record(key : EKEY, entry : EVAL)
+  SCOPE ==> HashTable(EKEY, EVAL, "UEQUAL")
 
-  Exports ==> CoercibleTo(PrintableForm) with
+  Exports ==> Join(CoercibleTo(PF), KeyedDictionary(EKEY, EVAL)) with
     new : () -> %
 
-    coerce : KEY -> PF
-    coerce : SCOPE -> PF
+    typesOf : (EKEY, %) -> List(N)
+    factsAbout : (EKEY, %) -> List(N)
 
-    addConstraints : (N, %) -> %
-    addDomain : (APP, %) -> %
-    addDomainAs : (APP, KEY, %) -> %
+    addTypeOf : (EKEY, N, %) -> Void
+    addFactAbout : (EKEY, N, %) -> Void
+    addDomain : (APP, %) -> Void
+    addDomainAs : (APP, EKEY, %) -> Void
 
-    key? : (KEY, %) -> Boolean
+    elt : (%, EKEY) -> EVAL
+    setelt! : (%, EKEY, EVAL) -> %
 
-    ++ returns empty list if nothing was found
-    search : (KEY, %) -> List(N)
-    ++ crashes if nothing was found
-    elt : (%, KEY) -> List(N)
-    setelt! : (%, KEY, N) -> %
-
-    reset! : (%, KEY) -> %
+    reset! : (%, EKEY) -> %
 
     createScope : % -> %
     discardScope : % -> %
 
     mergeEnv: (%, %, %) -> %
+
+    coerce : EKEY -> PF
+    coerce : EVAL -> PF
+    coerce : SCOPE -> PF
 
   Implementation ==> add
     Rep := List SCOPE
@@ -39,23 +38,35 @@ SpadEnvironment() : Exports == Implementation where
     import SpadNodeFactory
     import SpadNodeTools
     import SpadTypeEvaluator
-    import SpadLogic
-    import SpadTypeUnifier
 
     -- create empty environment
     new() == [empty()$SCOPE]
 
-    coerce (key : KEY) : PF ==
-      key case APP => key :: APP :: PF
-      key case "ctrs" => "[constraints]" :: PF
-      key :: Symbol :: PF
+    typesOf (key : EKEY, env : %) : List(N) ==
+      val := search(key, env)
+      (val case EVAL => val.types; [])
 
-    addConstraints (n : N, env : %) : % ==
-      for p in extractPredicates n repeat
-        env("ctrs") := n
-      env
+    factsAbout (key : EKEY, env : %) : List(N) ==
+      val := search(key, env)
+      (val case EVAL => val.facts; [])
 
-    importDomain (ti : TI, dom : N, env : %) : % ==
+    addTypeOf (key : EKEY, type : N, env : %) : Void ==
+      val := search(key, env)
+      val case "failed" =>
+        env(key) := [[type], emptyNode(), []]
+      val case EVAL =>
+        member?(type, val.types) => env
+        val.types := [type, :val.types]
+
+    addFactAbout (key : EKEY, fact : N, env : %) : Void ==
+      val := search(key, env)
+      val case "failed" =>
+        env(key) := [[], emptyNode(), [fact]]
+      val case EVAL =>
+        member?(fact, val.facts) => env
+        val.facts := [fact, :val.facts]
+
+    importDomain (ti : TI, dom : N, env : %) : Void ==
       for n in ti.body.list repeat
         n' := substitute(n, typeVar() :: TV, dom)
         guard := emptyNode()
@@ -70,67 +81,62 @@ SpadEnvironment() : Exports == Implementation where
         n' := nodeTypeOrigin(td.type, dom)
         if not emptyNode? guard then
           n' := nodeTypeGuard(n', guard)
-        env(td.expr :: Symbol) := n'
-      env
+        addTypeOf(td.expr :: Symbol, n', env)
 
-    addDomain (dom : APP, env : %) : % ==
+    addDomain (dom : APP, env : %) : Void ==
       key? (dom, env) => env
       notice ["Adding type" :: PF, bold (dom :: PF), "to the environment!" :: PF]
       ti := getTypeInfo(dom)
-      env(dom) := [ti]
+      addTypeOf(dom, [ti], env)
       importDomain(ti, [dom], env)
 
-    addDomainAs (dom : APP, key : KEY, env : %) : % ==
+    addDomainAs (dom : APP, key : EKEY, env : %) : Void ==
       key? (dom, env) => env
       notice(["Adding" :: PF, bold (dom :: PF), "as" :: PF, bold (key :: PF), 
               "to the environment!" :: PF])
       ti := getTypeInfo(dom)
-      env(key) := [ti]
+      addTypeOf(dom, [ti], env)
       n : N :=
         key case APP => [key :: APP]
         [key :: Symbol]
       importDomain(ti, n, env)
 
-    key? (key : KEY, env : %) : Boolean ==
-      for level in env repeat
-        if key? (key, level) then
-          return true
-      false
+    empty? (env : %) : Boolean ==
+      empty?(env)$Rep
 
-    search (key : KEY, env : %) : List(N) ==
-      empty? env => []
+    search (key : EKEY, env : %) : Union(EVAL, "failed") ==
+      empty? env => "failed"
       top := first env
       -- 1) if the symbol is found at first level the return it
       result := search(key, top)
-      result case List(N) => result
+      result case EVAL => result
       -- 2) if it is found deeper then (deep-)copy it to top level and return it
-      value : List(N) := []
       for level in rest env repeat
         result := search(key, level)
-        result case List(N) =>
-          value := copy(result :: List(N))
-          top(key) := value
-          break
-      value
+        result case EVAL =>
+          value := result :: EVAL
+          types' := [copy n for n in value.types]
+          info'  := copy value.info
+          facts' := [copy n for n in value.facts]
+          value' := [types', info', facts']
+          top(key) := value'
+          return value'
+      -- 3) not found :(
+      "failed"
 
-    setelt! (env : %, key : KEY, value : N) : % ==
-      values := search(key, env)
+    elt (env : %, key : EKEY) : EVAL ==
+      val := search(key, env)
+      val case EVAL => val
+      fail [string bold(key :: PF), "not found in the environment!" :: PF]
+      error ""
+
+    setelt! (env : %, key : EKEY, val : EVAL) : % ==
       top := first env
-      member?(value, values) => env
-      top(key) := [value, :values]
+      top(key) := val
       env
 
-    reset! (env : %, key : KEY) : % ==
-      top := first env
-      top(key) := []
-      env
-
-    elt (env : %, key : KEY) : List(N) ==
-      result := search(key, env)
-      empty? result =>
-        fail [string bold(key :: PF), "missing from environment!" :: PF]
-        error ""
-      result
+    reset! (env : %, key : EKEY) : % ==
+      env(key) := [[], emptyNode(), []]
 
     flatten (env : %) : % ==
       empty? env => new()
@@ -153,26 +159,36 @@ SpadEnvironment() : Exports == Implementation where
       rks := [k :: Symbol for k in keys first right | k case Symbol]
       for k in setIntersection(lks, rks) repeat
         if not member?(k, top) then
-          for n in concat(left k, right k) repeat
-            env(k) := n
+          lv := left(k) :: EVAL
+          rv := right(k) :: EVAL
+          ts := removeDuplicates concat(lv.types, rv.types)
+          fs := removeDuplicates concat(lv.facts, rv.facts)
+          env(k) := [ts, emptyNode(), fs]
       env
 
-    coerce (env : %) : PF ==
-      empty? env => "()" :: PF
-      (first flatten env) :: PF
+    coerce (key : EKEY) : PF ==
+      key case APP => key :: APP :: PF
+      key :: Symbol :: PF
 
+    coerce (val : EVAL) : PF ==
+      ts := [t :: PF for t in val.types]
+      fs := [f :: PF for f in val.facts]
+      empty? fs =>
+        pile [cyan("types:" :: PF), :ts]
+      vconcat [pile [cyan("types:" :: PF), :ts],
+               pile [cyan("facts:" :: PF), :fs]]
+      
     coerce (scope : SCOPE) : PF ==
       entries : List(PF) := []
       empty? scope => "()" :: PF
       for e in members(scope)@List(MEMBER) repeat
         sym := hconcat [bold cyan(e.key :: PF), ":" :: PF]
-        mms := [mm :: PF for mm in e.entry]
-        of :=
-          empty? mms =>
-            of := spaces [sym, "[]" :: PF]
-          pile [sym, :mms]
-        entries := [of, :entries]
+        entries := [pile [sym, e.entry :: PF], :entries]
       vconcat reverse entries
+
+    coerce (env : %) : PF ==
+      empty? env => "()" :: PF
+      (first flatten env) :: PF
 
 )abbrev domain SPENVT SpadEnvironmentTest
 SpadEnvironmentTest() : Exports == Implementation where
@@ -198,8 +214,8 @@ SpadEnvironmentTest() : Exports == Implementation where
       env := new()
       dom1 := [['Integer], []] $ APP
       dom2 := [['List], [['Integer]]] $ APP
-      env := addDomain(dom1, env)
-      env := addDomain(dom2, env)
+      addDomain(dom1, env)
+      addDomain(dom2, env)
       println (env :: PF)
 
     test2 () ==
@@ -210,9 +226,9 @@ SpadEnvironmentTest() : Exports == Implementation where
       dom0 := [['Polynomial], [emptyNode()]] $ APP
       dom1 := [['Polynomial], [nodeApp(['Integer], [])]] $ APP
       dom2 := [['Integer], []] $ APP
-      env := addDomain(dom0, env)
-      env := addDomain(dom1, env)
-      env := addDomain(dom2, env)
-      modemaps := env('*)
+      addDomain(dom0, env)
+      addDomain(dom1, env)
+      addDomain(dom2, env)
+      modemaps := typesOf('*, env)
       println pile([hconcat [bold cyan ("*" :: PF), ":" :: PF],
                     :[(modemap :: PF) for modemap in modemaps]])

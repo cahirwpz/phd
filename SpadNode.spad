@@ -1830,7 +1830,6 @@ SpadNode() : Exports == Implementation where
       error "coerce $ SpadNode: variant not handled!"
 
     copy n ==
-      warn ["copy of" :: PF, n :: PF]
       apply? n => [copy(n :: APP)]
       assign? n => [copy(n :: ASS)]
       case? n => [copy(n :: SC)]
@@ -1857,6 +1856,7 @@ SpadNode() : Exports == Implementation where
       typeGuard? n => [copy(n :: TG)]
       typeHas? n => [copy(n :: TEH)]
       typeIs? n => [copy(n :: TEI)]
+      typeInfo? n => [copy(n :: TI)]
       typePretend? n => [copy(n :: TEP)]
       typeValue? n => [copy(n :: TVL)]
       typeOrigin? n => [copy(n :: TO)]
@@ -1895,6 +1895,7 @@ SpadNode() : Exports == Implementation where
       -- typeGuard is not recognized by original compiler
       typeHas? n => convert(n :: TEH)
       typeIs? n => convert(n :: TEI)
+      -- typeInfo is not recognized by original compiler
       typePretend? n => convert(n :: TEP)
       -- typeValue is not recognized by original compiler
       typeOrigin? n => convert(n :: TO)
