@@ -261,7 +261,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
       symbol? t =>
         -- BUG! this is not correct but will do for time being
         ts := search(t :: Symbol, env)
-        fail [t :: PF for t in ts]
         -- detect type alias
         #ts = 1 and typeValue? ts.1 =>
           tv := ts.1 :: TVL
@@ -276,7 +275,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       -- treat QUOTE(symbol) application as a symbol value
       a.function = ['QUOTE] and #a.args = 1 =>
         this := addNode!(ctx, [a], env)
-        setTypeOf!(ctx, this, [symbolType])
+        bindNode!(ctx, this, symbolType)
         this
 
       debug ["Processing function application." :: PF]
@@ -425,18 +424,16 @@ SpadTypeTreeCreator() : Exports == Implementation where
       for argNode in argNodeList for argType in fnType.args repeat
         if not unbound? argType then
           bindNode!(ctx, argNode, argType)
-          done! argNode
 
       if not unbound? fnType.result then
         bindNode!(ctx, resNode, fnType.result)
-        done! resNode
 
       typeList : List(N) :=
         ([(emptyNode?(t) => n.type; t)
           for n in [resNode, :argNodeList] for t in [fnType.result, :fnType.args]])
 
       fnType' := nodeMappingType(rest typeList, first typeList)
-      setTypeOf!(ctx, funDefNode, [fnType'])
+      bindNode!(ctx, funDefNode, fnType')
 
       if fn.name case "lambda" then
         debug(["Lambda expression has" :: PF, bold(fnType' :: PF),
@@ -505,7 +502,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
           env'(s :: Symbol) := n
         error "walkFun: unexpected argument format"
 
-      if fn.name case Symbol then
+      if fresh? and fn.name case Symbol then
         -- add the type to environment visible inside function's body
         -- to enable recursion
         env'(fn.name :: Symbol) := funDefNode.type
@@ -560,7 +557,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       argList := [argNode.node for argNode in argNodeList]
       ftType := nodeApp([ft.name], argList)
       env("$" :: Symbol) := ftType
-      setTypeOf!(ctx, this, [nodeMappingType(argList, resType)])
+      bindNode!(ctx, this, nodeMappingType(argList, resType))
 
       -- add functor's type info to the environment
       invalidateTypeInfo(ft.name)
@@ -638,8 +635,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
         body := walk(lp.body, ctx, env')
         bodyType.node := bodyType.type
         bodyType.rules := [ruleSubType(body, bodyType)]
-        setTypeOf!(ctx, body, [bodyType.type])
-        setTypeOf!(ctx, this, [nodeApp(['List], [bodyType.type])])
+        bindNode!(ctx, body, bodyType.type)
+        bindNode!(ctx, this, nodeApp(['List], [bodyType.type]))
         maybeBodyType := bodyType
       else
         body := walk(lp.body, ctx, env')
@@ -667,11 +664,11 @@ SpadTypeTreeCreator() : Exports == Implementation where
       stepExpr' : Union(TN, "none") :=
         not emptyNode? seg.step =>
           stepExpr := walk(seg.step, ctx, env)
-          setTypeOf!(ctx, stepExpr, [integerType])
+          bindNode!(ctx, stepExpr, integerType)
           stepExpr
         "none"
 
-      setTypeOf!(ctx, this, [nodeApp(['UniversalSegment], [startExpr.type])])
+      bindNode!(ctx, this, nodeApp(['UniversalSegment], [startExpr.type]))
       this.rules := [ruleSeg(startExpr, endExpr', stepExpr')]
       this
 
@@ -735,7 +732,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
             ftorArgType := substitute(ftorArgType, ftorArgRenames)
 
             ftorArgTypeNode := addNode!(ctx, ftorArgType, env)
-            setTypeOf!(ctx, ftorArgTypeNode, [ftorArgType])
+            bindNode!(ctx, ftorArgTypeNode, ftorArgType)
 
             ftorArgNode := addNode!(ctx, ftorArg, env)
             ftorArg := ftorArgNode.type
@@ -854,7 +851,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       ntype := walk(sc.type, ctx, env)
       nexpr := walk(sc.expr, ctx, ntype.env)
 
-      setTypeOf!(ctx, this, [booleanType])
+      bindNode!(ctx, this, booleanType)
       this.rules := [ruleCase(nexpr, ntype)]
       this.env := ntype.env
       this
