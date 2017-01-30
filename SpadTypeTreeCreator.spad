@@ -22,7 +22,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleRef : (List(TN), TN) -> TR
     ruleTypeIs : (TN, TN) -> TR
     ruleTypeIs : (List(TN), TN, TN) -> TR
-    ruleSeg : (TN, OTN, OTN) -> TR
+    ruleSeg : (TN, OTN) -> TR
     ruleSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
                      "Tuple", "Body"), TN, List(TN)) -> TR
     ruleCapsule : List(TN) -> TR
@@ -110,7 +110,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
       bodyRef := nodeRef(body)
       [depRefs, bodyRef]
 
-    ruleSeg (start, end, step) ==
+    ruleSeg (start, end) ==
       startRef := nodeRef(start)
       formulas := [startRef]$List(N)
       if end case TN then
@@ -118,12 +118,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
         concat!(formulas, endRef)
       else
         endRef := emptyNode()
-      if step case TN then
-        stepRef := nodeRef(step)
-        concat!(formulas, stepRef)
-      else
-        stepRef := emptyNode()
-      [formulas, nodeSeg(startRef, endRef, stepRef)]
+      [formulas, nodeSeg(startRef, endRef)]
 
     ruleSeq (kind, seq, exprs) ==
       (seqRef, exprRefs) := (nodeRef(seq), [nodeRef(expr) for expr in exprs])
@@ -661,15 +656,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
           endExpr
         "none"
 
-      stepExpr' : Union(TN, "none") :=
-        not emptyNode? seg.step =>
-          stepExpr := walk(seg.step, ctx, env)
-          bindNode!(ctx, stepExpr, integerType)
-          stepExpr
-        "none"
-
       bindNode!(ctx, this, nodeApp(['UniversalSegment], [startExpr.type]))
-      this.rules := [ruleSeg(startExpr, endExpr', stepExpr')]
+      this.rules := [ruleSeg(startExpr, endExpr')]
       this
 
     walkSeq (s : SEQ, ctx : CTX, env : ENV) : TN ==

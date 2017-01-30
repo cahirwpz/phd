@@ -85,7 +85,7 @@ SpadTreeWalkerCategory() : Category == Definition where
         nodeRecordType [(rewrite [f]) :: TD for f in fields rt]
 
       rewrite (seg : SEG) : N ==
-        nodeSeg(rewrite seg.start, rewrite seg.end, rewrite seg.step)
+        nodeSeg(rewrite seg.start, rewrite seg.end)
 
       rewrite (s : SEQ) : N ==
         [collapse [s.kind, [rewrite n for n in s.list]]]
