@@ -211,7 +211,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
     import SpadNodeTools
-    import SpadDatabase
+    import DaaseDatabase
     import SpadEnvironment
     import SpadTypeRuleFactory
     import SpadTypeNodeArray

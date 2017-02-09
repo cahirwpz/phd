@@ -137,6 +137,9 @@ SpadNodeTools() : Exports == Implementation where
 
     setMajor : (N, NNI) -> N
 
+    merge : List(SUBS) -> SUBS
+    coerce : SUBS -> PF
+
   Implementation ==> add
     import Printer
     import Logger('Term)
@@ -169,3 +172,21 @@ SpadNodeTools() : Exports == Implementation where
 
     setMajor (n : N, major : NNI) : N ==
       setMajor(n, major) $ SpadNodeTypeVarSetMajor
+
+    merge subsList ==
+      merged : SUBS := empty()
+      -- merge list for each valid substitution
+      for subs in subsList repeat
+        for s in entries subs repeat
+          merged(s.key) := 
+            key?(s.key, merged) =>
+              concat(s.entry, merged(s.key))
+            s.entry
+      -- remove duplicates from term lists
+      for s in entries merged repeat
+        merged(s.key) := removeDuplicates s.entry
+      merged
+
+    coerce (subs : SUBS) : PF ==
+      bracket([spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]]
+               for s in entries subs])

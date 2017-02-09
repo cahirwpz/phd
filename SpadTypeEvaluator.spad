@@ -65,8 +65,8 @@ SpadTypeEvaluator() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
     import SpadNodeTools
-    import SpadDatabase
-    import SpadCtorModeMap
+    import DaaseDatabase
+    import DaaseCtorModeMap
     import Logger('TypeInfo)
     import SpadTypeUnifier
     import Printer
@@ -140,7 +140,7 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       cmm! := safeGetCtorModeMap(t)
       cmm! case "failed" => "failed"
-      cmm := cmm! :: SpadCtorModeMap
+      cmm := cmm! :: DaaseCtorModeMap
 
       cat? := (cmm.type = nodeApp(['Category], []))
 

@@ -5,9 +5,6 @@ SpadTypeUnifier() : Exports == Implementation where
   P ==> Record(t1 : N, t2 : N)
 
   Exports ==> with
-    coerce : SUBS -> PF
-
-    merge : List(SUBS) -> SUBS
 
     unify? : (N, N) -> Boolean
     unifyType : (N, N) -> URES
@@ -28,25 +25,7 @@ SpadTypeUnifier() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
     import SpadNodeTools
-    import SpadDatabase
-
-    coerce (subs : SUBS) : PF ==
-      bracket([spaces [s.key :: PF, "=>" :: PF, bracket [t :: PF for t in s.entry]]
-               for s in entries subs])
-
-    merge subsList ==
-      merged : SUBS := empty()
-      -- merge list for each valid substitution
-      for subs in subsList repeat
-        for s in entries subs repeat
-          merged(s.key) := 
-            key?(s.key, merged) =>
-              concat(s.entry, merged(s.key))
-            s.entry
-      -- remove duplicates from term lists
-      for s in entries merged repeat
-        merged(s.key) := removeDuplicates s.entry
-      merged
+    import DaaseDatabase
 
     unifyType' : (N, N) -> URES
 

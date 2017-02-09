@@ -1,5 +1,5 @@
-)abbrev domain SPCMM SpadCtorModeMap
-SpadCtorModeMap() : Exports == Implementation where
+)abbrev domain DCMM DaaseCtorModeMap
+DaaseCtorModeMap() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> Join(CoercibleTo(N), CoercibleTo(PF)) with
@@ -31,8 +31,8 @@ SpadCtorModeMap() : Exports == Implementation where
       ftor := bold hconcat [x.name :: PF, paren [arg :: PF for arg in x.args]]
       pile [spaces [ftor, ":" :: PF], x.type :: PF]
 
-)abbrev domain SPOP SpadOperation
-SpadOperation() : Exports == Implementation where
+)abbrev domain DOP DaaseOperation
+DaaseOperation() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> CoercibleTo(PF) with
@@ -82,12 +82,12 @@ SpadOperation() : Exports == Implementation where
       emptyNode? cond => x.signature :: PF 
       pile [x.signature :: PF, spaces [bold("when" :: PF), cond :: PF]]
 
-)abbrev domain SPDB SpadDatabase
-SpadDatabase() : Exports == Implementation where
+)abbrev domain DDB DaaseDatabase
+DaaseDatabase() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> with
-    getOperationList : Symbol -> List SpadOperation
+    getOperationList : Symbol -> List DaaseOperation
     getCtorArgs : Symbol -> List Symbol
       ++ returns constructor argument names
     getCtorArgsKind : Symbol -> List Boolean
@@ -96,8 +96,8 @@ SpadDatabase() : Exports == Implementation where
     getCtorKind : Symbol -> Union("domain", "category", "package")
       ++ returns constructor kind
     inDatabase? : Symbol -> Boolean
-    getCtorModeMap : Symbol -> SpadCtorModeMap
-    safeGetCtorModeMap : Symbol -> Union(SpadCtorModeMap, "failed")
+    getCtorModeMap : Symbol -> DaaseCtorModeMap
+    safeGetCtorModeMap : Symbol -> Union(DaaseCtorModeMap, "failed")
     getAbbrev : Symbol -> Symbol
     getSourceFile : Symbol -> String
     getSuperDomain : Symbol -> N
@@ -181,8 +181,8 @@ SpadDatabase() : Exports == Implementation where
         type := getSuperDomain(s)
       false
 
-)abbrev domain SPDBT SpadDatabaseTest
-SpadDatabaseTest() : Exports == Implementation where
+)abbrev package DDBT DaaseDatabaseTest
+DaaseDatabaseTest() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> with
@@ -193,7 +193,7 @@ SpadDatabaseTest() : Exports == Implementation where
 
   Implementation ==> add
     import Printer
-    import SpadDatabase
+    import DaaseDatabase
 
     test1 () ==
       printOps (s : Symbol) : Void ==
@@ -223,5 +223,3 @@ SpadDatabaseTest() : Exports == Implementation where
       println (isSubDomain?('NonNegativeInteger, 'Integer) :: PF)
       println (isSubDomain?('PositiveInteger, 'NonNegativeInteger) :: PF)
       println (isSubDomain?('PositiveInteger, 'Integer) :: PF)
-
-

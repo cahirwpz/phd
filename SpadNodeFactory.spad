@@ -17,6 +17,8 @@ SpadNodeFactory() : Exports == Implementation where
     categoryType : () -> N
     baseType : () -> N
     undefinedType : () -> N
+    setCategoryType : () -> N
+    orderedSetType : () -> N
 
     typeVar : () -> N
     typeVar : PI -> N
@@ -39,6 +41,8 @@ SpadNodeFactory() : Exports == Implementation where
     voidType () == nodeApp(['Void], [])
     categoryType () == nodeApp(['Category], [])
     baseType () == nodeApp(['Type], [])
+    setCategoryType () == nodeApp(['SetCategory], [])
+    orderedSetType () == nodeApp(['OrderedSet], [])
     undefinedType() == [["%undef"]$MR]
 
     typeVar() == [[0, 0]$TV]

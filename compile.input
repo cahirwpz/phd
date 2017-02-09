@@ -8,7 +8,7 @@
 )compile SpadNodeCollect.spad
 )compile SpadNodeRewrite.spad
 )compile SpadNodeTools.spad
-)compile SpadDatabase.spad
+)compile DaaseDatabase.spad
 )compile SpadLogic.spad
 )compile SpadTypeUnifier.spad
 )compile SpadTypeEvaluator.spad

@@ -86,7 +86,7 @@ PrintableForm() : Exports == Implementation where
     coerce (i : Integer) : % == [i]$Rep
     coerce (s : String) : % == [s]$Rep
     coerce (s : Symbol) : % == [s]$Rep
-    coerce (l : List(%)) : % == brace sepBy("," :: %, l)
+    coerce (l : List(%)) : % == bracket sepBy(", " :: %, l)
 
     command? f == f case cmd
     float? f == f case fnum

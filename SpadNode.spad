@@ -1364,6 +1364,10 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     elt : (%, "type") -> N
     elt : (%, "superType") -> N
 
+    category? : % -> Boolean
+    domain? : % -> Boolean
+    package? : % -> Boolean
+
   Implementation ==> add
     Rep := Record(ti_name : Symbol,
                   ti_args : List TD,
@@ -1383,21 +1387,29 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "type") == [[[x.ti_name], [arg.expr for arg in x.ti_args]]$APP]
     elt(x, "superType") == x.ti_superType
 
+    category? x == x.body.kind case "Join"
+    domain? x == x.body.kind case "Domain"
+    package? x == x.ti_body.kind case "Package"
+
     coerce x ==
       args := [arg :: PF for arg in x.ti_args]
       app := hconcat [x.ti_name :: PF, paren args]
       k : String :=
-        x.ti_body.kind case "Join" => "Category"
-        x.ti_body.kind case "Domain" => "Domain"
-        x.ti_body.kind case "Package" => "Package"
+        category? x => "Category"
+        domain? x => "Domain"
+        package? x => "Package"
         error x.ti_body.kind
-      l : List(PF) :=
+      st : List(PF) :=
         emptyNode? x.ti_superType => []
         [bold("subtype of" :: PF), x.ti_superType :: PF]
-      pile([spaces [app, :l, bold("is" :: PF), k :: PF],
+      ct : List(PF) :=
+        empty? x.ti_constraints => []
+        [pile [bold("constraints:" :: PF),
+         :[c :: PF for c in x.ti_constraints]]]
+      pile([spaces [app, :st, bold("is" :: PF), k :: PF],
             pile [bold("defined as:" :: PF), x.ti_body :: PF],
             pile [bold("has relation:" :: PF), :[h :: PF for h in x.ti_hasList]],
-            pile [bold("constraints:" :: PF), :[c :: PF for c in x.ti_constraints]]])
+            :ct])
 
     copy x ==
       [copy!(x.name, Symbol), map(copy, x.args), map(copy, x.hasList),
