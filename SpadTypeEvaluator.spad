@@ -1,37 +1,34 @@
 )abbrev package STSYMRPL SpadTreeSymbolReplace
-SpadTreeSymbolReplace(ctx : CTX) : WALKER == Implementation where
-  N ==> SpadNode
+SpadTreeSymbolReplace(ctx : CTX) : SNRC == Implementation where
   CTX ==> Table(Symbol, N)
-  WALKER ==> SpadTreeWalkerCategory 
+
+)include SpadTypeDefs.inc
 
   Implementation ==> add
-    rewrite (s : Symbol) : N ==
+    walk (s : Symbol) : N ==
       r := search(s, ctx)
       r case "failed" => [s]
       r
 
 )abbrev package STTVSM SpadTreeTypeVarSetMajor
-SpadTreeTypeVarSetMajor(major : NNI) : WALKER == Implementation where
-  N ==> SpadNode
-  NNI ==> NonNegativeInteger 
-  TV ==> SpadTypeVar(N)
-  WALKER ==> SpadTreeWalkerCategory 
+SpadTreeTypeVarSetMajor(major : NNI) : SNRC == Implementation where
+)include SpadTypeDefs.inc
 
   Implementation ==> add
-    rewrite (tv : TV) : N ==
+    walk (tv : TV) : N ==
       nodeTypeVar(major, tv.minor)
 
 )abbrev package FLATDBT FlattenDatabaseType
-FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
+FlattenDatabaseType() : SNRC == Implementation where
 )include SpadTypeDefs.inc
 
   Implementation ==> add
     import SpadNode
     import SpadNodeFactory
 
-    rewrite (app : APP) : N ==
-      app.function = ['ATTRIBUTE] => rewrite(first app.args)
-      nodeApp(rewrite app.function, [rewrite arg for arg in app.args])
+    walk (app : APP) : N ==
+      app.function = ['ATTRIBUTE] => walk(first app.args)
+      nodeApp(walk app.function, map(walk, app.args))
 
     addTypeGuard(n : N, cond : N) : N ==
       typeGuard? n =>
@@ -46,19 +43,19 @@ FlattenDatabaseType() : SpadTreeWalkerCategory == Implementation where
         s.list
       [n]
 
-    rewrite (cn : CE) : N ==
-      c := rewrite cn.cond
+    walk (cn : CE) : N ==
+      c := walk cn.cond
       nc := nodeApp(['not], [c])
 
-      tl := [addTypeGuard(n, c) for n in listOf(rewrite cn.truebr)]
-      fl := [addTypeGuard(n, nc) for n in listOf(rewrite cn.falsebr)]
+      tl := [addTypeGuard(n, c) for n in listOf(walk cn.truebr)]
+      fl := [addTypeGuard(n, nc) for n in listOf(walk cn.falsebr)]
 
       nodeSeq("Body", concat(tl, fl))
 
-    rewrite (seq : SEQ) : N ==
+    walk (seq : SEQ) : N ==
       l : List(N) := []
       for n in seq.list repeat
-        n := rewrite n
+        n := walk n
         emptyNode? n => "iterate"
         sequence? n =>
           s : SEQ := coerce(n)
@@ -182,14 +179,14 @@ SpadTypeEvaluator() : Exports == Implementation where
         v := typeVar(i :: PI)
         ctx(s) := v
 
-      types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
+      types := [walk(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
       args := [[typeVar(i :: PI), typ]$TD for typ in types for i in 1..]
       body := (cat? => getCtorCategory(t); cmm.type)
 
       body := nodeSeq((cat? => "Join"; "Domain"),
                       (sequence? body => (body :: SEQ).list; [body]))
-      body := rewrite(body)$SpadTreeSymbolReplace(ctx)
-      body := rewrite(body)$FlattenDatabaseType
+      body := walk(body)$SpadTreeSymbolReplace(ctx)
+      body := walk(body)$FlattenDatabaseType
 
       [cmm.name, args, [], [], getSuperDomain(t), body :: SEQ]
 
@@ -203,14 +200,14 @@ SpadTypeEvaluator() : Exports == Implementation where
         v := typeVar(i :: PI)
         ctx(s) := v
 
-      types := [rewrite(arg.type)$SpadTreeSymbolReplace(ctx) for arg in ft.args] 
+      types := [walk(arg.type)$SpadTreeSymbolReplace(ctx) for arg in ft.args] 
       args := [[typeVar(i :: PI), t]$TD for t in types for i in 1..]
 
       body := 
         ft.type = categoryType() => ft.extends
         nodeSeq("Domain", (ft.type :: SEQ).list)
-      body := rewrite(body)$SpadTreeSymbolReplace(ctx)
-      body := rewrite(body)$FlattenDatabaseType
+      body := walk(body)$SpadTreeSymbolReplace(ctx)
+      body := walk(body)$FlattenDatabaseType
 
       [ft.name, args, [], [], getSuperDomain(ft.name), body :: SEQ]
 
@@ -233,7 +230,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       n1 := nodeApp([ti.name], [arg.expr for arg in ti.args])
       n2 := nodeApp([ti.name], values)
 
-      res := unifyType(n1, rewrite(n2)$AddVer)
+      res := unifyType(n1, walk(n2)$AddVer)
       res case "failed" =>
         fail ("unification failed" :: PF)
         error ""
@@ -248,10 +245,10 @@ SpadTypeEvaluator() : Exports == Implementation where
         concat(nodeApp([ti.name], [[arg] for arg in args']),
                [substitute(c, subst) for c in ti.constraints])
 
-      args' := [rewrite(arg)$DelVer :: TD for arg in args']
-      body' := rewrite(body')$DelVer
-      hasList' := [rewrite(hasItem)$DelVer for hasItem in hasList']
-      constraints' := [rewrite(con)$DelVer for con in constraints']
+      args' := [walk(arg)$DelVer :: TD for arg in args']
+      body' := walk(body')$DelVer
+      hasList' := [walk(hasItem)$DelVer for hasItem in hasList']
+      constraints' := [walk(con)$DelVer for con in constraints']
 
       -- BUG: Fix improper functor application. 
       -- i.e. when List(Integer) is passed instead of List(Integer())

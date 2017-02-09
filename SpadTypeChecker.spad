@@ -1,31 +1,31 @@
 )abbrev package STREMREF SpadTreeRemoveReferences
-SpadTreeRemoveReferences(find : (PI, PI) -> TN) : Exports == Implementation where
+SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SNRC == Implementation where
 )include SpadTypeDefs.inc
 
-  Exports ==> SpadTreeWalkerCategory 
+  SNRC ==> SpadNodeRewriterCategory 
 
   Implementation ==> add
     import Logger('Fill)
     import FT
 
-    rewrite (to : TO) : N ==
-      (e, t) := (rewrite to.expr, rewrite to.type)
+    walk (to : TO) : N ==
+      (e, t) := (walk to.expr, walk to.type)
       t = ['_$] => e
       t = appform(find(1, 1).node :: FT) => e
       undefinedType? t => e
       mappingType? t => e
       nodeTypeOrigin(e, t)
 
-    rewrite (tv : TVL) : N ==
-      rewrite tv.type
+    walk (tv : TVL) : N ==
+      walk tv.type
 
-    rewrite (app : APP) : N ==
+    walk (app : APP) : N ==
       -- WORKAROUND! Remove origin qualifier from first argument of implicit
       -- call to 'elt' added in walkApp $ SpadTypeChecker.
-      fun := rewrite app.function
-      args := [rewrite a for a in app.args]
+      fun := walk app.function
+      args := map(walk, app.args)
       typeSelect? fun =>
-        ts : TS := coerce(rewrite fun)
+        ts : TS := coerce(walk fun)
         nodeTypeSelect(nodeApp(ts.expr, args), ts.type)
       if typeOrigin? fun then 
         to : TO := coerce(fun)
@@ -34,7 +34,7 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : Exports == Implementation wher
           args := cons(to.expr, rest args)
       nodeApp(fun, args)
 
-    rewrite (tv : TV) : N ==
+    walk (tv : TV) : N ==
       to : TO
       tn := find(tv.major :: PI, tv.minor :: PI)
       t := tn.type
@@ -43,12 +43,12 @@ SpadTreeRemoveReferences(find : (PI, PI) -> TN) : Exports == Implementation wher
         t := to.type
       t
 
-    rewrite (nr : NR) : N ==
+    walk (nr : NR) : N ==
       tn := find(nr.major :: PI, nr.minor :: PI)
       tn.node = [nr] =>
         fail pile ["Self reference detected:" :: PF, tn :: PF]
         error ""
-      rewrite tn.node
+      walk tn.node
 
 )abbrev package STTCHECK SpadTypeTreeChecker
 SpadTypeTreeChecker() : Exports == Implementation where
@@ -469,7 +469,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
         -- type to SpadTreeFillInTypes
         for na in members ctx repeat
           findTypeNode := ((i : PI, j : PI) : TN +-> node(ctx, i, j))
-          root(na).node := rewrite(root(na).node)$SpadTreeRemoveReferences(findTypeNode)
+          root(na).node := walk(root(na).node)$SpadTreeRemoveReferences(findTypeNode)
       else
         for na in reverse members ctx repeat
           for n in reverse members na repeat 

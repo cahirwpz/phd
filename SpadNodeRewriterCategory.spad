@@ -1,0 +1,106 @@
+)abbrev category SNRWRC SpadNodeRewriterCategory
+SpadNodeRewriterCategory() : Category == Definition where
+)include SpadTypeDefs.inc
+
+  Definition ==> SpadNodeWalkerCategory(N) add
+      walk (a : APP) : N ==
+        nodeApp(walk a.function, map(walk, a.args))
+
+      walk (a : ASS) : N ==
+        nodeAssign(walk a.lval, walk a.rval)
+
+      walk (cn : CE) : N ==
+        nodeCondExpr(walk cn.cond, walk cn.truebr, walk cn.falsebr)
+
+      walk (fn : FN) : N ==
+        nodeFun(fn.name, map(walk, fn.args), walk fn.type, walk fn.body)
+
+      walk (ft : FT) : N ==
+        nodeFtor(ft.name, [(walk [arg]) :: TD for arg in ft.args],
+                 walk ft.type, walk ft.extends, walk ft.capsule)
+
+      walk (im : IM) : N ==
+        nodeImport(walk im.type)
+
+      walk (it : IT) : N ==
+        nodeIterator(it.var, walk it.seq)
+
+      walk (lp : LP) : N ==
+        nodeLoop(lp.kind, map(walk, lp.itors), map(walk, lp.guards),
+                 walk lp.body)
+
+      walk (m : SM) : N ==
+        nodeMacro(m.name, m.args, walk m.body)
+
+      walk (mr : MR) : N == [mr]
+
+      walk (nr : NR) : N == [nr]
+
+      walk (mt : MT) : N ==
+        nodeMappingType(map(walk, mt.args), walk mt.result)
+
+      walk (rt : RT) : N ==
+        nodeRecordType [(walk [f]) :: TD for f in fields rt]
+
+      walk (seg : SEG) : N ==
+        nodeSeg(walk seg.start, walk seg.end)
+
+      walk (s : SEQ) : N ==
+        [collapse [s.kind, map(walk, s.list)]]
+
+      walk (te : SC) : N ==
+        nodeCase(walk te.expr, walk te.type)
+
+      walk (te : ST) : N ==
+        nodeSubType(walk te.expr, walk te.type)
+
+      walk (te : TC) : N ==
+        nodeTypeCoerce(walk te.expr, walk te.type)
+
+      walk (te : TD) : N ==
+        nodeTypeDecl(walk te.expr, walk te.type)
+
+      walk (te : TG) : N ==
+        nodeTypeGuard(walk te.expr, walk te.type)
+
+      walk (te : TEH) : N ==
+        nodeTypeHas(walk te.expr, walk te.type)
+
+      walk (te : TEI) : N ==
+        nodeTypeIs(walk te.expr, walk te.type)
+
+      walk (te : TEP) : N ==
+        nodeTypePretend(walk te.expr, walk te.type)
+
+      walk (ti : TI) : N ==
+        nodeTypeInfo(ti.name, [walk(arg) :: TD for arg in ti.args],
+                     map(walk, ti.hasList),
+                     map(walk, ti.constraints),
+                     walk ti.superType, (walk ti.body) :: SEQ)
+
+      walk (te : TO) : N ==
+        nodeTypeOrigin(walk te.expr, walk te.type)
+
+      walk (te : TS) : N ==
+        nodeTypeSelect(walk te.expr, walk te.type)
+
+      walk (tv : TVL) : N ==
+        nodeTypeValue(walk tv.type, walk tv.value)
+
+      walk (tv : TV) : N == [tv]
+
+      walk (ut : UT) : N ==
+        nodeUnionType map(walk, variants ut)
+
+      walk (w : SW) : N ==
+        nodeWhere(walk w.body, walk w.env)
+
+      walk (s : String) : N == [s]
+
+      walk (s : Symbol) : N == [s]
+
+      walk (i : Integer) : N == [i]
+
+      walk (f : DoubleFloat) : N == [f]
+
+      walk () : N == emptyNode()

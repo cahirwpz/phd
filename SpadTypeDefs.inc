@@ -41,6 +41,9 @@
   UT ==> SpadUnionType(N)
   SW ==> SpadWhere(N)
 
+  SNWC ==> SpadNodeWalkerCategory
+  SNRC ==> SpadNodeRewriterCategory
+
   SUBS ==> AssociationList(TV, List(N))
   URES ==> Union(SUBS, "failed")
 

@@ -1,37 +1,40 @@
 )abbrev package STCLEAN SpadTreeCleanUp
-SpadTreeCleanUp() : SpadTreeWalkerCategory == Implementation where
+SpadTreeCleanUp() : SNRC == Implementation where
 )include SpadTypeDefs.inc
 
   Implementation ==> add
-    rewrite (a : APP) : N ==
-      fn := rewrite a.function
-      args := [rewrite arg for arg in a.args]
+    walk (a : APP) : N ==
+      fn := walk a.function
+      args := map(walk, a.args)
       fn = ['exit] =>
         -- replace "exit(1, node)" with "node"
         args.1 = [1] => args.2
         -- otherwise it's return statement
         nodeApp(['return], args)
       nodeApp(fn, args)
-    rewrite (a : ASS) : N ==
+
+    walk (a : ASS) : N ==
       -- replace "a : T := b" with "a : T; a := b"
-      lv := rewrite a.lval
-      rv := rewrite a.rval
+      lv := walk a.lval
+      rv := walk a.rval
       typeDecl? lv =>
         td : TD := coerce(lv)
         nodeSeq("Sequence", [lv, nodeAssign(td.expr, rv)])
       nodeAssign(lv, rv)
-    rewrite (to : TO) ==
-      to := [rewrite(to.expr), rewrite(to.type)]$TO
+
+    walk (to : TO) ==
+      to := [walk to.expr, walk to.type]$TO
       -- replace "fn(a, b, ...) $ T" with "(fn $ T)(a, b, ...)"
       apply? to.expr =>
-        a : APP := coerce(to.expr)
+        a : APP := coerce to.expr
         nodeApp(nodeTypeOrigin(a.function, to.type), a.args)
       nodeTypeOrigin(to.expr, to.type)
-    rewrite (ts : TS) ==
-      ts := [rewrite(ts.expr), rewrite(ts.type)]$TS
+
+    walk (ts : TS) ==
+      ts := [walk ts.expr, walk ts.type]$TS
       -- replace "fn(a, b, ...) @ T" with "(fn @ T)(a, b, ...)"
       apply? ts.expr =>
-        a : APP := coerce(ts.expr)
+        a : APP := coerce ts.expr
         nodeApp(nodeTypeSelect(a.function, ts.type), a.args)
       nodeTypeOrigin(ts.expr, ts.type)
 
@@ -41,7 +44,7 @@ SpadMacroExpander() : Exports == Implementation where
 
   AL ==> Table(Symbol, SM)
 
-  Exports ==> SpadTreeWalkerCategory with 
+  Exports ==> SNRC with 
     init : () -> Void
 
   Implementation ==> add
@@ -75,20 +78,20 @@ SpadMacroExpander() : Exports == Implementation where
       env := stack [table()]
       lastCtx := table()
 
-    rewrite (seq : SpadSequence(N)) : N ==
-      seq.kind = "Sequence" or seq.kind = "Capsule" =>
+    walk (seq : SEQ) : N ==
+      nodes := map(walk, seq.list)
+
+      if seq.kind = "Sequence" or seq.kind = "Capsule" then
         newCtx()
-        nodes := [rewrite ex for ex in seq.list]
         lastCtx := discardCtx()
 
         -- eliminate leftovers after consumed macros
-        nodes := [node for node in nodes | not emptyNode? node]
-        empty? nodes => emptyNode()
-        nodeSeq(seq.kind, nodes)
+        nodes := remove(emptyNode?, nodes)
+        empty? nodes => return emptyNode()
 
-      nodeSeq(seq.kind, [rewrite ex for ex in seq.list])
+      nodeSeq(seq.kind, nodes)
 
-    rewrite (app : SpadApply(N)) : N ==
+    walk (app : APP) : N ==
       if symbol? app.function then
         m := findMacro (app.function :: Symbol)
         m case SM and #m.args > 0 =>
@@ -102,30 +105,30 @@ SpadMacroExpander() : Exports == Implementation where
             -- skip argument rewriting if it doesn't require renaming
             if not(symbol? arg and (arg :: Symbol) = m_arg) then
               addMacro(nodeMacro(m_arg, [], arg) :: SM)
-          app' := rewrite m.body
+          app' := walk m.body
           discardCtx()
           return app'
-      nodeApp(rewrite app.function, [rewrite arg for arg in app.args])
+      nodeApp(walk app.function, map(walk, app.args))
 
-    rewrite (m : SM) : N ==
+    walk (m : SM) : N ==
       addMacro m
       emptyNode()
 
-    rewrite (w : SW) : N ==
-      wenv := rewrite w.env
+    walk (w : SW) : N ==
+      wenv := walk w.env
       -- because w.env is always (?) a sequence it produces a valid lastCtx environment
       addCtx lastCtx
-      wbody := rewrite w.body
+      wbody := walk w.body
       discardCtx()
       -- reduce where statement if environment contained only macros
       emptyNode? wenv => wbody
       nodeWhere(wbody, wenv)
 
-    rewrite (sym : Symbol) : N ==
+    walk (sym : Symbol) : N ==
       m := findMacro sym
       m case "failed" => [sym]
       #m.args ~= 0 =>
         fail (["Attempted to apply arguments to parameterless macro:" :: PF,
                string(m.name :: PF)])
         error ""
-      rewrite m.body
+      walk m.body

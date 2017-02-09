@@ -4,9 +4,10 @@
 )compile SpadNode.spad
 )compile SpadNodeFactory.spad
 )compile SpadNodeTools.spad
+)compile SpadNodeWalkerCategory.spad
+)compile SpadNodeRewriterCategory.spad
 )compile SpadDatabase.spad
 )compile SpadLogic.spad
-)compile SpadTreeWalker.spad
 )compile SpadTypeUnifier.spad
 )compile SpadTypeEvaluator.spad
 )compile SpadEnvironment.spad

@@ -165,26 +165,26 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
 
 )abbrev package STEXCAPT SpadTreeExtractCapsuleType
-SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implementation where
+SpadTreeExtractCapsuleType(find : NR -> TN) : SNRC == Implementation where
 )include SpadTypeDefs.inc
 
   Implementation ==> add
     import Logger('Capsule)
 
-    rewrite (seq : SEQ) : N ==
-      ns := [rewrite(coerce(n)@NR) for n in seq.list | nodeRef? n]
+    walk (seq : SEQ) : N ==
+      ns := [walk(coerce(n)@NR) for n in seq.list | nodeRef? n]
       nodeSeq("Join", [n for n in ns | not emptyNode? n])
 
-    rewrite (ass : ASS) : N == emptyNode()
-    rewrite (td : TD) : N == emptyNode()
+    walk (ass : ASS) : N == emptyNode()
+    walk (td : TD) : N == emptyNode()
 
-    rewrite (nr : NR) : N ==
+    walk (nr : NR) : N ==
       tn := find(nr)
       tn.node = [nr] =>
         fail pile ["Self reference detected:" :: PF, tn :: PF]
         error ""
       -- nodes that have no rules are leaves and we accept them
-      empty? tn.rules => rewrite tn.node
+      empty? tn.rules => walk tn.node
       n := first(tn.rules).solution
       -- for functions take definition type
       function? n =>
@@ -194,11 +194,11 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SpadTreeWalkerCategory == Implemen
       -- for conditional expression add type guards to the content of branches
       condExpr? n =>
         ce : CE := coerce(n)
-        cond := rewrite(ce.cond)
-        truebr := nodeTypeGuard(rewrite(ce.truebr), cond)
-        falsebr := nodeTypeGuard(rewrite(ce.falsebr), nodeApp(['not], [cond]))
+        cond := walk(ce.cond)
+        truebr := nodeTypeGuard(walk ce.truebr, cond)
+        falsebr := nodeTypeGuard(walk ce.falsebr, nodeApp(['not], [cond]))
         nodeSeq("Join", [truebr, falsebr])
-      rewrite n
+      walk n
 
 )abbrev package STTCREAT SpadTypeTreeCreator
 SpadTypeTreeCreator() : Exports == Implementation where
@@ -682,7 +682,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       if s.kind = "Capsule" then
         rule := ruleCapsule(exprList)
         findTypeNode := ((nr : NR) : TN +-> node(ctx, nr))
-        capsuleType := rewrite(rule.solution)$SpadTreeExtractCapsuleType(findTypeNode)
+        capsuleType := walk(rule.solution)$SpadTreeExtractCapsuleType(findTypeNode)
         bindNode!(ctx, this, capsuleType)
         this.rules := [rule]
       else

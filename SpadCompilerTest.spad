@@ -29,11 +29,11 @@ SpadCompilerTest() : Exports == Implementation where
       -- "parse" function that fails to parse functor
       n : SpadNode := parse e
 
-      n := rewrite(n) $ SpadTreeCleanUp
+      n := walk(n) $ SpadTreeCleanUp
       println (n :: PF)
       
       init() $ SpadMacroExpander
-      n := rewrite(n) $ SpadMacroExpander
+      n := walk(n) $ SpadMacroExpander
       println (n :: PF)
       convert(n)
 
@@ -50,9 +50,9 @@ SpadCompilerTest() : Exports == Implementation where
       info pile ["Parser tree in internal format:" :: PF, ast :: PF]
 
       info ["Running cleanup & macro expander." :: PF]
-      ast := rewrite(ast) $ SpadTreeCleanUp
+      ast := walk(ast) $ SpadTreeCleanUp
       init() $ SpadMacroExpander
-      ast := rewrite(ast) $ SpadMacroExpander
+      ast := walk(ast) $ SpadMacroExpander
 
       notice pile ["Tree ready for type checking:" :: PF, ast :: PF]
       tt : SpadTypeTree := []

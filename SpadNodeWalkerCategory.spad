@@ -1,0 +1,85 @@
+)abbrev category SNWALKC SpadNodeWalkerCategory
+SpadNodeWalkerCategory(R : Type) : Category == Definition where
+)include SpadTypeDefs.inc
+
+  Definition ==> with
+      gensym : () -> Symbol
+
+      walk : APP -> R
+      walk : ASS -> R
+      walk : SC -> R
+      walk : CE -> R
+      walk : FN -> R
+      walk : FT -> R
+      walk : IM -> R
+      walk : IT -> R
+      walk : LP -> R
+      walk : SM -> R
+      walk : MR -> R
+      walk : MT -> R
+      walk : NR -> R
+      walk : RT -> R
+      walk : SEG -> R
+      walk : SEQ -> R
+      walk : ST -> R
+      walk : TC -> R
+      walk : TD -> R
+      walk : TG -> R
+      walk : TEH -> R
+      walk : TEI -> R
+      walk : TEP -> R
+      walk : TI -> R
+      walk : TO -> R
+      walk : TS -> R
+      walk : TVL -> R
+      walk : TV -> R
+      walk : UT -> R
+      walk : SW -> R
+      walk : String -> R
+      walk : Symbol -> R
+      walk : I -> R
+      walk : DF -> R
+      walk : () -> R
+
+      walk : N -> R 
+    add
+      gensym() ==
+        GENSYM()$Lisp
+
+      walk (n : N) : R ==
+        apply? n => walk (n :: APP)
+        assign? n => walk (n :: ASS)
+        case? n => walk (n :: SC)
+        condExpr? n => walk (n :: CE)
+        function? n or lambda? n => walk (n :: FN)
+        functor? n => walk (n :: FT)
+        import? n => walk (n :: IM)
+        iterator? n => walk (n :: IT)
+        loop? n => walk (n :: LP)
+        macro? n => walk (n :: SM)
+        mappingType? n => walk (n :: MT)
+        marker? n => walk(n :: MR)
+        nodeRef? n => walk (n :: NR)
+        recordType? n => walk (n :: RT)
+        segment? n => walk (n :: SEG)
+        sequence? n => walk (n :: SEQ)
+        subType? n => walk (n :: ST)
+        typeCoerce? n => walk (n :: TC)
+        typeDecl? n => walk (n :: TD)
+        typeGuard? n => walk (n :: TG)
+        typeHas? n => walk (n :: TEH)
+        typeIs? n => walk (n :: TEI)
+        typeInfo? n => walk (n :: TI)
+        typePretend? n => walk (n :: TEP)
+        typeOrigin? n => walk (n :: TO)
+        typeSelect? n => walk (n :: TS)
+        typeValue? n => walk (n :: TVL)
+        typeVar? n => walk (n :: TV)
+        unionType? n => walk (n :: UT)
+        where? n => walk (n :: SW)
+        string? n => walk (n :: String)
+        symbol? n => walk (n :: Symbol)
+        integer? n => walk (n :: I)
+        float? n => walk (n :: DF) 
+        emptyNode? n => walk () 
+        error "walk: variant not handled"
