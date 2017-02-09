@@ -1,25 +1,5 @@
-)abbrev package STSYMRPL SpadTreeSymbolReplace
-SpadTreeSymbolReplace(ctx : CTX) : SNRC == Implementation where
-  CTX ==> Table(Symbol, N)
-
-)include SpadTypeDefs.inc
-
-  Implementation ==> add
-    walk (s : Symbol) : N ==
-      r := search(s, ctx)
-      r case "failed" => [s]
-      r
-
-)abbrev package STTVSM SpadTreeTypeVarSetMajor
-SpadTreeTypeVarSetMajor(major : NNI) : SNRC == Implementation where
-)include SpadTypeDefs.inc
-
-  Implementation ==> add
-    walk (tv : TV) : N ==
-      nodeTypeVar(major, tv.minor)
-
 )abbrev package FLATDBT FlattenDatabaseType
-FlattenDatabaseType() : SNRC == Implementation where
+FlattenDatabaseType() : SNR == Implementation where
 )include SpadTypeDefs.inc
 
   Implementation ==> add
@@ -179,13 +159,13 @@ SpadTypeEvaluator() : Exports == Implementation where
         v := typeVar(i :: PI)
         ctx(s) := v
 
-      types := [walk(arg.type)$SpadTreeSymbolReplace(ctx) for arg in cmm.args] 
+      types := [walk(arg.type)$SpadNodeSymbolReplace(ctx) for arg in cmm.args] 
       args := [[typeVar(i :: PI), typ]$TD for typ in types for i in 1..]
       body := (cat? => getCtorCategory(t); cmm.type)
 
       body := nodeSeq((cat? => "Join"; "Domain"),
                       (sequence? body => (body :: SEQ).list; [body]))
-      body := walk(body)$SpadTreeSymbolReplace(ctx)
+      body := walk(body)$SpadNodeSymbolReplace(ctx)
       body := walk(body)$FlattenDatabaseType
 
       [cmm.name, args, [], [], getSuperDomain(t), body :: SEQ]
@@ -200,19 +180,19 @@ SpadTypeEvaluator() : Exports == Implementation where
         v := typeVar(i :: PI)
         ctx(s) := v
 
-      types := [walk(arg.type)$SpadTreeSymbolReplace(ctx) for arg in ft.args] 
+      types := [walk(arg.type)$SpadNodeSymbolReplace(ctx) for arg in ft.args] 
       args := [[typeVar(i :: PI), t]$TD for t in types for i in 1..]
 
       body := 
         ft.type = categoryType() => ft.extends
         nodeSeq("Domain", (ft.type :: SEQ).list)
-      body := walk(body)$SpadTreeSymbolReplace(ctx)
+      body := walk(body)$SpadNodeSymbolReplace(ctx)
       body := walk(body)$FlattenDatabaseType
 
       [ft.name, args, [], [], getSuperDomain(ft.name), body :: SEQ]
 
-    DelVer := SpadTreeTypeVarSetMajor(0)
-    AddVer := SpadTreeTypeVarSetMajor(1)
+    DelVer := SpadNodeTypeVarSetMajor(0)
+    AddVer := SpadNodeTypeVarSetMajor(1)
 
     apply(ti : TI, values : List(N)) : TI ==
       before := bold hconcat [ti.name :: PF, paren [arg :: PF for arg in ti.args]]

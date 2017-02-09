@@ -1,0 +1,27 @@
+)abbrev category SNPRED SpadNodePredicate
+SpadNodePredicate() : Category == Definition where
+)include SpadTypeDefs.inc
+
+  Definition ==> SpadNodeWalk(Boolean) add
+    import List(N)
+
+    walk (a : APP) == any?(walk, [a.function, :a.args])
+    walk (a : ASS) == any?(walk, [a.lval, a.rval])
+    walk (mt : MT) == any?(walk, [mt.result, :mt.args])
+    walk (rt : RT) == any?(walk, fields rt)
+    walk (ut : UT) == any?(walk, variants ut)
+    walk (s : SEQ) == any?(walk, s.list)
+    walk (te : TD) == walk te.expr or walk te.type
+    walk (te : TG) == walk te.expr or walk te.type
+    walk (te : TEH) == walk te.expr or walk te.type
+    walk (te : TEI) == walk te.expr or walk te.type
+    walk (te : TO) == walk te.expr or walk te.type
+    walk (tv : TVL) == walk tv.type or walk tv.value
+    walk (tv : TV) == false
+    walk (m : MR) == false
+
+    walk (f : DoubleFloat) == false
+    walk (i : Integer) == false
+    walk (s : String) == false
+    walk (s : Symbol) == false
+    walk () == false

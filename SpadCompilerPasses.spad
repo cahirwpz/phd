@@ -1,5 +1,5 @@
 )abbrev package STCLEAN SpadTreeCleanUp
-SpadTreeCleanUp() : SNRC == Implementation where
+SpadTreeCleanUp() : SNR == Implementation where
 )include SpadTypeDefs.inc
 
   Implementation ==> add
@@ -44,7 +44,7 @@ SpadMacroExpander() : Exports == Implementation where
 
   AL ==> Table(Symbol, SM)
 
-  Exports ==> SNRC with 
+  Exports ==> SNR with 
     init : () -> Void
 
   Implementation ==> add

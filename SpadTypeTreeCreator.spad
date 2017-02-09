@@ -165,7 +165,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
 
 )abbrev package STEXCAPT SpadTreeExtractCapsuleType
-SpadTreeExtractCapsuleType(find : NR -> TN) : SNRC == Implementation where
+SpadTreeExtractCapsuleType(find : NR -> TN) : SNR == Implementation where
 )include SpadTypeDefs.inc
 
   Implementation ==> add

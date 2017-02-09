@@ -1,3 +1,58 @@
+)abbrev package SNTVO SpadNodeTypeVarOccurs
+SpadNodeTypeVarOccurs(tv' : TV) : SNP == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (tv : TV) == tv = tv'
+
+)abbrev package SNUNB SpadNodeUnbound
+SpadNodeUnbound() : SNP == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (tv : TV) == true
+    walk () == true
+
+)abbrev package SNCWILD SpadNodeContainsWildcard
+SpadNodeContainsWildcard() : SNP == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (mr : MR) == true
+
+)abbrev package SNSYMRPL SpadNodeSymbolReplace
+SpadNodeSymbolReplace(ctx : CTX) : SNR == Implementation where
+  CTX ==> Table(Symbol, N)
+
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (s : Symbol) : N ==
+      r := search(s, ctx)
+      r case "failed" => [s]
+      r
+
+)abbrev package SNTVSM SpadNodeTypeVarSetMajor
+SpadNodeTypeVarSetMajor(major : NNI) : SNR == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (tv : TV) : N == nodeTypeVar(major, tv.minor)
+
+)abbrev package SNCFV SpadNodeCollectFreeVars
+SpadNodeCollectFreeVars() : SpadNodeCollect(TV) == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (tv : TV) == [tv]
+
+)abbrev package SNCNR SpadNodeCollectNodeRefs
+SpadNodeCollectNodeRefs() : SpadNodeCollect(NR) == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (nr : NR) == [nr]
+
 )abbrev package SNTOOLS SpadNodeTools
 SpadNodeTools() : Exports == Implementation where
 )include SpadTypeDefs.inc
@@ -19,210 +74,11 @@ SpadNodeTools() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
 
-    occurs? (tvar, n) ==
-      import List(N)
-
-      emptyNode? n => false
-      integer? n => false
-      string? n => false
-      symbol? n => false
-      marker? n => false
-
-      occurs'? (m : N) : Boolean ==
-        occurs?(tvar, m)
-
-      apply? n =>
-        app := n :: APP
-        any?(occurs'?, [app.function, :app.args])
-      assign? n =>
-        a := n :: ASS
-        any?(occurs'?, [a.lval, a.rval])
-      mappingType? n =>
-        mt := n :: MT
-        any?(occurs'?, [mt.result, :mt.args])
-      recordType? n =>
-        rt := n :: RT
-        any?(occurs'?, [[f] for f in fields(rt)])
-      unionType? n =>
-        ut := n :: UT
-        any?(occurs'?, variants ut)
-      sequence? n =>
-        seq := n :: SEQ
-        any?(occurs'?, seq.list)
-      typeDecl? n =>
-        td := n :: TD
-        occurs'? td.expr or occurs'? td.type
-      typeOrigin? n =>
-        to := n :: TO
-        occurs'? to.expr or occurs'? to.type
-      typeGuard? n =>
-        tg := n :: TG
-        occurs'? tg.expr or occurs'? tg.type
-      typeHas? n =>
-        te := n :: TEH
-        occurs'? te.expr or occurs'? te.type
-      typeIs? n =>
-        te := n :: TEI
-        occurs'? te.expr or occurs'? te.type
-      typeValue? n =>
-        tv := n :: TVL
-        occurs'? tv.type or occurs'? tv.value
-      typeVar? n =>
-        (n :: TV) = tvar
-
-      fail ["occurs?: case not handled for" :: PF, n :: PF]
-      error ""
-
-    unbound? n ==
-      import List(N)
-
-      emptyNode? n => true
-      integer? n => false
-      string? n => false
-      symbol? n => false
-      typeVar? n => true
-      marker? n => false
-
-      apply? n =>
-        app := n :: APP
-        unbound? app.function or any?(unbound?, app.args)
-      assign? n =>
-        a := n :: ASS
-        any?(unbound?, [a.lval, a.rval])
-      recordType? n =>
-        rt := n :: RT
-        any?(unbound?, [[f] for f in fields rt])
-      unionType? n =>
-        ut := n :: UT
-        any?(unbound?, variants ut)
-      mappingType? n =>
-        mt := n :: MT
-        any?(unbound?, [mt.result, :mt.args])
-      sequence? n =>
-        seq := n :: SEQ
-        any?(unbound?, seq.list)
-      typeDecl? n =>
-        td := n :: TD
-        unbound? td.expr or unbound? td.type
-      typeOrigin? n =>
-        to := n :: TO
-        unbound? to.expr or unbound? to.type
-      typeGuard? n =>
-        tg := n :: TG
-        unbound? tg.expr or unbound? tg.type
-      typeHas? n =>
-        te := n :: TEH
-        unbound? te.expr or unbound? te.type
-      typeIs? n =>
-        te := n :: TEI
-        unbound? te.expr or unbound? te.type
-      typeValue? n =>
-        tv := n :: TVL
-        unbound? tv.type or unbound? tv.value
-
-      fail ["unbound?: case not handled for" :: PF, n :: PF]
-      error ""
-
-    containsWildcard? n ==
-      import List(N)
-
-      emptyNode? n => false
-      integer? n => false
-      string? n => false
-      symbol? n => false
-      marker? n => true
-      typeVar? n => false
-
-      apply? n =>
-        app := n :: APP
-        any?(containsWildcard?, [app.function, :app.args])
-      recordType? n =>
-        rt := n :: RT
-        any?(containsWildcard?, [[f] for f in fields rt])
-      unionType? n =>
-        ut := n :: UT
-        any?(containsWildcard?, variants ut)
-      mappingType? n =>
-        mt := n :: MT
-        any?(containsWildcard?, [mt.result, :mt.args])
-      sequence? n =>
-        seq := n :: SEQ
-        any?(containsWildcard?, seq.list)
-      typeDecl? n =>
-        td := n :: TD
-        containsWildcard? td.expr or containsWildcard? td.type
-      typeOrigin? n =>
-        to := n :: TO
-        containsWildcard? to.expr or containsWildcard? to.type
-      typeValue? n =>
-        tv := n :: TVL
-        containsWildcard? tv.type or containsWildcard? tv.value
-
-      fail ["containsWildcard?: case not handled for" :: PF, n :: PF]
-      error ""
-
-    freeVars n ==
-      import List(N)
-
-      emptyNode? n => []
-      integer? n => []
-      symbol? n => []
-      string? n => []
-
-      apply? n =>
-        app := n :: APP
-        removeDuplicates("concat"/[freeVars i for i in [app.function, :app.args]])
-      mappingType? n =>
-        mt := n :: MT
-        removeDuplicates("concat"/[freeVars i for i in [mt.result, :mt.args]])
-      recordType? n =>
-        rt := n :: RT
-        removeDuplicates("concat"/[freeVars [i] for i in fields rt])
-      unionType? n =>
-        ut := n :: UT
-        removeDuplicates("concat"/[freeVars i for i in variants ut])
-      typeVar? n => [n :: TV]
-      typeDecl? n =>
-        td := n :: TD
-        removeDuplicates(concat(freeVars td.type, freeVars td.expr))
-      typeOrigin? n =>
-        to := n :: TO
-        removeDuplicates(concat(freeVars to.type, freeVars to.expr))
-
-      fail ["freeVars: case not handled for" :: PF, n :: PF]
-      error ""
-
-    refListRec(n : N) : List(NR) ==
-      import List(N)
-
-      emptyNode? n => []
-      symbol? n => []
-      nodeRef? n => [n :: NR]
-      
-      apply? n =>
-        app := n :: APP
-        "concat"/[refListRec n for n in [app.function, :app.args]]
-      assign? n =>
-        a := n :: ASS
-        concat(refListRec a.lval, refListRec a.rval)
-      condExpr? n =>
-        c := n :: CE
-        concat [refListRec c.cond, refListRec c.truebr, refListRec c.falsebr]
-      sequence? n =>
-        s := n :: SEQ
-        "concat"/[refListRec n for n in s.list]
-      typeDecl? n =>
-        td := n :: TD
-        concat(refListRec td.type, refListRec td.expr)
-      typeOrigin? n =>
-        to := n :: TO
-        concat(refListRec to.type, refListRec to.expr)
-
-      fail ["refListRec: case not handled for" :: PF, n :: PF]
-      error ""
-
-    refList n ==
-      removeDuplicates(refListRec n)
+    occurs? (tv, n) == walk(n) $ SpadNodeTypeVarOccurs(tv)
+    unbound? n == walk(n) $ SpadNodeUnbound
+    containsWildcard? n == walk(n) $ SpadNodeContainsWildcard
+    freeVars n == collect(n) $ SpadNodeCollectFreeVars
+    refList n == collect(n) $ SpadNodeCollectNodeRefs
 
     substitute(n : N, var : TV, term : N) : N ==
       emptyNode? n => n

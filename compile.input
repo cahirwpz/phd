@@ -3,9 +3,11 @@
 )compile ParserTools.spad
 )compile SpadNode.spad
 )compile SpadNodeFactory.spad
+)compile SpadNodeWalk.spad
+)compile SpadNodePredicate.spad
+)compile SpadNodeCollect.spad
+)compile SpadNodeRewrite.spad
 )compile SpadNodeTools.spad
-)compile SpadNodeWalkerCategory.spad
-)compile SpadNodeRewriterCategory.spad
 )compile SpadDatabase.spad
 )compile SpadLogic.spad
 )compile SpadTypeUnifier.spad

@@ -1,8 +1,6 @@
 )abbrev package STREMREF SpadTreeRemoveReferences
-SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SNRC == Implementation where
+SpadTreeRemoveReferences(find : (PI, PI) -> TN) : SNR == Implementation where
 )include SpadTypeDefs.inc
-
-  SNRC ==> SpadNodeRewriterCategory 
 
   Implementation ==> add
     import Logger('Fill)

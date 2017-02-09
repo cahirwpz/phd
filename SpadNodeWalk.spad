@@ -1,5 +1,5 @@
-)abbrev category SNWALKC SpadNodeWalkerCategory
-SpadNodeWalkerCategory(R : Type) : Category == Definition where
+)abbrev category SNWALK SpadNodeWalk
+SpadNodeWalk(R : Type) : Category == Definition where
 )include SpadTypeDefs.inc
 
   Definition ==> with

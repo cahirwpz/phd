@@ -1,0 +1,29 @@
+)abbrev category SNCOLL SpadNodeCollect
+SpadNodeCollect(R : BasicType) : Category == Definition where
+)include SpadTypeDefs.inc
+
+  Definition ==> SpadNodeWalk(List(R)) with
+      collect : N -> List(R)
+    add
+      walk (a : APP) == concat [walk x for x in [a.function, :a.args]]
+      walk (a : ASS) == concat (walk a.lval, walk a.rval)
+      walk (mt : MT) == concat [walk x for x in [mt.result, :mt.args]]
+      walk (rt : RT) == concat [walk f for f in fields rt]
+      walk (ut : UT) == concat [walk v for v in variants ut]
+      walk (s : SEQ) == concat [walk e for e in s.list]
+      walk (te : TD) == concat (walk te.expr, walk te.type)
+      walk (te : TG) == concat (walk te.expr, walk te.type)
+      walk (te : TEH) == concat (walk te.expr, walk te.type)
+      walk (te : TEI) == concat (walk te.expr, walk te.type)
+      walk (te : TO) == concat (walk te.expr, walk te.type)
+      walk (tv : TVL) == concat (walk tv.type, walk tv.value)
+      walk (m : MR) == []
+      walk (m : TV) == []
+
+      walk (f : DoubleFloat) == []
+      walk (i : Integer) == []
+      walk (s : String) == []
+      walk (s : Symbol) == []
+      walk () == []
+
+      collect (n : N) : List(R) == removeDuplicates walk(n)
