@@ -1,9 +1,23 @@
 )abbrev package SNTVO SpadNodeTypeVarOccurs
-SpadNodeTypeVarOccurs(tv' : TV) : SNP == Implementation where
+SpadNodeTypeVarOccurs() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
+  Exports ==> SNP with
+    occurs? : (N, TV) -> Boolean
+    occurs? : (N, List(TV)) -> Boolean
+
   Implementation ==> add
-    walk (tv : TV) == tv = tv'
+    ctx : List(TV) := []
+
+    walk (tv : TV) == member?(tv, ctx)
+
+    occurs? (n : N, tv : TV) ==
+      ctx := [tv]
+      walk n
+
+    occurs? (n : N, tvs : List(TV)) ==
+      ctx := tvs
+      walk n
 
 )abbrev package SNUNB SpadNodeUnbound
 SpadNodeUnbound() : SNP == Implementation where
@@ -20,24 +34,73 @@ SpadNodeContainsWildcard() : SNP == Implementation where
   Implementation ==> add
     walk (mr : MR) == true
 
-)abbrev package SNSYMRPL SpadNodeSymbolReplace
-SpadNodeSymbolReplace(ctx : CTX) : SNR == Implementation where
-  CTX ==> Table(Symbol, N)
+)abbrev package SNSSUB SpadNodeSymbolSubstitute
+SpadNodeSymbolSubstitute() : Exports == Implementation where
+  SUBS ==> Table(Symbol, N)
 
 )include SpadTypeDefs.inc
 
+  Exports ==> SNR with
+    substitute : (N, Symbol, N) -> N
+    substitute : (N, SUBS) -> N
+
   Implementation ==> add
+    ctx : SUBS := [[]]
+
     walk (s : Symbol) : N ==
       r := search(s, ctx)
       r case "failed" => [s]
       r
+
+    substitute (n, sym, term) ==
+      ctx := [[[sym, term]]]
+      walk n
+
+    substitute (n, subs) ==
+      ctx := subs
+      walk n
 
-)abbrev package SNTVSM SpadNodeTypeVarSetMajor
-SpadNodeTypeVarSetMajor(major : NNI) : SNR == Implementation where
+)abbrev package SNTVSUB SpadNodeTypeVarSubstitute
+SpadNodeTypeVarSubstitute() : Exports == Implementation where
+  SUBS ==> Table(TV, N)
+
 )include SpadTypeDefs.inc
 
+  Exports ==> SNR with
+    substitute : (N, TV, N) -> N
+    substitute : (N, SUBS) -> N
+
   Implementation ==> add
-    walk (tv : TV) : N == nodeTypeVar(major, tv.minor)
+    ctx : SUBS := [[]]
+
+    walk (tv : TV) : N ==
+      r := search(tv, ctx)
+      r case "failed" => [tv]
+      r
+
+    substitute (n, var, term) ==
+      ctx := [[[var, term]]]
+      walk n
+
+    substitute (n, subs) ==
+      ctx := subs
+      walk n
+
+)abbrev package SNTVSM SpadNodeTypeVarSetMajor
+SpadNodeTypeVarSetMajor() : Exports == Implementation where
+)include SpadTypeDefs.inc
+
+  Exports ==> SNR with
+    setMajor : (N, NNI) -> N
+
+  Implementation ==> add
+    ctx : NNI := 0
+
+    walk (tv : TV) : N == nodeTypeVar(ctx, tv.minor)
+
+    setMajor (n : N, major : NNI) : N ==
+      ctx := major
+      walk n
 
 )abbrev package SNCFV SpadNodeCollectFreeVars
 SpadNodeCollectFreeVars() : SpadNodeCollect(TV) == Implementation where
@@ -65,8 +128,14 @@ SpadNodeTools() : Exports == Implementation where
     freeVars : N -> List(TV)
     refList : N -> List(NR)
 
+    substitute : (N, Symbol, N) -> N
+    substitute : (N, Table(Symbol, N)) -> N
+
     substitute : (N, TV, N) -> N
+    substitute : (N, Table(TV, N)) -> N
     substitute : (N, SUBS) -> N
+
+    setMajor : (N, NNI) -> N
 
   Implementation ==> add
     import Printer
@@ -74,98 +143,29 @@ SpadNodeTools() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
 
-    occurs? (tv, n) == walk(n) $ SpadNodeTypeVarOccurs(tv)
+    occurs? (tv, n) == occurs?(n, tv) $ SpadNodeTypeVarOccurs
     unbound? n == walk(n) $ SpadNodeUnbound
     containsWildcard? n == walk(n) $ SpadNodeContainsWildcard
     freeVars n == collect(n) $ SpadNodeCollectFreeVars
     refList n == collect(n) $ SpadNodeCollectNodeRefs
 
+    substitute(n : N, sym : Symbol, term : N) : N ==
+      substitute(n, sym, term) $ SpadNodeSymbolSubstitute
+
+    substitute(n : N, subs : Table(Symbol, N)) : N ==
+      substitute(n, subs) $ SpadNodeSymbolSubstitute
+
     substitute(n : N, var : TV, term : N) : N ==
-      emptyNode? n => n
-      integer? n => n
-      string? n => n
-      symbol? n => n
-      marker? n => n
+      substitute(n, var, term) $ SpadNodeTypeVarSubstitute
 
-      apply? n =>
-        app := n :: APP
-        lst := [stripType substitute(k, var, term) for k in [app.function, :app.args]]
-        nodeApp(first lst, rest lst)
-      assign? n =>
-        ass := n :: ASS
-        nodeAssign(substitute(ass.lval, var, term),
-                   substitute(ass.rval, var, term))
-      condExpr? n =>
-        ce := n :: CE
-        cond := substitute(ce.cond, var, term)
-        truebr := substitute(ce.truebr, var, term)
-        falsebr := substitute(ce.falsebr, var, term)
-        nodeCondExpr(cond, truebr, falsebr)
-      function? n =>
-        fn := n :: FN
-        args := [substitute(arg, var, term) for arg in fn.args]
-        type := substitute(fn.type, var, term)
-        body := substitute(fn.body, var, term)
-        nodeFun(fn.name, args, type, body)
-      import? n =>
-        im := n :: IM
-        nodeImport(substitute(im.type, var, term))
-      mappingType? n =>
-        mt := n :: MT
-        lst := [substitute(k, var, term) for k in [mt.result, :mt.args]]
-        nodeMappingType(rest lst, first lst)
-      recordType? n =>
-        rt := n :: RT
-        lst := [[substitute(f.expr, var, term), 
-                 substitute(f.type, var, term)]$TD for f in fields rt]
-        nodeRecordType(lst)
-      unionType? n =>
-        ut := n :: UT
-        nodeUnionType [substitute(v, var, term) for v in variants ut]
-      sequence? n =>
-        seq := n :: SEQ
-        nodeSeq(seq.kind, [substitute(t, var, term) for t in seq.list])
-      typeInfo? n =>
-        ti := n :: TI
-        nodeTypeInfo(ti.name,
-                     [substitute([arg], var, term) :: TD for arg in ti.args],
-                     [substitute(hasItem, var, term) for hasItem in ti.hasList],
-                     [substitute(c, var, term) for c in ti.constraints],
-                     substitute(ti.superType, var, term),
-                     substitute([ti.body], var, term) :: SEQ)
-      typeDecl? n =>
-        td := n :: TD
-        nodeTypeDecl(substitute(td.expr, var, term),
-                     substitute(td.type, var, term))
-      typeGuard? n =>
-        tg := n :: TG
-        nodeTypeGuard(substitute(tg.expr, var, term),
-                      substitute(tg.type, var, term))
-      typeHas? n =>
-        te := n :: TEH
-        nodeTypeHas(substitute(te.expr, var, term),
-                    substitute(te.type, var, term))
-      typeIs? n =>
-        te := n :: TEI
-        nodeTypeIs(substitute(te.expr, var, term),
-                   substitute(te.type, var, term))
-      typeOrigin? n =>
-        to := n :: TO
-        nodeTypeOrigin(substitute(to.expr, var, term),
-                       substitute(to.type, var, term))
-      typeValue? n =>
-        tv := n :: TVL
-        nodeTypeValue(substitute(tv.type, var, term),
-                      substitute(tv.value, var, term))
-      typeVar? n =>
-        if (n :: TV) = var then term else n
-
-      fail ["substitute: case not handled for" :: PF, n :: PF]
-      error ""
+    substitute(n : N, subs : Table(TV, N)) : N ==
+      substitute(n, subs) $ SpadNodeTypeVarSubstitute
 
     substitute(n : N, subs : SUBS) : N ==
       for s in entries subs repeat
-        var := s.key
-        for term in s.entry repeat
-          n := substitute(n, var, term)
+        empty? s.entry => "iterate"
+        n := substitute(n, s.key, first s.entry)
       n
+
+    setMajor (n : N, major : NNI) : N ==
+      setMajor(n, major) $ SpadNodeTypeVarSetMajor
