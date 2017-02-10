@@ -7,18 +7,35 @@ SpadNodePredicate() : Category == Definition where
 
     walk (a : APP) == any?(walk, [a.function, :a.args])
     walk (a : ASS) == any?(walk, [a.lval, a.rval])
+    walk (sc : SC) == walk sc.expr or walk sc.type
+    walk (ce : CE) == walk ce.cond or walk ce.truebr or walk ce.falsebr
+    walk (fn : FN) == any?(walk, fn.args) or walk fn.type or walk fn.body
+    walk (im : IM) == walk im.type
+    walk (m : MR) == false
     walk (mt : MT) == any?(walk, [mt.result, :mt.args])
+    walk (nr : NR) == false
     walk (rt : RT) == any?(walk, fields rt)
     walk (ut : UT) == any?(walk, variants ut)
     walk (s : SEQ) == any?(walk, s.list)
+    walk (te : TC) == walk te.expr or walk te.type
     walk (te : TD) == walk te.expr or walk te.type
     walk (te : TG) == walk te.expr or walk te.type
     walk (te : TEH) == walk te.expr or walk te.type
     walk (te : TEI) == walk te.expr or walk te.type
     walk (te : TO) == walk te.expr or walk te.type
+    walk (te : TS) == walk te.expr or walk te.type
     walk (tv : TVL) == walk tv.type or walk tv.value
     walk (tv : TV) == false
-    walk (m : MR) == false
+
+    walk (ft : FT) ==
+      any?(walk, ft.args) or walk ft.type or walk ft.extends or walk ft.capsule
+
+    walk (it : IT) == walk it.var or walk it.seq
+
+    walk (seg : SEG) == walk seg.start or walk seg.end
+
+    walk (lp : LP) ==
+      any?(walk, lp.itors) or any?(walk, lp.guards) or walk lp.body
 
     walk (f : DoubleFloat) == false
     walk (i : Integer) == false

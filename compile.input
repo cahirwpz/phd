@@ -11,6 +11,7 @@
 )compile DaaseDatabase.spad
 )compile SpadLogic.spad
 )compile SpadTypeUnifier.spad
+)compile SpadTypeDatabase.spad
 )compile SpadTypeEvaluator.spad
 )compile SpadEnvironment.spad
 )compile SpadTypeTree.spad

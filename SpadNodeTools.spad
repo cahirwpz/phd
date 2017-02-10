@@ -19,6 +19,13 @@ SpadNodeTypeVarOccurs() : Exports == Implementation where
       ctx := tvs
       walk n
 
+)abbrev package SNHFV SpadNodeHasFreeVars
+SpadNodeHasFreeVars() : SNP == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    walk (tv : TV) == true
+
 )abbrev package SNUNB SpadNodeUnbound
 SpadNodeUnbound() : SNP == Implementation where
 )include SpadTypeDefs.inc
@@ -124,6 +131,7 @@ SpadNodeTools() : Exports == Implementation where
     occurs? : (TV, N) -> Boolean
     unbound? : N -> Boolean
     containsWildcard? : N -> Boolean
+    hasFreeVars? : N -> Boolean
 
     freeVars : N -> List(TV)
     refList : N -> List(NR)
@@ -149,6 +157,7 @@ SpadNodeTools() : Exports == Implementation where
     occurs? (tv, n) == occurs?(n, tv) $ SpadNodeTypeVarOccurs
     unbound? n == walk(n) $ SpadNodeUnbound
     containsWildcard? n == walk(n) $ SpadNodeContainsWildcard
+    hasFreeVars? n == walk(n) $ SpadNodeHasFreeVars
     freeVars n == collect(n) $ SpadNodeCollectFreeVars
     refList n == collect(n) $ SpadNodeCollectNodeRefs
 

@@ -1,0 +1,191 @@
+)abbrev package FLATDBT FlattenDatabaseType
+FlattenDatabaseType() : SNR == Implementation where
+)include SpadTypeDefs.inc
+
+  Implementation ==> add
+    import SpadNode
+    import SpadNodeFactory
+
+    walk (app : APP) : N ==
+      app.function = ['ATTRIBUTE] => walk(first app.args)
+      nodeApp(walk app.function, map(walk, app.args))
+
+    addTypeGuard(n : N, cond : N) : N ==
+      typeGuard? n =>
+        tg : TG := coerce(n)
+        nodeTypeGuard(tg.expr, nodeApp(['and], [cond, tg.type]))
+      nodeTypeGuard(n, cond)
+
+    listOf(n : N) : List(N) ==
+      emptyNode? n => []
+      sequence? n =>
+        s : SEQ := coerce(n)
+        s.list
+      [n]
+
+    walk (cn : CE) : N ==
+      c := walk cn.cond
+      nc := nodeApp(['not], [c])
+
+      tl := [addTypeGuard(n, c) for n in listOf(walk cn.truebr)]
+      fl := [addTypeGuard(n, nc) for n in listOf(walk cn.falsebr)]
+
+      nodeSeq("Body", concat(tl, fl))
+
+    walk (seq : SEQ) : N ==
+      l : List(N) := []
+      for n in seq.list repeat
+        n := walk n
+        emptyNode? n => "iterate"
+        sequence? n =>
+          s : SEQ := coerce(n)
+          l := concat(l, s.list)
+        l := concat!(l, n)
+      #l = 1 and seq.kind = "Body" => first l
+      nodeSeq(seq.kind, l)
+
+)abbrev domain STDB SpadTypeDatabase
+SpadTypeDatabase() : Exports == Implementation where
+)include SpadTypeDefs.inc
+
+  CACHE ==> HashTable(Symbol, TI, "UEQUAL")
+
+  Exports ==> CoercibleTo(PF) with
+    typeCacheInit : () -> Void
+    typeCacheList : () -> List(Symbol)
+    invalidateType : Symbol -> Void
+
+    fetchType : Symbol -> TI
+    makeType : FT -> TI
+
+  Implementation ==> add
+    import SpadNode
+    import SpadNodeFactory
+    import SpadNodeTools
+    import SpadTypeUnifier
+    import DaaseDatabase
+    import DaaseCtorModeMap
+    import Logger('TypeDB)
+    import Printer
+
+    cache : CACHE := [[]]
+
+    mkvar(s1 : String, s2 : String) : Symbol ==
+      concat(s1, s2)$String :: Symbol
+
+    typeCacheInit () ==
+      cache := [[]]
+
+    typeCacheList() == keys cache
+
+    invalidateType(name : Symbol) ==
+      eq? (r : Record(key : Symbol, entry : TI)) : Boolean == r.key = name
+      remove!(eq?, cache)
+
+    fromDatabase (t : Symbol) : Union(TI, "failed") ==
+      debug ["fromDatabase :" :: PF, bold(t :: PF)]
+
+      cmm! := safeGetCtorModeMap(t)
+      cmm! case "failed" => "failed"
+      cmm := cmm! :: DaaseCtorModeMap
+
+      cat? := (cmm.type = nodeApp(['Category], []))
+
+      -- Some symbols will be rewritten to type variables.
+      ctx := [[]]$Table(Symbol, N)
+      -- "%" => "%0"
+      ctx("%" :: Symbol) := typeVar()
+      -- "#1" => "%1", "#2" => "%2", ...
+      for i in 1..#cmm.args repeat
+        s := mkvar("#", string i)
+        v := typeVar(i :: PI)
+        ctx(s) := v
+      -- "t#1" => "%1", "t#2" => "%2", ...
+      for arg in cmm.args for i in 1.. repeat
+        s := mkvar("t", string(arg.expr :: Symbol))
+        v := typeVar(i :: PI)
+        ctx(s) := v
+
+      types := [substitute(arg.type, ctx) for arg in cmm.args] 
+      args := [[typeVar(i :: PI), typ]$TD for typ in types for i in 1..]
+      body := (cat? => getCtorCategory(t); cmm.type)
+
+      body := nodeSeq((cat? => "Join"; "Domain"),
+                      (sequence? body => (body :: SEQ).list; [body]))
+      body := substitute(body, ctx)
+      body := walk(body)$FlattenDatabaseType
+
+      [cmm.name, args, [], [], getSuperDomain(t), body :: SEQ]
+
+    fromFunctor (ft : FT) : Union(TI, "failed") ==
+      debug ["fromFunctor:" :: PF, bold(ft :: PF)]
+
+      -- Some symbols will be rewritten to type variables.
+      ctx := [[]]$Table(Symbol, N)
+      for arg in ft.args for i in 1.. repeat
+        s := (arg :: TD).expr :: Symbol
+        v := typeVar(i :: PI)
+        ctx(s) := v
+
+      types := [substitute(arg.type, ctx) for arg in ft.args] 
+      args := [[typeVar(i :: PI), t]$TD for t in types for i in 1..]
+
+      body := 
+        ft.type = categoryType() => ft.extends
+        nodeSeq("Domain", (ft.type :: SEQ).list)
+      body := substitute(body, ctx)
+      body := walk(body)$FlattenDatabaseType
+
+      [ft.name, args, [], [], getSuperDomain(ft.name), body :: SEQ]
+
+    fetchType(name : Symbol) : TI ==
+      ti? := search(name, cache)
+      ti? case TI => ti? :: TI
+      cache(name) := fromDatabase(name) :: TI
+
+    makeType(ft : FT) : TI ==
+      ti := fromFunctor(ft) :: TI
+      cache(ft.name) := ti
+
+)abbrev package STDBT SpadTypeDatabaseTest
+SpadTypeDatabaseTest() : Exports == Implementation where
+)include SpadTypeDefs.inc
+
+  Exports ==> with
+    test1 : () -> Void
+    test2 : () -> Void
+
+  Implementation ==> add
+    import Printer
+    import SpadNodeFactory
+    import SpadTypeDatabase
+    import MainLogger
+
+    initTest : () -> Void
+    initTest ==
+      loggerDefaultLevel "info"
+      loggerLevel('Parser, "notice")
+      resetTime()
+      typeCacheInit()
+
+    dumpTypeCache : () -> Void
+    dumpTypeCache ==
+      println([bold("Types in cache:" :: PF),
+               bracket [app :: PF for app in typeCacheList()]])
+
+    test1 ==
+      initTest()
+
+      -- simple DAASE lookup
+      println (fetchType('unitsKnown) :: PF)
+      println (fetchType('SetCategory) :: PF)
+      println (fetchType('DictionaryOperations) :: PF)
+      println (fetchType('UnivariatePuiseuxSeries) :: PF)
+
+      println (fetchType('Integer) :: PF)
+      println (fetchType('List) :: PF)
+      println (fetchType('Fraction) :: PF)
+      println (fetchType('Expression) :: PF)
+      println (fetchType('TwoDimensionalArrayCategory) :: PF)
+
+      dumpTypeCache()
