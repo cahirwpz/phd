@@ -92,7 +92,7 @@ SpadTypeNode() : Exports == Implementation where
                   m_state : Union("finished", "pending", "poisoned", "killed"))
 
     construct (i, j, n) ==
-      [[i, j]$NR, n, [], emptyNode(), new(), "pending"]$Rep
+      [[i, j]$NR, n, [], null, new(), "pending"]$Rep
 
     elt (x, "index") == x.m_index
     elt (x, "node") == x.m_node
@@ -131,7 +131,7 @@ SpadTypeNode() : Exports == Implementation where
         c := n :: CE
         fs : List(PF) :=
           ["if" :: PF, c.cond :: PF, "then" :: PF, c.truebr :: PF]
-        if not emptyNode? c.falsebr then
+        if not null? c.falsebr then
           fs := [:fs, "else" :: PF, c.falsebr :: PF]
         spaces fs
       function? n =>
@@ -139,7 +139,7 @@ SpadTypeNode() : Exports == Implementation where
         f.name case Symbol =>
           fargs := [arg :: PF for arg in f.args]
           rtype : List(PF) :=
-            emptyNode? f.type => []
+            null? f.type => []
             [":" :: PF, f.type :: PF]
           spaces([f.name :: Symbol :: PF, paren fargs, :rtype,
                   "==" :: PF, f.body :: PF])
@@ -183,7 +183,7 @@ SpadTypeNode() : Exports == Implementation where
       t := bold (x.m_type :: PF)
       if typeVar? x.m_type then
         t := red t
-      if emptyNode? x.m_type then
+      if null? x.m_type then
         t := bold yellow("%none" :: PF)
       t := indent(11, t)
       not empty? x.m_rules =>
@@ -410,7 +410,7 @@ SpadTypeTree() : Exports == Implementation where
       listPostOrder (x.m_nodes.i)
 
     unknownType? (terms : List(N)) : Boolean ==
-      #terms = 1 and emptyNode?(first terms)
+      #terms = 1 and null?(first terms)
 
     undefinedType? (terms : List(N)) : Boolean ==
       #terms = 1 and undefinedType?(first terms)
@@ -437,7 +437,7 @@ SpadTypeTree() : Exports == Implementation where
       killNode!((x.m_nodes)(tn.index.major), tn)
 
     registerNode! (x : %, tn : TN) : Void ==
-      (x.m_typevars)(tn.type :: TV) := [emptyNode()]
+      (x.m_typevars)(tn.type :: TV) := [null]
 
     unregisterNode! (x : %, tn : TN, final : N) : Void ==
       tv := tn.type :: TV
@@ -505,7 +505,7 @@ SpadTypeTree() : Exports == Implementation where
           -- Remove duplicates.
           member?(t, ts) => "iterate"
           -- Avoid ill-formed types (for now only unions).
-          emptyNode? t => "iterate"
+          null? t => "iterate"
           ts := [t, :ts]
         tv.entry := reverse ts
 

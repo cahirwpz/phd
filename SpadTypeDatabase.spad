@@ -17,7 +17,7 @@ FlattenDatabaseType() : SNR == Implementation where
       nodeTypeGuard(n, cond)
 
     listOf(n : N) : List(N) ==
-      emptyNode? n => []
+      null? n => []
       sequence? n =>
         s : SEQ := coerce(n)
         s.list
@@ -36,7 +36,7 @@ FlattenDatabaseType() : SNR == Implementation where
       l : List(N) := []
       for n in seq.list repeat
         n := walk n
-        emptyNode? n => "iterate"
+        null? n => "iterate"
         sequence? n =>
           s : SEQ := coerce(n)
           l := concat(l, s.list)

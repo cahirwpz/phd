@@ -55,4 +55,4 @@ SpadNodeRewrite() : Category == Definition where
       walk (s : Symbol) == [s]
       walk (i : Integer) == [i]
       walk (f : DoubleFloat) == [f]
-      walk () == emptyNode()
+      walk () == null

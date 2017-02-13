@@ -205,7 +205,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
       not limitNodeType!(ctx, cn, [booleanType]) => false
 
       tn := node(ctx, r.truebr :: NR) -- true branch node
-      emptyNode? r.falsebr =>
+      null? r.falsebr =>
         hasUndefinedType?(ctx, tn) =>
           bindNode!(ctx, n, undefinedType)
           bindNode!(ctx, tn, undefinedType)
@@ -308,7 +308,7 @@ SpadTypeTreeChecker() : Exports == Implementation where
     -- evaluates single rule; note that it can happen that nothing was changed
     -- even if no type error was detected (result "true" means yes or maybe)
     evalFormula(ctx : CTX, f : N, n : TN) : Boolean ==
-      emptyNode? f => true
+      null? f => true
       nodeRef? f => true
 
       debug (["Running type inference for" :: PF, bold(n.index :: PF),

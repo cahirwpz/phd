@@ -166,7 +166,7 @@ SpadTypeUnifier() : Exports == Implementation where
           ++ Sometimes, by applying substitutions, unions will become
           ++ ill-formed (i.e. contain two fields of same type),
           ++ filter out such cases.
-          emptyNode? t => "iterate"
+          null? t => "iterate"
           terms := [t, :terms]
           subsList := [ss, :subsList]
       ++ Remove wildcard if we have more than one match.

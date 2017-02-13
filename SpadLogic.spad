@@ -26,8 +26,8 @@ SpadLogic() : Exports == Implementation where
           nodeApp(['and], [invert arg for arg in app.args])
         app.function = ['not] =>
           n
-        emptyNode()
-      emptyNode()
+        null
+      null
 
     extractPredicates (n : N) : List(N) ==
       typeHas? n or typeIs? n => [n]

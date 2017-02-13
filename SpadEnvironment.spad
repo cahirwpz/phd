@@ -53,7 +53,7 @@ SpadEnvironment() : Exports == Implementation where
     addTypeOf (key : EKEY, type : N, env : %) : Void ==
       val := search(key, env)
       val case "failed" =>
-        env(key) := [[type], emptyNode(), []]
+        env(key) := [[type], null, []]
       val case EVAL =>
         member?(type, val.types) => env
         val.types := [type, :val.types]
@@ -61,7 +61,7 @@ SpadEnvironment() : Exports == Implementation where
     addFactAbout (key : EKEY, fact : N, env : %) : Void ==
       val := search(key, env)
       val case "failed" =>
-        env(key) := [[], emptyNode(), [fact]]
+        env(key) := [[], null, [fact]]
       val case EVAL =>
         member?(fact, val.facts) => env
         val.facts := [fact, :val.facts]
@@ -69,7 +69,7 @@ SpadEnvironment() : Exports == Implementation where
     importDomain (ti : TI, dom : N, env : %) : Void ==
       for n in ti.body.list repeat
         n' := substitute(n, typeVar() :: TV, dom)
-        guard := emptyNode()
+        guard := null
         if typeGuard? n' then
           tg := n' :: TG
           n' := tg.expr
@@ -79,7 +79,7 @@ SpadEnvironment() : Exports == Implementation where
           n' := to.expr
         td := n' :: TD
         n' := nodeTypeOrigin(td.type, dom)
-        if not emptyNode? guard then
+        if not null? guard then
           n' := nodeTypeGuard(n', guard)
         addTypeOf(td.expr :: Symbol, n', env)
 
@@ -136,7 +136,7 @@ SpadEnvironment() : Exports == Implementation where
       env
 
     reset! (env : %, key : EKEY) : % ==
-      env(key) := [[], emptyNode(), []]
+      env(key) := [[], null, []]
 
     flatten (env : %) : % ==
       empty? env => new()
@@ -163,7 +163,7 @@ SpadEnvironment() : Exports == Implementation where
           rv := right(k) :: EVAL
           ts := removeDuplicates concat(lv.types, rv.types)
           fs := removeDuplicates concat(lv.facts, rv.facts)
-          env(k) := [ts, emptyNode(), fs]
+          env(k) := [ts, null, fs]
       env
 
     coerce (key : EKEY) : PF ==
@@ -223,7 +223,7 @@ SpadEnvironmentTest() : Exports == Implementation where
       resetTime()
 
       env := new()
-      dom0 := [['Polynomial], [emptyNode()]] $ APP
+      dom0 := [['Polynomial], [null]] $ APP
       dom1 := [['Polynomial], [nodeApp(['Integer], [])]] $ APP
       dom2 := [['Integer], []] $ APP
       addDomain(dom0, env)

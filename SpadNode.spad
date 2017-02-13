@@ -48,14 +48,13 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   construct : String -> %
   construct : Symbol -> %
 
-  emptyNode : () -> %
+  null : constant -> %
 
   apply? : % -> Boolean
   assign? : % -> Boolean
   capsule? : % -> Boolean
   case? : % -> Boolean
   condExpr? : % -> Boolean
-  emptyNode? : % -> Boolean
   float? : % -> Boolean
   function? : % -> Boolean
   functor? : % -> Boolean
@@ -90,6 +89,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   typeVar? : % -> Boolean
   unionType? : % -> Boolean
   where? : % -> Boolean
+  null? : % -> Boolean
 
   value? : % -> Boolean
   true? : % -> Boolean
@@ -289,7 +289,7 @@ SpadMappingType(N : SpadNodeCategory) : Exports == Implementation where
 
     coerce n ==
       coerceType (t : N) : PF ==
-        if emptyNode? t then "?" :: PF else t :: PF
+        if null? t then "?" :: PF else t :: PF
       ts := [coerceType t for t in n.args]
       src := (#ts = 1 and not typeDecl? n.args.1 => first ts; paren ts)
       spaces [src, "->" :: PF, coerceType n.result]
@@ -317,7 +317,7 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
         -- (: field Type)
         [parse(ex.2)$N, parseNonNull ex.3]
       symbol? ex =>
-        [[symbol ex], emptyNode()]
+        [[symbol ex], null]
       signature? ex =>
         -- (SIGNATURE name (RetType Arg1Type Arg2Type ...))
         -- (SIGNATURE name Type constant)
@@ -356,7 +356,7 @@ SpadTypeDecl(N : SpadNodeCategory) : Exports == Implementation where
       convert [convert ("SIGNATURE" :: Symbol), convert x.expr, t]
 
     coerce n ==
-      typeName := (emptyNode? n.type => "?" :: PF; n.type :: PF)
+      typeName := (null? n.type => "?" :: PF; n.type :: PF)
       spaces [n.expr :: PF, ":" :: PF, typeName]
 
 )abbrev domain SRTYPE SpadRecordType
@@ -666,19 +666,19 @@ SpadSegment(N : SpadNodeCategory) : Exports == Implementation where
     parse ex ==
       -- (SEGMENT m n) -> 'm..n'
       -- (SEGMENT m)   -> 'm..'
-      #ex = 2 => [parse ex.2, emptyNode]
+      #ex = 2 => [parse ex.2, null]
       #ex = 3 => [parse ex.2, parse ex.3]
       error "unrecognized SEGMENT node"
 
     copy x == [copy x.start, copy x.end]
 
     convert x ==
-      emptyNode? x.end => convert [convert 'SEGMENT, convert x.start]
+      null? x.end => convert [convert 'SEGMENT, convert x.start]
       convert [convert 'SEGMENT, convert x.start, convert x.end]
 
     coerce n ==
       form : List(PF) := [n.start :: PF, ".." :: PF]
-      if not emptyNode? n.end then
+      if not null? n.end then
         form := [:form, n.end :: PF]
       spaces form
 
@@ -1028,7 +1028,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
       convert ex
 
     coerce n ==
-      ls := [e :: PF for e in n.list | not emptyNode? e]
+      ls := [e :: PF for e in n.list | not null? e]
       empty? ls => "()" :: PF
       n.kind case "Join" =>
         #n.list = 1 => ls.1
@@ -1080,9 +1080,9 @@ SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
       (c, l, r) := (ex.2, ex.3, ex.4)
       nobranch? l =>
         pc : N := parse (convert [convert '_not, c])
-        [pc, parse r, emptyNode()]
+        [pc, parse r, null]
       nobranch? r =>
-        [parse c, parse l, emptyNode()]
+        [parse c, parse l, null]
       [parse c, parse l, parse r]
 
     copy x == [copy x.cond, copy x.truebr, copy x.falsebr]
@@ -1091,7 +1091,7 @@ SpadCondExpr(N : SpadNodeCategory) : Exports == Implementation where
       fs : List(PF) :=
         [spaces ["if" :: PF, c.cond :: PF],
          pile ["then" :: PF, c.truebr :: PF]]
-      if not emptyNode? c.falsebr then
+      if not null? c.falsebr then
         fs := [:fs, pile ["else" :: PF, c.falsebr :: PF]]
       vconcat fs
 
@@ -1182,8 +1182,7 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
                  convert x.body])
 
     signature fn ==
-      types := [(typeDecl? arg => (arg :: TD).type; emptyNode())
-                for arg in fn.args]
+      types := [(typeDecl? arg => (arg :: TD).type; null) for arg in fn.args]
       [types, fn.type]$MT
 
     coerce n ==
@@ -1194,11 +1193,9 @@ SpadFunction(N : SpadNodeCategory) : Exports == Implementation where
       n.name case Symbol =>
         fname := n.name :: Symbol
         fargs := [arg :: PF for arg in n.args]
-        retType : List(PF) :=
-          emptyNode? n.type => []
-          [":" :: PF, n.type :: PF]
-        pile ([spaces [fname :: PF, paren fargs, :retType, "==" :: PF],
-               n.body :: PF])
+        retType : List(PF) := (null? n.type => []; [":" :: PF, n.type :: PF])
+        pile [spaces [fname :: PF, paren fargs, :retType, "==" :: PF],
+              n.body :: PF]
 
 )abbrev package SMACRO SpadMacro
 SpadMacro(N : SpadNodeCategory) : Exports == Implementation where
@@ -1322,7 +1319,7 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
       insideCapsule true
       caps := convert x.capsule
       insideCapsule false
-      if not emptyNode? x.extends then
+      if not null? x.extends then
         caps := convert [convert ("add" :: Symbol), convert x.extends, caps]
       convert([convert 'DEF,
                convert [convert x.name, :argNames],
@@ -1400,7 +1397,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
         package? x => "Package"
         error x.ti_body.kind
       st : List(PF) :=
-        emptyNode? x.ti_superType => []
+        null? x.ti_superType => []
         [bold("subtype of" :: PF), x.ti_superType :: PF]
       ct : List(PF) :=
         empty? x.ti_constraints => []
@@ -1698,8 +1695,8 @@ SpadNode() : Exports == Implementation where
       string? n => n.str
       CoerceError("String")
 
-    emptyNode () == ["$EmptyNode"]$Rep
-    emptyNode? n == n case empty
+    null == ["$EmptyNode"]$Rep
+    null? n == n case empty
 
     constructor? s ==
       sex : SExpression := GETDATABASE(s, 'ABBREVIATION)$Lisp
@@ -1742,7 +1739,7 @@ SpadNode() : Exports == Implementation where
     construct (n : Symbol) : % == [n]$Rep
 
     parseNonNull ex ==
-      null? ex => emptyNode()
+      null? ex => null
       parse ex
 
     parse ex ==
@@ -1797,7 +1794,7 @@ SpadNode() : Exports == Implementation where
       string? ex => [string ex]
       integer? ex => [integer ex]
       float? ex => [float ex]
-      null? ex => emptyNode()
+      null? ex => null
 
       fail ["Could not parse s-expression:" :: PF, convert(ex) :: PF]
       error ""
@@ -1837,7 +1834,7 @@ SpadNode() : Exports == Implementation where
       typeVar? n => (n :: TV) :: PF
       unionType? n => (n :: UT) :: PF
       where? n => (n :: SW) :: PF
-      emptyNode? n => "?" :: PF
+      null? n => "?" :: PF
 
       error "coerce $ SpadNode: variant not handled!"
 
@@ -1876,7 +1873,7 @@ SpadNode() : Exports == Implementation where
       typeVar? n => [copy(n :: TV)]
       unionType? n => [copy(n :: UT)]
       where? n => [copy(n :: SW)]
-      emptyNode? n => emptyNode()
+      null? n => null
 
       error "copy $ SpadNode: variant not handled!"
 
@@ -1915,7 +1912,7 @@ SpadNode() : Exports == Implementation where
       typeVar? n => convert(n :: TV)
       unionType? n => convert(n :: UT)
       where? n => convert(n :: SW)
-      emptyNode? n => convert []
+      null? n => convert []
 
       error "convert $ SpadNode: variant not handled!"
 
@@ -1933,7 +1930,7 @@ SpadNode() : Exports == Implementation where
     nodeMappingType (args, type) == [[args, type]$MT]
     nodeRecordType fields ==
       rt := [fields]$RT
-      rt case "failed" => emptyNode()
+      rt case "failed" => null
       [rt]
     nodeNodeRef (major, minor) == [[major, minor]$NR]
     nodeSeq (kind, list) == [[kind, list]$SEQ]
@@ -1953,7 +1950,7 @@ SpadNode() : Exports == Implementation where
     nodeSubType (type1, type2) == [[type1, type2]$ST]
     nodeUnionType variants ==
       ut := [variants]$UT
-      ut case "failed" => emptyNode()
+      ut case "failed" => null
       [ut]
     nodeWhere (body, env) == [[body, env]$SW]
 

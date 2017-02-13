@@ -68,18 +68,18 @@ DaaseOperation() : Exports == Implementation where
 
     elt (x, "condition") ==
       sig := x.op_info.1
-      #sig < 3 or (symbol? sig.3 and symbol sig.3 = 'T) => emptyNode()
+      #sig < 3 or (symbol? sig.3 and symbol sig.3 = 'T) => null
       parse sig.3
 
     coerce (x : %) : N ==
       c := x.condition
       t := nodeTypeDecl([x.name], [x.type])
-      emptyNode? c => t
-      nodeCondExpr(c, t, emptyNode())
+      null? c => t
+      nodeCondExpr(c, t, null)
 
     coerce (x : %) : PF ==
       cond := x.condition
-      emptyNode? cond => x.signature :: PF 
+      null? cond => x.signature :: PF 
       pile [x.signature :: PF, spaces [bold("when" :: PF), cond :: PF]]
 
 )abbrev domain DDB DaaseDatabase
@@ -167,14 +167,14 @@ DaaseDatabase() : Exports == Implementation where
 
     getSuperDomain t == 
       sex : SEX := GETDATABASE(t, 'SUPERDOMAIN)$Lisp
-      null? sex => emptyNode()
+      null? sex => null
       (domain, guard) := (sex.1, sex.2)
       nodeTypeGuard(parse domain, parse guard.2)
 
     isSubDomain?(s, t) ==
       s = t => true
       type := getSuperDomain(s)
-      while not emptyNode? type repeat
+      while not null? type repeat
         dom := (type :: TG).expr :: APP
         s := dom.function :: Symbol
         s = t => return true

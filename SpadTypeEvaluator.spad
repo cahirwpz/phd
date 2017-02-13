@@ -48,12 +48,12 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       validate? := true
       ti! := 
-        if app.args = [emptyNode()] then
+        if app.args = [null] then
           validate? := false
           ti := fetchType(app.function :: Symbol)
           flatten(ti)
         else
-          ti := getTypeInfo([app.function, [emptyNode()]])
+          ti := getTypeInfo([app.function, [null]])
           apply(ti, app.args)
 
       ti! := evalTypeGuards(ti!)
@@ -71,7 +71,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       ti := flatten ti
       ti := evalTypeGuards ti
       ti := eraseConstraints(ti, false)
-      cache([[ft.name], [emptyNode()]]) := ti
+      cache([[ft.name], [null]]) := ti
       ti
 
     apply(ti : TI, values : List(N)) : TI ==
@@ -403,16 +403,16 @@ SpadTypeEvaluatorTest() : Exports == Implementation where
     test1 ==
       initTest()
 
-      -- emptyNode() passed as a list of parameters to a functor prevents
+      -- null passed as a list of parameters to a functor prevents
       -- constrains evaluation
 
       -- type flattening, type constrains are left unevaluated
-      println (getTypeInfo([['Integer], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['List], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['Fraction], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['Expression], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['UnivariateTaylorSeries], [emptyNode()]]) :: PF)
-      println (getTypeInfo([['Matrix], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['Integer], [null]]) :: PF)
+      println (getTypeInfo([['List], [null]]) :: PF)
+      println (getTypeInfo([['Fraction], [null]]) :: PF)
+      println (getTypeInfo([['Expression], [null]]) :: PF)
+      println (getTypeInfo([['UnivariateTaylorSeries], [null]]) :: PF)
+      println (getTypeInfo([['Matrix], [null]]) :: PF)
 
       printTypeInfoCache()
 
@@ -435,7 +435,7 @@ SpadTypeEvaluatorTest() : Exports == Implementation where
       initTest()
 
       -- check if values as accepted as functor arguments (instead of types)
-      println (getTypeInfo([['UnivariateTaylorSeries], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['UnivariateTaylorSeries], [null]]) :: PF)
       println (getTypeInfo([['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]) :: PF)
 
       printTypeInfoCache()
@@ -444,9 +444,9 @@ SpadTypeEvaluatorTest() : Exports == Implementation where
       initTest()
 
       -- TODO: some extremely slow cases to be improved
-      println (getTypeInfo([['UnivariateLaurentSeries], [emptyNode()]]) :: PF)
-      --println (getTypeInfo([['UnivariatePuiseuxSeries], [emptyNode()]]) :: PF)
-      --println (getTypeInfo([['ExponentialExpansion], [emptyNode()]]) :: PF)
+      println (getTypeInfo([['UnivariateLaurentSeries], [null]]) :: PF)
+      --println (getTypeInfo([['UnivariatePuiseuxSeries], [null]]) :: PF)
+      --println (getTypeInfo([['ExponentialExpansion], [null]]) :: PF)
 
       printTypeInfoCache()
 

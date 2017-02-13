@@ -72,7 +72,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     ruleIfThen (C', T') ==
       (C, T) := (nodeRef(C'), nodeRef(T'))
-      [[C, T, nodeCondExpr(C, T, emptyNode)], nodeCondExpr(C, T, emptyNode)]
+      [[C, T, nodeCondExpr(C, T, null)], nodeCondExpr(C, T, null)]
 
     -- for function "fn (a1 : A1, ..., an : An) : T == B" do:
     -- compute "A1, ..., An, T, B"; if "T is B" then solution is "fn"
@@ -117,7 +117,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
         endRef := nodeRef(end)
         concat!(formulas, endRef)
       else
-        endRef := emptyNode()
+        endRef := null
       [formulas, nodeSeg(startRef, endRef)]
 
     ruleSeq (kind, seq, exprs) ==
@@ -173,10 +173,10 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SNR == Implementation where
 
     walk (seq : SEQ) : N ==
       ns := [walk(coerce(n)@NR) for n in seq.list | nodeRef? n]
-      nodeSeq("Join", [n for n in ns | not emptyNode? n])
+      nodeSeq("Join", [n for n in ns | not null? n])
 
-    walk (ass : ASS) : N == emptyNode()
-    walk (td : TD) : N == emptyNode()
+    walk (ass : ASS) : N == null
+    walk (td : TD) : N == null
 
     walk (nr : NR) : N ==
       tn := find(nr)
@@ -314,7 +314,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- First case with a twist: arbitrary list construction.
       if stripOrigin(a.function) = ['construct] then
-        item := addNode!(ctx, emptyNode(), env)
+        item := addNode!(ctx, null, env)
         item.node := item.type
         setTypeOf!(ctx, item, dropSubTypes [argExpr.type for argExpr in argExprList])
         ctorArgs := [item.type for i in 1..#a.args]
@@ -334,7 +334,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         this.node := [a]
         this
 
-      this := addNode!(ctx, emptyNode())
+      this := addNode!(ctx, null)
       right := walk(a.rval, ctx, env)
 
       fresh? :=
@@ -374,7 +374,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       envAddFacts(ce.cond, trueEnv)
       truebr := walk(ce.truebr, ctx, trueEnv)
 
-      emptyNode? ce.falsebr =>
+      null? ce.falsebr =>
         this.env := env
         this.rules := [ruleIfThen(cond, truebr)]
         this
@@ -399,7 +399,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkFun (fn : FN, ctx : CTX, env : ENV) : TN ==
       funName := (fn.name case "lambda" => '_+_-_>; fn.name :: Symbol)
-      funDeclNode := addNode!(ctx, emptyNode(), env)
+      funDeclNode := addNode!(ctx, null, env)
 
       if fn.name case "lambda" then
         debug ("Processing lambda expression." :: PF)
@@ -411,9 +411,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- It's vitally important that result type is represented by "%2" type
       -- variable (e.g. 'return' refers to "%2").
-      funDefNode := addNode!(ctx, emptyNode(), env')
-      resNode := addNode!(ctx, emptyNode(), env')
-      argNodeList := [addNode!(ctx, emptyNode(), env') for n in fn.args]
+      funDefNode := addNode!(ctx, null, env')
+      resNode := addNode!(ctx, null, env')
+      argNodeList := [addNode!(ctx, null, env') for n in fn.args]
 
       resNode.node := resNode.type
       for argNode in argNodeList for n in fn.args repeat
@@ -434,7 +434,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         bindNode!(ctx, resNode, fnType.result)
 
       typeList : List(N) :=
-        ([(emptyNode?(t) => n.type; t)
+        ([(null?(t) => n.type; t)
           for n in [resNode, :argNodeList] for t in [fnType.result, :fnType.args]])
 
       fnType' := nodeMappingType(rest typeList, first typeList)
@@ -456,7 +456,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       if fn.name case Symbol then
         for n in typesOf(fn.name :: Symbol, env') repeat
-          candidate := emptyNode()
+          candidate := null
 
           if typeGuard? n then
             tg := n :: TG
@@ -469,7 +469,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
           if mappingType? n then
             candidate := n
 
-          if not emptyNode? candidate then
+          if not null? candidate then
             ures := unifyType(fnType', candidate)
             ures case "failed" => "iterate"
             candidate := substitute(fnType', ures :: SUBS)
@@ -578,7 +578,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       extNode := addNode!(ctx, ft.extends, env)
       bindNode!(ctx, extNode,
-                (emptyNode? ft.extends => undefinedType(); ft.extends))
+                (null? ft.extends => undefinedType(); ft.extends))
 
       bodyNode := walk(ft.capsule, ctx, env)
 
@@ -609,7 +609,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
         itorExpr := addNode!(ctx, n, env)
         varExpr := addNode!(ctx, [itor.var], env)
-        seqType := addNode!(ctx, emptyNode(), env)
+        seqType := addNode!(ctx, null, env)
         seqExpr := walk(itor.seq, ctx, env)
 
         setTypeOf!(ctx, seqType,
@@ -637,7 +637,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       maybeBodyType : Union(TN, "none") := "none"
       body : TN
       if lp.kind case "collect" then
-        bodyType := addNode!(ctx, emptyNode, env)
+        bodyType := addNode!(ctx, null, env)
         body := walk(lp.body, ctx, env')
         bodyType.node := bodyType.type
         bodyType.rules := [ruleSubType(body, bodyType)]
@@ -661,7 +661,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       startExpr := walk(seg.start, ctx, env)
 
       endExpr' : Union(TN, "none") :=
-        not emptyNode? seg.end =>
+        not null? seg.end =>
           endExpr := walk(seg.end, ctx, env)
           setTypeOf!(ctx, endExpr, [startExpr.type])
           endExpr
@@ -716,7 +716,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- handle a symbol which is a type constructor
       if inDatabase? s then
-        ti := getTypeInfo([[s], [emptyNode()]]$APP)
+        ti := getTypeInfo([[s], [null]]$APP)
 
         ftorArgList : List(N) := []
         ftorArgNodeList : List(TN) := []
@@ -913,7 +913,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       function? n or lambda? n => walkFun(n :: FN, ctx, env)
       recordType? n => walkRecord(n :: RT, ctx, env)
       unionType? n => walkUnion(n :: UT, ctx, env)
-      emptyNode? n => walkEmpty(n, ctx, env)
+      null? n => walkEmpty(n, ctx, env)
       -- namedType, mappingType, recordType, sumType, unionType, macro, where
       fail ["Expression" :: PF, bold red paren(n :: PF), "not handled yet!" :: PF]
       error ""

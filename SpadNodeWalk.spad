@@ -81,5 +81,5 @@ SpadNodeWalk(R : Type) : Category == Definition where
         symbol? n => walk (n :: Symbol)
         integer? n => walk (n :: I)
         float? n => walk (n :: DF) 
-        emptyNode? n => walk () 
+        null? n => walk () 
         error "walk: variant not handled"
