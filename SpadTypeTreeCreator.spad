@@ -716,15 +716,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- handle a symbol which is a type constructor
       if inDatabase? s then
-        ti := getTypeInfo([[s], [null]]$APP)
+        mt := getTypeInfo s
 
         ftorArgList : List(N) := []
         ftorArgNodeList : List(TN) := []
         ftorArgRenames : SUBS := empty()
 
-        for arg in ti.args repeat
-          ftorArg := arg.expr
-          ftorArgType := arg.type
+        for arg in mt.args repeat
+          ftorArg := (arg :: TD).expr
+          ftorArgType := (arg :: TD).type
 
           if typeVar? ftorArg then
             origFtorArg := ftorArg

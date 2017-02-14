@@ -40,10 +40,8 @@ SpadNodeRewrite() : Category == Definition where
       walk (te : TEP) == nodeTypePretend(walk te.expr, walk te.type)
 
       walk (ti : TI) ==
-        nodeTypeInfo(ti.name, [walk(arg) :: TD for arg in ti.args],
-                     map(walk, ti.hasList),
-                     map(walk, ti.constraints),
-                     walk ti.superType, (walk ti.body) :: SEQ)
+        nodeTypeInfo((walk ti.body) :: SEQ, map(walk, ti.hasList),
+                     map(walk, ti.constraints), walk ti.superType)
 
       walk (te : TO) == nodeTypeOrigin(walk te.expr, walk te.type)
       walk (te : TS) == nodeTypeSelect(walk te.expr, walk te.type)

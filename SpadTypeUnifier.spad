@@ -85,27 +85,37 @@ SpadTypeUnifier() : Exports == Implementation where
             return "failed"
         unifyTypeList ([[f1.type, f2.type]$P
                         for f1 in fields rt1 for f2 in fields rt2])
+
       unionType? n1 and unionType? n2 =>
         ut1 := n1 :: UT
         ut2 := n2 :: UT
         #(variants ut1) ~= #(variants ut2) => "failed"
         unifyTypeList ([[v1, v2]$P for v1 in variants ut1
                                    for v2 in variants ut2])
+
       typeDecl? n1 and typeDecl? n2 =>
         td1 := n1 :: TD
         td2 := n2 :: TD
         td1.expr ~= td2.expr => "failed"
         unifyType'(td1.type, td2.type)
+
       typeOrigin? n1 and typeOrigin? n2 =>
         to1 := n1 :: TO
         to2 := n2 :: TO
-        unifyTypeList ([[to1.type, to2.type]$P, [to1.expr, to2.expr]$P])
+        unifyTypeList [[to1.type, to2.type]$P, [to1.expr, to2.expr]$P]
       typeOrigin? n1 =>
         to1 := n1 :: TO
         unifyType'(to1.expr, n2)
       typeOrigin? n2 =>
         to2 := n2 :: TO
         unifyType'(n1, to2.expr)
+
+      sequence? n1 and sequence? n2 =>
+        s1 := n1 :: SEQ
+        s2 := n2 :: SEQ
+        s1.kind ~= s1.kind => "failed"
+        #s1.list ~= #s2.list => "failed"
+        unifyTypeList [[e1, e2]$P for e1 in s1.list for e2 in s2.list]
 
       -- constants
       symbol? n1 and symbol? n2 and (n1 :: Symbol) = (n2 :: Symbol) => [[]]
