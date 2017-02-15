@@ -211,57 +211,15 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadNode
     import SpadNodeFactory
     import SpadNodeTools
-    import DaaseDatabase
     import SpadEnvironment
     import SpadTypeRuleFactory
     import SpadTypeNodeArray
     import SpadLogic
+    import SpadTypeDatabase
     import SpadTypeUnifier
     import SpadTypeEvaluator(SpadEnvironment)
     import Printer
     import Logger('Creator)
-
-    envAddType (t : N, env : ENV) : Void ==
-      apply? t =>
-        app := t :: APP
-        addDomain(app, env)
-        for k in app.args repeat
-          envAddType(k, env)
-        importDomain(app, env)
-
-      mappingType? t =>
-        mt := t :: MT
-        for k in [mt.result, :mt.args] repeat
-          envAddType(k, env)
-
-      recordType? t =>
-        rt := t :: RT
-        for f in fields rt repeat
-          envAddType(f.type, env)
-        for f in makeRecordFunList t repeat
-          addTypeOf(f.expr :: Symbol, nodeTypeOrigin(f.type, t), env)
-
-      unionType? t =>
-        ut := t :: UT
-        for v in variants ut repeat
-          if typeDecl? v then
-            v := (v :: TD).type
-          envAddType(v, env)
-        for f in makeUnionFunList t repeat
-          addTypeOf(f.expr :: Symbol, nodeTypeOrigin(f.type, t), env)
-
-      symbol? t =>
-        -- BUG! this is not correct but will do for time being
-        ts := typesOf(t :: Symbol, env)
-        -- detect type alias
-        #ts = 1 and typeValue? ts.1 =>
-          tv := ts.1 :: TVL
-          envAddType(tv.value, env)
-
-      string? t => void
-
-      fail ["Type" :: PF, bold(t :: PF), "not handled!" :: PF]
-      error "envAddType"
 
     keyOf (n : N) : EKEY ==
       symbol? n => n :: Symbol
@@ -478,9 +436,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       for c in candidateList repeat 
         for type in c.args | not unbound? type repeat
-          envAddType(type, env')
+          addType(type, env')
         if not unbound? c.result then
-          envAddType(c.result, env')
+          addType(c.result, env')
 
       -- TODO: Filter out function which have been already defined.
       if not empty? candidateList then
@@ -592,7 +550,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
     walkImport (im : IM, ctx : CTX, env : ENV) : TN ==
       debug ["Importing" :: PF, bold(im.type :: PF)]
-      envAddType(im.type, env)
+      addType(im.type, env)
       if apply? im.type then
         importDomain (im.type :: APP, env)
       tn := addNode!(ctx, [im], env)
@@ -796,7 +754,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         fail ["Type cut operator works only for function symbols!" :: PF]
         error ""
 
-      envAddType(ts.type, env)
+      addType(ts.type, env)
       this := addNode!(ctx, [ts], env)
       ntype := walk(ts.type, ctx, env)
       nexpr := walk(ts.expr, ctx, ntype.env)
@@ -806,7 +764,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     walkTypeCoerce (tc : TC, ctx : CTX, env : ENV) : TN ==
       debug ["Expression" :: PF, tc.expr :: PF, "have to coerce to" :: PF, tc.type :: PF]
 
-      envAddType(tc.type, env)
+      addType(tc.type, env)
       this := addNode!(ctx, [tc], env)
       ntype := walk(tc.type, ctx, env)
       nexpr := walk(tc.expr, ctx, ntype.env)
@@ -837,7 +795,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
              "must originate from" :: PF, bold(to.type :: PF),
              "type!" :: PF])
 
-      envAddType(to.type, env)
+      addType(to.type, env)
       this := addNode!(ctx, [to], env)
       ntype := walk(to.type, ctx, env)
       nexpr := walk(to.expr, ctx, ntype.env)
@@ -847,7 +805,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this
 
     walkCase (sc : SC, ctx : CTX, env : ENV) : TN ==
-      envAddType(sc.type, env)
+      addType(sc.type, env)
 
       this := addNode!(ctx, [sc], env)
       ntype := walk(sc.type, ctx, env)

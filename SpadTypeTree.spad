@@ -192,7 +192,7 @@ SpadTypeNode() : Exports == Implementation where
       n := stripOrigin x.m_node
       sequence? n =>
         pile([spaces [prefix, bold blue(nodeRef(x) :: PF), "is" :: PF], t])
-      recordType? n or unionType? n =>
+      recordType? n or unionType? n or mappingType? n =>
         spaces [prefix, blue(n :: PF)]
       pn :=
         apply? n or typeDecl? n or symbol? n or import? n =>

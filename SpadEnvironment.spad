@@ -9,6 +9,8 @@ SpadEnvironment() : Exports == Implementation where
     typesOf : (EKEY, %) -> List(N)
     factsAbout : (EKEY, %) -> List(N)
 
+    addType : (N, %) -> Void
+
     addTypeOf : (EKEY, N, %) -> Void
     addFactAbout : (EKEY, N, %) -> Void
     addDomain : (APP, %) -> Void
@@ -41,6 +43,48 @@ SpadEnvironment() : Exports == Implementation where
     factsAbout (key : EKEY, env : %) : List(N) ==
       val := search(key, env)
       (val case EVAL => val.facts; [])
+
+    addType (t : N, env : %) : Void ==
+      apply? t =>
+        app := t :: APP
+        addDomain(app, env)
+        for k in app.args repeat
+          addType(k, env)
+        importDomain(app, env)
+
+      mappingType? t =>
+        mt := t :: MT
+        for k in [mt.result, :mt.args] repeat
+          addType(k, env)
+
+      recordType? t =>
+        rt := t :: RT
+        for f in fields rt repeat
+          addType(f.type, env)
+        for f in makeRecordFunList t repeat
+          addTypeOf(f.expr :: Symbol, nodeTypeOrigin(f.type, t), env)
+
+      unionType? t =>
+        ut := t :: UT
+        for v in variants ut repeat
+          if typeDecl? v then
+            v := (v :: TD).type
+          addType(v, env)
+        for f in makeUnionFunList t repeat
+          addTypeOf(f.expr :: Symbol, nodeTypeOrigin(f.type, t), env)
+
+      symbol? t =>
+        -- BUG! this is not correct but will do for time being
+        ts := typesOf(t :: Symbol, env)
+        -- detect type alias
+        #ts = 1 and typeValue? ts.1 =>
+          tv := ts.1 :: TVL
+          addType(tv.value, env)
+
+      string? t => void
+
+      fail ["Type" :: PF, bold(t :: PF), "not handled!" :: PF]
+      error "addType $ SpadEnvironment"
 
     addTypeOf (key : EKEY, type : N, env : %) : Void ==
       val := search(key, env)

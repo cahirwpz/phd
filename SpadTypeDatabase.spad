@@ -55,6 +55,8 @@ SpadTypeDatabase() : Exports == Implementation where
     typeCacheList : () -> List(Symbol)
     invalidateType : Symbol -> Void
 
+    inDatabase? : Symbol -> Boolean
+
     fetchType : Symbol -> MT
     makeType : FT -> MT
 
@@ -147,6 +149,9 @@ SpadTypeDatabase() : Exports == Implementation where
     makeType(ft : FT) : MT ==
       t := fromFunctor(ft) :: MT
       cache(ft.name) := t
+
+    inDatabase?(name : Symbol) : Boolean ==
+      inDatabase?(name) $ DaaseDatabase
 
 )abbrev package STDBT SpadTypeDatabaseTest
 SpadTypeDatabaseTest() : Exports == Implementation where
