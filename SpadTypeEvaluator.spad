@@ -1,21 +1,11 @@
 )abbrev domain STEVAL SpadTypeEvaluator
-SpadTypeEvaluator() : Exports == Implementation where
+SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
 )include SpadTypeDefs.inc
 
-  CKEY ==> Union(Symbol, APP)
-  CACHE ==> Table(CKEY, N)
-
   Exports ==> CoercibleTo(PF) with
-    typeInfoCacheInit : () -> Void
-    typeInfoCacheList : () -> List CKEY
-
-    invalidateTypeInfo : CKEY -> Void
-
-    getTypeInfo : Symbol -> MT
-    getTypeInfo : APP -> TI
-    getTypeInfo : FT -> MT
-
-    coerce : CKEY -> PF
+    getTypeInfo : (Symbol, EC) -> MT
+    getTypeInfo : (APP, EC) -> TI
+    getTypeInfo : (FT, EC) -> MT
 
   Implementation ==> add
     import Logger('TypeEval)
@@ -26,62 +16,44 @@ SpadTypeEvaluator() : Exports == Implementation where
     import SpadTypeDatabase
     import SpadTypeUnifier
 
-    apply : (APP, MT) -> TI
-    flatten : (Symbol, TI) -> TI
-    evalTypeGuards : (APP, TI) -> TI
-    eraseConstraints : (APP, TI) -> TI
+    apply : (APP, MT, EC) -> TI
+    flatten : (Symbol, TI, EC) -> TI
+    evalTypeGuards : (APP, TI, EC) -> TI
+    eraseConstraints : (APP, TI, EC) -> TI
 
-    cache : CACHE := [[]]
-
-    typeInfoCacheInit () ==
-      cache := [[]]
-
-    typeInfoCacheList() == keys(cache)
-
-    coerce (key : CKEY) : PF ==
-      key case Symbol => (key :: Symbol) :: PF
-      key case APP => (key :: APP) :: PF
-
-    invalidateTypeInfo(invalid : CKEY) ==
-      -- TODO: track dependencies and remove them as well
-      sameName (r : Record(key : CKEY, entry : N)) : Boolean ==
-        r.key = invalid
-      cache := remove(sameName, cache)
-
-    getTypeInfo(name : Symbol) : MT ==
-      n? := search(name, cache)
-      n? case N => (n? :: N) :: MT
+    getTypeInfo(name : Symbol, env : EC) : MT ==
+      n? := search(name, env)
+      n? case EVAL => (n? :: EVAL).info :: MT
 
       info ["getTypeInfo :" :: PF, bold(name :: PF)]
 
       mt := fetchType name
-      ti := flatten(name, mt.result :: TI)
+      ti := flatten(name, mt.result :: TI, env)
       mt := [mt.args, [ti]]
-      cache(name) := [mt]
+      env(name) := [[], [mt], []]
       mt
 
-    getTypeInfo(app : APP) : TI ==
-      n? := search(app, cache)
-      n? case N => (n? :: N) :: TI
+    getTypeInfo(app : APP, env : EC) : TI ==
+      n? := search(app, env)
+      n? case EVAL => (n? :: EVAL).info :: TI
 
       name := app.function :: Symbol
-      ti := apply(app, getTypeInfo name)
-      cache(app) := [ti]
-
-      ti := evalTypeGuards(app, ti)
+      ti := apply(app, getTypeInfo(name, env), env)
+      env(app) := [[], [ti], []]
+      ti := evalTypeGuards(app, ti, env)
 
       hasFreeVars? [app] => ti
 
-      eraseConstraints(app, ti)
+      eraseConstraints(app, ti, env)
       
-    getTypeInfo(ft : FT) : MT ==
+    getTypeInfo(ft : FT, env : EC) : MT ==
       mt := makeType ft
-      ti := flatten(ft.name, mt.result :: TI)
+      ti := flatten(ft.name, mt.result :: TI, env)
       mt := [mt.args, [ti]]
-      cache(ft.name) := [mt]
+      env(ft.name) := [[], [mt], []]
       mt
 
-    apply(app : APP, mt : MT) : TI ==
+    apply(app : APP, mt : MT, env : EC) : TI ==
       #app.args ~= #mt.args =>
         fail ["wrong number of arguments for:" :: PF, app :: PF]
         error "apply $ SpadTypeEvaluator"
@@ -107,7 +79,7 @@ SpadTypeEvaluator() : Exports == Implementation where
         cs := concat(cs, ti.constraints)
         setMajor(nodeTypeInfo(ti.body, ti.hasList, cs, ti.superType), 0) :: TI
 
-    flatten(name : Symbol, ti : TI) : TI ==
+    flatten(name : Symbol, ti : TI, env : EC) : TI ==
       info ["Flatten" :: PF, bold(name :: PF)]
 
       origBody := ti.body.list
@@ -151,7 +123,7 @@ SpadTypeEvaluator() : Exports == Implementation where
                  "with" :: PF, name :: PF])
 
           hasLst(app) := cond
-          ti' := apply(app, fetchType(app.function :: Symbol))
+          ti' := apply(app, fetchType(app.function :: Symbol), env)
           -- TODO: does it make sense?
           constraints := concat(ti'.constraints, constraints)
 
@@ -225,7 +197,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       [[ti.body.kind, reverse flatBody],
        hasLst', removeDuplicates constraints, ti.superType]
 
-    evalTypeHas(t0 : N, t1 : N) : Boolean ==
+    evalTypeHas(t0 : N, t1 : N, env : EC) : Boolean ==
       hasFreeVars? t0 =>
         fail ["Free variables in" :: PF, bold (t0 :: PF)]
         error "evalTypeHas $ SpadTypeEvaluator"
@@ -241,7 +213,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       t0 = t1 => true
 
       ti := 
-        apply? t0 => getTypeInfo(t0 :: APP)
+        apply? t0 => getTypeInfo(t0 :: APP, env)
         fail [t0 :: PF, "has" :: PF, t1 :: PF]
         error "evalTypeHas $ SpadTypeEvaluator"
 
@@ -252,7 +224,7 @@ SpadTypeEvaluator() : Exports == Implementation where
       -- case "A has Join(..)"
       sequence? t1 =>
         seq := t1 :: SEQ
-        "and"/[evalTypeHas(t0, typ) for typ in seq.list]
+        "and"/[evalTypeHas(t0, typ, env) for typ in seq.list]
 
       -- case "A has { fn : (..) -> .. }"
       typeDecl? t1 and not(unbound? t0 or unbound? t1) =>
@@ -269,11 +241,11 @@ SpadTypeEvaluator() : Exports == Implementation where
       fail [t0 :: PF, "has" :: PF, t1 :: PF]
       error "Not handled!"
 
-    evalTypeHas'(t0 : N, t1 : N, self : APP) : Boolean ==
+    evalTypeHas'(t0 : N, t1 : N, self : APP, env : EC) : Boolean ==
       evalTypeHas(substitute(t0, typeVar() :: TV, [self]),
-                  substitute(t1, typeVar() :: TV, [self]))
+                  substitute(t1, typeVar() :: TV, [self]), env)
 
-    evalGuard(n : N) : N ==
+    evalGuard(n : N, env : EC) : N ==
       hasFreeVars? n =>
         fail ["Free variables in" :: PF, bold (n :: PF)]
         error "evalGuard $ SpadTypeEvaluator"
@@ -281,11 +253,11 @@ SpadTypeEvaluator() : Exports == Implementation where
       debug ["Evaluate guard:" :: PF, bold(n :: PF)]
       typeHas? n =>
         te := n :: TEH
-        evalTypeHas(te.expr, te.type) => ['true]
+        evalTypeHas(te.expr, te.type, env) => ['true]
         n
       apply? n =>
         app := n :: APP
-        lst := map(evalGuard, app.args)
+        lst := [evalGuard(arg, env) for arg in app.args]
         app.function = ['and] =>
           any?(false?, lst) => ['false]
           lst := remove(true?, lst)
@@ -299,26 +271,26 @@ SpadTypeEvaluator() : Exports == Implementation where
           #lst = 1 => first lst
           nodeApp(['or], lst)
         app.function = ['not] and #app.args = 1 =>
-          n' := evalGuard(first app.args)
+          n' := evalGuard(first app.args, env)
           true? n' => ['false]
           n
         fail ["evalGuard" :: PF, bold(n :: PF)]
         error "Not handled!"
       n
 
-    evalGuard'(n : N, self : APP) : N ==
-      evalGuard substitute(n, typeVar() :: TV, [self])
+    evalGuard'(n : N, self : APP, env : EC) : N ==
+      evalGuard(substitute(n, typeVar() :: TV, [self]), env)
 
-    eraseConstraints(name : APP, ti : TI) : TI ==
+    eraseConstraints(name : APP, ti : TI, env : EC) : TI ==
       info ["Check type constraints for" :: PF, bold(name :: PF)]
 
       appliesCleanly(n : N) : Boolean ==
         te := (n :: TO).expr :: TEH
-        evalTypeHas'(te.expr, te.type, name)
+        evalTypeHas'(te.expr, te.type, name, env)
 
       ti := [ti.body, ti.hasList, remove(appliesCleanly, ti.constraints),
              ti.superType]
-      cache(name) := [ti]
+      env(name) := [[], [ti], []]
 
       empty? ti.constraints => ti
 
@@ -332,7 +304,7 @@ SpadTypeEvaluator() : Exports == Implementation where
 
       error "eraseConstraints $ SpadTypeEvaluator"
 
-    evalTypeGuards(name : APP, ti : TI) : TI ==
+    evalTypeGuards(name : APP, ti : TI, env : EC) : TI ==
       info ["Evaluate type guards for" :: PF, bold(name :: PF)]
 
       -- evaluate type guards on HasList
@@ -346,29 +318,29 @@ SpadTypeEvaluator() : Exports == Implementation where
           n' := 
             not typeGuard? n => n
             tg := n :: TG
-            type' := evalGuard'(tg.type, name)
+            type' := evalGuard'(tg.type, name, env)
             true? type' => (continue? := true; tg.expr)
             nodeTypeGuard(tg.expr, type')
           newHasList := [n', :newHasList]
 
         ti := [ti.body, reverse newHasList, ti.constraints, ti.superType]
-        cache(name) := [ti]
+        env(name) := [[], [ti], []]
 
       -- with new HasList evaluate type guards in TypeInfo's body
       eval(n : N) : N ==
         not typeGuard? n => n
         tg := n :: TG
-        type' := evalGuard'(tg.type, name)
+        type' := evalGuard'(tg.type, name, env)
         true? type' => tg.expr
         nodeTypeGuard(tg.expr, type')
 
       ti := [[ti.body.kind, map(eval, ti.body.list)],
              ti.hasList, ti.constraints, ti.superType]
-      cache(name) := [ti]
+      env(name) := [[], [ti], []]
       ti
 
 )abbrev package TEVALT SpadTypeEvaluatorTest
-SpadTypeEvaluatorTest() : Exports == Implementation where
+SpadTypeEvaluatorTest(EC : SpadEnvCategory) : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> with
@@ -385,34 +357,29 @@ SpadTypeEvaluatorTest() : Exports == Implementation where
   Implementation ==> add
     import Printer
     import SpadNodeFactory
-    import SpadTypeEvaluator
+    import SpadTypeEvaluator(EC)
     import MainLogger
 
-    initTest : () -> Void
+    initTest : () -> EC
     initTest ==
       loggerDefaultLevel "info"
       loggerLevel('Parser, "notice")
       resetTime()
-      typeInfoCacheInit()
-
-    printTypeInfoCache : () -> Void
-    printTypeInfoCache ==
-      println([bold("Types in cache:" :: PF),
-               bracket [app :: PF for app in typeInfoCacheList()]])
+      new()
 
     test1 ==
-      initTest()
+      env := initTest()
 
       symbols : List(Symbol) := (['Integer, 'List, 'Fraction, 'Expression,
                                   'UnivariateTaylorSeries, 'Matrix])
 
       for s in symbols repeat
-        println [bold blue(s :: PF), "is" :: PF, getTypeInfo(s) :: PF]
+        println [bold blue(s :: PF), "is" :: PF, getTypeInfo(s, env) :: PF]
 
-      printTypeInfoCache()
+      println (env :: PF)
 
     test2 ==
-      initTest()
+      env := initTest()
 
       -- type flattening, type contrains evaluation
       types : List(APP) := (
@@ -426,48 +393,49 @@ SpadTypeEvaluatorTest() : Exports == Implementation where
          [['Expression], [integerType]]])
 
       for t in types repeat
-        println [bold blue(t :: PF), "is" :: PF, getTypeInfo(t) :: PF]
+        println [bold blue(t :: PF), "is" :: PF, getTypeInfo(t, env) :: PF]
 
-      printTypeInfoCache()
+      println (env :: PF)
 
     test3 ==
-      initTest()
+      env := initTest()
 
       -- check if values as accepted as functor arguments (instead of types)
-      println (getTypeInfo('UnivariateTaylorSeries) :: PF)
-      println (getTypeInfo([['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]) :: PF)
+      println (getTypeInfo('UnivariateTaylorSeries, env) :: PF)
+      t := [['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]$APP
+      println (getTypeInfo(t, env) :: PF)
 
-      printTypeInfoCache()
+      println (env :: PF)
 
     test4 ==
-      initTest()
+      env := initTest()
 
       -- TODO: some extremely slow cases to be improved
-      println (getTypeInfo('UnivariateLaurentSeries) :: PF)
-      --println (getTypeInfo('UnivariatePuiseuxSeries) :: PF)
-      --println (getTypeInfo('ExponentialExpansion) :: PF)
+      println (getTypeInfo('UnivariateLaurentSeries, env) :: PF)
+      --println (getTypeInfo('UnivariatePuiseuxSeries, env) :: PF)
+      --println (getTypeInfo('ExponentialExpansion, env) :: PF)
 
-      printTypeInfoCache()
+      println (env :: PF)
 
     -- Should I consider following case:
     -- undefinedType() "%undef" passed as a parameter to a functor prevents
     -- contraint evaluation that involves the parameter
 
     test5 ==
-      initTest()
+      env := initTest()
 
       LI := nodeApp(['List], [['Integer]$N])$N
 
-      println (getTypeInfo([['List], [LI]]) :: PF)
+      println (getTypeInfo([['List], [LI]], env) :: PF)
 
     fail1 ==
-      initTest()
+      env := initTest()
 
       -- wrong number of arguments => should fail!
-      println (getTypeInfo([['List], []]) :: PF)
+      println (getTypeInfo([['List], []], env) :: PF)
 
     fail2 ==
-      initTest()
+      env := initTest()
 
       -- wrong type parameter => should fail!
-      println (getTypeInfo([['List], [nodeApp(['BasicType], [])]]) :: PF)
+      println (getTypeInfo([['List], [nodeApp(['BasicType], [])]], env) :: PF)

@@ -1,0 +1,16 @@
+)abbrev category SPENVC SpadEnvCategory
+SpadEnvCategory() : Category == Definition where
+)include SpadTypeDefs.inc
+
+  Definition ==> Join(CoercibleTo(PF), KeyedDictionary(EKEY, EVAL)) with
+    new : () -> %
+
+    search : (EKEY, %) -> Union(EVAL, "failed")
+    elt : (%, EKEY) -> EVAL
+    setelt! : (%, EKEY, EVAL) -> %
+
+    createScope : % -> %
+    discardScope : % -> %
+
+    coerce : EKEY -> PF
+    coerce : EVAL -> PF

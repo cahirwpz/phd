@@ -217,7 +217,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadTypeNodeArray
     import SpadLogic
     import SpadTypeUnifier
-    import SpadTypeEvaluator
+    import SpadTypeEvaluator(SpadEnvironment)
     import Printer
     import Logger('Creator)
 
@@ -227,6 +227,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         addDomain(app, env)
         for k in app.args repeat
           envAddType(k, env)
+        importDomain(app, env)
 
       mappingType? t =>
         mt := t :: MT
@@ -565,9 +566,9 @@ SpadTypeTreeCreator() : Exports == Implementation where
       bindNode!(ctx, this, nodeMappingType(argList, resType))
 
       -- add functor's type info to the environment
-      invalidateTypeInfo(ft.name)
-      ti := getTypeInfo ft
+      ti := getTypeInfo(ft, env)
       addDomain(ftType :: APP, env)
+      importDomain(ftType :: APP, env)
       ftRealType := 
         substitute(first typesOf(ftType :: APP, env), typeVar() :: TV, ftType)
       ftRes :=
@@ -590,8 +591,10 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this
 
     walkImport (im : IM, ctx : CTX, env : ENV) : TN ==
-      debug ["Importing" :: PF, im.type :: PF]
+      debug ["Importing" :: PF, bold(im.type :: PF)]
       envAddType(im.type, env)
+      if apply? im.type then
+        importDomain (im.type :: APP, env)
       tn := addNode!(ctx, [im], env)
       bindNode!(ctx, tn, undefinedType)
       done! tn
@@ -716,7 +719,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       -- handle a symbol which is a type constructor
       if inDatabase? s then
-        mt := getTypeInfo s
+        mt := getTypeInfo(s, env)
 
         ftorArgList : List(N) := []
         ftorArgNodeList : List(TN) := []
