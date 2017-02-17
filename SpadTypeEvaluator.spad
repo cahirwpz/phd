@@ -15,6 +15,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
     import SpadNodeTools
     import SpadTypeDatabase
     import SpadTypeUnifier
+    import SpadLogic(EC)
 
     apply : (APP, MT, EC) -> TI
     flatten : (Symbol, TI, EC) -> TI
@@ -197,96 +198,14 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
       [[ti.body.kind, reverse flatBody],
        hasLst', removeDuplicates constraints, ti.superType]
 
-    evalTypeHas(t0 : N, t1 : N, env : EC) : Boolean ==
-      hasFreeVars? t0 =>
-        fail ["Free variables in" :: PF, bold (t0 :: PF)]
-        error "evalTypeHas $ SpadTypeEvaluator"
-      hasFreeVars? t1 =>
-        fail ["Free variables in" :: PF, bold (t1 :: PF)]
-        error "evalTypeHas $ SpadTypeEvaluator"
-
-      t1 = nodeApp(['Type], []) => true
-
-      if symbol? t0 then t0 := symbolType()
-      if integer? t0 then t0 := integerType()
-
-      t0 = t1 => true
-
-      ti := 
-        apply? t0 => getTypeInfo(t0 :: APP, env)
-        fail [t0 :: PF, "has" :: PF, t1 :: PF]
-        error "evalTypeHas $ SpadTypeEvaluator"
-
-      -- case "A has B()"
-      apply? t1 =>
-        member?(t1, ti.hasList)
-
-      -- case "A has Join(..)"
-      sequence? t1 =>
-        seq := t1 :: SEQ
-        "and"/[evalTypeHas(t0, typ, env) for typ in seq.list]
-
-      -- case "A has { fn : (..) -> .. }"
-      typeDecl? t1 and not(unbound? t0 or unbound? t1) =>
-        seq := ti.body :: SEQ
-        for n in seq.list repeat
-          if typeOrigin? n then
-            n := (n :: TO).expr
-          not typeDecl? n => "iterate"
-          n := substitute(n, typeVar() :: TV, t0)
-          if n = t1 then
-            return true
-        false
-
-      fail [t0 :: PF, "has" :: PF, t1 :: PF]
-      error "Not handled!"
-
-    evalTypeHas'(t0 : N, t1 : N, self : APP, env : EC) : Boolean ==
-      evalTypeHas(substitute(t0, typeVar() :: TV, [self]),
-                  substitute(t1, typeVar() :: TV, [self]), env)
-
-    evalGuard(n : N, env : EC) : N ==
-      hasFreeVars? n =>
-        fail ["Free variables in" :: PF, bold (n :: PF)]
-        error "evalGuard $ SpadTypeEvaluator"
-
-      debug ["Evaluate guard:" :: PF, bold(n :: PF)]
-      typeHas? n =>
-        te := n :: TEH
-        evalTypeHas(te.expr, te.type, env) => ['true]
-        n
-      apply? n =>
-        app := n :: APP
-        lst := [evalGuard(arg, env) for arg in app.args]
-        app.function = ['and] =>
-          any?(false?, lst) => ['false]
-          lst := remove(true?, lst)
-          #lst = 0 => ['true]
-          #lst = 1 => first lst
-          nodeApp(['and], lst)
-        app.function = ['or] =>
-          any?(true?, lst) => ['true]
-          lst := remove(false?, lst)
-          #lst = 0 => ['false]
-          #lst = 1 => first lst
-          nodeApp(['or], lst)
-        app.function = ['not] and #app.args = 1 =>
-          n' := evalGuard(first app.args, env)
-          true? n' => ['false]
-          n
-        fail ["evalGuard" :: PF, bold(n :: PF)]
-        error "Not handled!"
-      n
-
-    evalGuard'(n : N, self : APP, env : EC) : N ==
-      evalGuard(substitute(n, typeVar() :: TV, [self]), env)
+    evaluate'(n : N, self : APP, env : EC) : N ==
+      evaluate(substitute(n, typeVar() :: TV, [self]), env)
 
     eraseConstraints(name : APP, ti : TI, env : EC) : TI ==
       info ["Check type constraints for" :: PF, bold(name :: PF)]
 
       appliesCleanly(n : N) : Boolean ==
-        te := (n :: TO).expr :: TEH
-        evalTypeHas'(te.expr, te.type, name, env)
+        true? evaluate'((n :: TO).expr, name, env)
 
       ti := [ti.body, ti.hasList, remove(appliesCleanly, ti.constraints),
              ti.superType]
@@ -318,7 +237,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
           n' := 
             not typeGuard? n => n
             tg := n :: TG
-            type' := evalGuard'(tg.type, name, env)
+            type' := evaluate'(tg.type, name, env)
             true? type' => (continue? := true; tg.expr)
             nodeTypeGuard(tg.expr, type')
           newHasList := [n', :newHasList]
@@ -330,7 +249,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
       eval(n : N) : N ==
         not typeGuard? n => n
         tg := n :: TG
-        type' := evalGuard'(tg.type, name, env)
+        type' := evaluate'(tg.type, name, env)
         true? type' => tg.expr
         nodeTypeGuard(tg.expr, type')
 

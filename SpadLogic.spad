@@ -1,15 +1,17 @@
 )abbrev package SLOGIC SpadLogic
-SpadLogic() : Exports == Implementation where
+SpadLogic(EC : SpadEnvCategory) : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> with
     extractPredicates : N -> List(N)
-    evaluate : (N, List(N)) -> N
+    evaluate : (N, EC) -> N
 
   Implementation ==> add
-    import SpadNode
     import Printer
     import Logger('Logic)
+    import SpadNode
+    import SpadNodeFactory
+    import SpadNodeTools
 
     invert (n : N) : N ==
       typeHas? n or typeIs? n =>
@@ -44,14 +46,71 @@ SpadLogic() : Exports == Implementation where
         []
       []
 
-    evaluate(n : N, ns : List(N)) : N ==
-      typeHas? n or typeIs? n =>
-        member?(n, ns) => ['true]
-        member?(nodeApp(['not], [n]), ns) => ['false]
-        n
+    -- evaluate "n0 is n1" or leave it as is
+    evalTypeIs(te : TEI, env : EC) : N ==
+      (n0, n1) := (te.expr, te.type)
+
+      hasFreeVars? n0 or hasFreeVars? n1 => [te]
+
+      (n0 = n1 => ['true]; ['false])
+
+    -- evaluate "n0 has n1" or leave it as is
+    evalTypeHas(te : TEH, env : EC) : N ==
+      (n0, n1) := (te.expr, te.type)
+
+      hasFreeVars? n0 or hasFreeVars? n1 => [te]
+
+      n1 = baseType() => ['true]
+
+      if symbol? n0 then n0 := symbolType()
+      if integer? n0 then n0 := integerType()
+
+      n0 = n1 => ['true]
+
+      -- let's find type structure of n0
+      ti? :=
+        symbol? n0 => fetchType(n0 :: Symbol, env)
+        apply? n0 => fetchType(n0 :: APP, env)
+        return [te]
+
+      ti? case "failed" => [te]
+      ti := ti? :: TI
+
+      -- case "A has B()"
+      apply? n1 =>
+        (member?(n1, ti.hasList) => ['true]; ['false])
+
+      -- case "A has Join(..)"
+      sequence? n1 =>
+        seq := n1 :: SEQ
+        bs := [evalTypeHas([n0, t]$TEH, env) for t in seq.list]
+        every?(true?, bs) => ['true]
+        any?(false?, bs) => ['false]
+        [te]
+
+      -- case "A has { fn : (..) -> .. }"
+      typeDecl? n1 and not(unbound? n0 or unbound? n1) =>
+        seq := ti.body :: SEQ
+        for n in seq.list repeat
+          if typeOrigin? n then
+            n := (n :: TO).expr
+          not typeDecl? n => "iterate"
+          n := substitute(n, typeVar() :: TV, n0)
+          if n = n1 then
+            return ['true]
+        ['false]
+
+      [te]
+
+    evaluate(n : N, env : EC) : N ==
+      debug ["Evaluate expression:" :: PF, bold(n :: PF)]
+
+      typeHas? n => evalTypeHas(n :: TEH, env)
+      typeIs? n => evalTypeIs(n :: TEI, env)
       apply? n =>
         app := n :: APP
-        lst := [evaluate(arg, ns) for arg in app.args]
+        not member?(app.function, [['and], ['or], ['not]]$List(N)) => n
+        lst := [evaluate(arg, env) for arg in app.args]
         app.function = ['and] =>
           any?(false?, lst) => ['false]
           lst := remove(true?, lst)
@@ -65,15 +124,16 @@ SpadLogic() : Exports == Implementation where
           #lst = 1 => first lst
           nodeApp(['or], lst)
         app.function = ['not] and #app.args = 1 =>
-          n' := evaluate(first app.args, ns)
+          n' := evaluate(first app.args, env)
           true? n' => ['false]
-          false? n' => ['true]
           n
         n
-      n
+      true? n or false? n => n
+      fail ["Expression" :: PF, bold(n :: PF), "not handled!" :: PF]
+      error "evaluate $ SpadLogic"
 
 )abbrev package SLOGICT SpadLogicTest
-SpadLogicTest() : Exports == Implementation where
+SpadLogicTest(EC : SpadEnvCategory) : Exports == Implementation where
   N ==> SpadNode
   APP ==> SpadApply(N)
   PF ==> PrintableForm
@@ -87,15 +147,16 @@ SpadLogicTest() : Exports == Implementation where
     import SpadNodeFactory
     import Printer
     import MainLogger
-    import SpadLogic
+    import SpadLogic(EC)
 
     extract (n : N) : Void ==
       println pile([spaces [n :: PF, bold("=>" :: PF)],
                     bracket [p :: PF for p in extractPredicates n]])
 
-    eval (n : N, ns : List(N)) : Void ==
-      println pile([spaces [n :: PF, bold("=>" :: PF), evaluate(n, ns) :: PF],
-                    spaces [bold("when" :: PF), :[k :: PF for k in ns]]])
+    eval (n : N, fs : List(N)) : Void ==
+      env := new()
+      println pile([spaces [n :: PF, bold("=>" :: PF), evaluate(n, env) :: PF],
+                    spaces [bold("when" :: PF), :[f :: PF for f in fs]]])
 
     test1 () ==
       loggerDefaultLevel "info"
@@ -119,13 +180,14 @@ SpadLogicTest() : Exports == Implementation where
       a1 := nodeApp(['_>], [['x], [0]])
       a2 := nodeTypeHas(['S], ['Foo])
       a3 := nodeTypeIs(['R], ['Integer])
-      n1 := nodeApp(["and" :: Symbol], [a1, a2, a3])
-      n2 := nodeApp(["or" :: Symbol], [a1, a2, a3])
 
       eval(a3, [a3])
       eval(nodeApp(['not], [a3]), [nodeApp(['not], [a3])])
 
+      n1 := nodeApp(["and" :: Symbol], [a1, a2, a3])
       eval(n1, [nodeApp(['not], [a2])])
       eval(n1, [a2])
+
+      n2 := nodeApp(["or" :: Symbol], [a1, a2, a3])
       eval(n2, [nodeApp(['not], [a3])])
       eval(n2, [a3])

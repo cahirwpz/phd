@@ -9,6 +9,8 @@ SpadEnvCategory() : Category == Definition where
     elt : (%, EKEY) -> EVAL
     setelt! : (%, EKEY, EVAL) -> %
 
+    fetchType : (EKEY, %) -> Union(TI, "failed")
+
     createScope : % -> %
     discardScope : % -> %
 

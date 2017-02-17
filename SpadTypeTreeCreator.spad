@@ -214,26 +214,12 @@ SpadTypeTreeCreator() : Exports == Implementation where
     import SpadEnvironment
     import SpadTypeRuleFactory
     import SpadTypeNodeArray
-    import SpadLogic
     import SpadTypeDatabase
     import SpadTypeUnifier
+    import SpadLogic(SpadEnvironment)
     import SpadTypeEvaluator(SpadEnvironment)
     import Printer
     import Logger('Creator)
-
-    keyOf (n : N) : EKEY ==
-      symbol? n => n :: Symbol
-      apply? n => n :: APP
-      typeHas? n => keyOf((n :: TEH).expr)
-      typeIs? n => keyOf((n :: TEI).expr)
-      case? n => keyOf((n :: SC).expr)
-      fail ["not a valid environment key:" :: PF, bold(n :: PF)]
-      error ""
-
-    envAddFacts (n : N, env : ENV) : Void ==
-      for p in extractPredicates n repeat
-        if typeHas? p or typeIs? p or case? p then
-          addFactAbout(keyOf p, p, env)
 
     walkApp (a : APP, ctx : CTX, env : ENV) : TN ==
       -- treat QUOTE(symbol) application as a symbol value
@@ -330,7 +316,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       cond := walk(ce.cond, ctx, env)
       trueEnv := createScope cond.env
-      envAddFacts(ce.cond, trueEnv)
+      addFacts(ce.cond, trueEnv)
       truebr := walk(ce.truebr, ctx, trueEnv)
 
       null? ce.falsebr =>
@@ -339,7 +325,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         this
 
       falseEnv := createScope (case? ce.cond => env; cond.env)
-      envAddFacts(nodeApp(['not], [ce.cond]), falseEnv)
+      addFacts(nodeApp(['not], [ce.cond]), falseEnv)
       falsebr := walk(ce.falsebr, ctx, falseEnv)
 
       env := mergeEnv(env, trueEnv, falseEnv)
@@ -419,7 +405,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
           if typeGuard? n then
             tg := n :: TG
-            if true? evaluate(tg.type, factsAbout(keyOf n, env)) then
+            if true? evaluate(tg.type, env) then
               candidate := tg.expr
           if typeOrigin? n then
             to := n :: TO

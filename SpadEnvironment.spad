@@ -10,6 +10,7 @@ SpadEnvironment() : Exports == Implementation where
     factsAbout : (EKEY, %) -> List(N)
 
     addType : (N, %) -> Void
+    addFacts : (N, %) -> Void
 
     addTypeOf : (EKEY, N, %) -> Void
     addFactAbout : (EKEY, N, %) -> Void
@@ -31,10 +32,20 @@ SpadEnvironment() : Exports == Implementation where
     import Logger('Env)
     import SpadNodeFactory
     import SpadNodeTools
+    import SpadLogic(%)
     import SpadTypeEvaluator(%)
 
     -- create empty environment
     new() == [empty()$SCOPE]
+
+    keyOf (n : N) : EKEY ==
+      symbol? n => n :: Symbol
+      apply? n => n :: APP
+      typeHas? n => keyOf((n :: TEH).expr)
+      typeIs? n => keyOf((n :: TEI).expr)
+      case? n => keyOf((n :: SC).expr)
+      fail ["not a valid environment key:" :: PF, bold(n :: PF)]
+      error ""
 
     typesOf (key : EKEY, env : %) : List(N) ==
       val := search(key, env)
@@ -86,6 +97,15 @@ SpadEnvironment() : Exports == Implementation where
       fail ["Type" :: PF, bold(t :: PF), "not handled!" :: PF]
       error "addType $ SpadEnvironment"
 
+    fetchType (key : EKEY, env : %) ==
+      val := search(key, env)
+      val case "failed" =>
+        key case APP => getTypeInfo(key :: APP, env)
+        key case Symbol => "failed"
+      val case EVAL =>
+        typeInfo? val.info => val.info :: TI
+        "failed"
+
     addTypeOf (key : EKEY, type : N, env : %) : Void ==
       val := search(key, env)
       val case "failed" =>
@@ -101,6 +121,11 @@ SpadEnvironment() : Exports == Implementation where
       val case EVAL =>
         member?(fact, val.facts) => env
         val.facts := [fact, :val.facts]
+
+    addFacts (n : N, env : %) : Void ==
+      for p in extractPredicates n repeat
+        if typeHas? p or typeIs? p or case? p then
+          addFactAbout(keyOf p, p, env)
 
     importDomain (dom : APP, env : %) : Void ==
       notice ["Importing" :: PF, bold(dom :: PF), "domain" :: PF]
