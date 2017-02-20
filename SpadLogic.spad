@@ -46,13 +46,32 @@ SpadLogic(EC : SpadEnvCategory) : Exports == Implementation where
         []
       []
 
+    evalPredicate(p : N, env : EC) : N ==
+      key :=
+        typeIs? p => (p :: TEI).expr
+        typeHas? p => (p :: TEH).expr
+        case? p => (p :: SC).expr
+        return p
+      facts := 
+        symbol? key => factsAbout(key :: Symbol, env)
+        apply? key => factsAbout(key :: APP, env)
+        return p
+      for f in facts repeat
+        not? f =>
+          f := (f :: APP).args.1
+          f = p => return ['false]
+        f = p => return ['true]
+      p
+
     -- evaluate "n0 is n1" or leave it as is
     evalTypeIs(te : TEI, env : EC) : N ==
       (n0, n1) := (te.expr, te.type)
 
       hasFreeVars? n0 or hasFreeVars? n1 => [te]
 
-      (n0 = n1 => ['true]; ['false])
+      n0 = n1 => ['true]
+
+      evalPredicate([te], env)
 
     -- evaluate "n0 has n1" or leave it as is
     evalTypeHas(te : TEH, env : EC) : N ==
@@ -66,6 +85,9 @@ SpadLogic(EC : SpadEnvCategory) : Exports == Implementation where
       if integer? n0 then n0 := integerType()
 
       n0 = n1 => ['true]
+
+      n := evalPredicate([te], env)
+      true? n or false? n => n
 
       -- let's find type structure of n0
       ti? :=
@@ -126,6 +148,7 @@ SpadLogic(EC : SpadEnvCategory) : Exports == Implementation where
         app.function = ['not] and #app.args = 1 =>
           n' := evaluate(first app.args, env)
           true? n' => ['false]
+          false? n' => ['true]
           n
         n
       true? n or false? n => n
@@ -155,6 +178,8 @@ SpadLogicTest(EC : SpadEnvCategory) : Exports == Implementation where
 
     eval (n : N, fs : List(N)) : Void ==
       env := new()
+      for f in fs repeat
+        addFacts(f, env)
       println pile([spaces [n :: PF, bold("=>" :: PF), evaluate(n, env) :: PF],
                     spaces [bold("when" :: PF), :[f :: PF for f in fs]]])
 
@@ -164,7 +189,7 @@ SpadLogicTest(EC : SpadEnvCategory) : Exports == Implementation where
 
       a1 := nodeApp(['_>], [['x], [0]])
       a2 := nodeTypeHas(['S], ['Foo])
-      a3 := nodeTypeIs(['R], ['Integer])
+      a3 := nodeTypeIs(['R], integerType)
       n1 := nodeApp(["and" :: Symbol], [a1, a2, a3])
       n2 := nodeApp(["or" :: Symbol], [a1, a2, a3])
 
@@ -178,8 +203,8 @@ SpadLogicTest(EC : SpadEnvCategory) : Exports == Implementation where
       resetTime()
 
       a1 := nodeApp(['_>], [['x], [0]])
-      a2 := nodeTypeHas(['S], ['Foo])
-      a3 := nodeTypeIs(['R], ['Integer])
+      a2 := nodeTypeHas(['S], setCategoryType)
+      a3 := nodeTypeIs(['R], integerType)
 
       eval(a3, [a3])
       eval(nodeApp(['not], [a3]), [nodeApp(['not], [a3])])

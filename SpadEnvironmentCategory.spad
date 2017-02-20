@@ -5,10 +5,13 @@ SpadEnvCategory() : Category == Definition where
   Definition ==> Join(CoercibleTo(PF), KeyedDictionary(EKEY, EVAL)) with
     new : () -> %
 
+    factsAbout : (EKEY, %) -> List(N)
+
     search : (EKEY, %) -> Union(EVAL, "failed")
     elt : (%, EKEY) -> EVAL
     setelt! : (%, EKEY, EVAL) -> %
 
+    addFacts : (N, %) -> Void
     fetchType : (EKEY, %) -> Union(TI, "failed")
 
     createScope : % -> %

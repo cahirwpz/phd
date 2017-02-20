@@ -91,10 +91,6 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   where? : % -> Boolean
   null? : % -> Boolean
 
-  value? : % -> Boolean
-  true? : % -> Boolean
-  false? : % -> Boolean
-
   coerce : % -> DoubleFloat
   coerce : % -> Integer
   coerce : % -> String
@@ -1536,15 +1532,6 @@ SpadNode() : Exports == Implementation where
     undefinedType? n ==
       not n case marker => false
       n :: MR = ["%undef"]
-
-    value? n ==
-      float? n or integer? n or string? n or symbol? n
-
-    true? n ==
-      n = ['true]
-
-    false? n ==
-      n = ['false]
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]

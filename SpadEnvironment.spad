@@ -7,10 +7,8 @@ SpadEnvironment() : Exports == Implementation where
 
   Exports ==> SpadEnvCategory with
     typesOf : (EKEY, %) -> List(N)
-    factsAbout : (EKEY, %) -> List(N)
 
     addType : (N, %) -> Void
-    addFacts : (N, %) -> Void
 
     addTypeOf : (EKEY, N, %) -> Void
     addFactAbout : (EKEY, N, %) -> Void
@@ -40,12 +38,13 @@ SpadEnvironment() : Exports == Implementation where
 
     keyOf (n : N) : EKEY ==
       symbol? n => n :: Symbol
+      not? n => keyOf (n :: APP).args.1
       apply? n => n :: APP
       typeHas? n => keyOf((n :: TEH).expr)
       typeIs? n => keyOf((n :: TEI).expr)
       case? n => keyOf((n :: SC).expr)
       fail ["not a valid environment key:" :: PF, bold(n :: PF)]
-      error ""
+      error "keyOf $ SpadEnvironment"
 
     typesOf (key : EKEY, env : %) : List(N) ==
       val := search(key, env)
@@ -124,8 +123,7 @@ SpadEnvironment() : Exports == Implementation where
 
     addFacts (n : N, env : %) : Void ==
       for p in extractPredicates n repeat
-        if typeHas? p or typeIs? p or case? p then
-          addFactAbout(keyOf p, p, env)
+        addFactAbout(keyOf p, p, env)
 
     importDomain (dom : APP, env : %) : Void ==
       notice ["Importing" :: PF, bold(dom :: PF), "domain" :: PF]

@@ -83,6 +83,7 @@ SpadTypeNode() : Exports == Implementation where
     import Printer
     import SpadTypeUnifier
     import SpadNodeFactory
+    import SpadNodeTools
 
     Rep := Record(m_index : NR,
                   m_node : N,

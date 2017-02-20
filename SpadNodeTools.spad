@@ -128,6 +128,12 @@ SpadNodeTools() : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> with
+    true? : N -> Boolean
+    false? : N -> Boolean
+    boolean? : N -> Boolean
+    value? : N -> Boolean
+    not? : N -> Boolean
+
     occurs? : (TV, N) -> Boolean
     unbound? : N -> Boolean
     containsWildcard? : N -> Boolean
@@ -153,6 +159,17 @@ SpadNodeTools() : Exports == Implementation where
     import Logger('Term)
     import SpadNode
     import SpadNodeFactory
+
+    true? n ==
+      n = ['true]
+    false? n ==
+      n = ['false]
+    boolean? n == 
+      n = ['true] or n = ['false]
+    value? n ==
+      float? n or integer? n or string? n or symbol? n
+    not? n ==
+      apply? n and (n :: APP).function = ['not] and #(n :: APP).args = 1
 
     occurs? (tv, n) == occurs?(n, tv) $ SpadNodeTypeVarOccurs
     unbound? n == walk(n) $ SpadNodeUnbound
