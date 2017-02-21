@@ -6,21 +6,6 @@ SpadEnvironment() : Exports == Implementation where
   SCOPE ==> HashTable(EKEY, EVAL, "UEQUAL")
 
   Exports ==> SpadEnvCategory with
-    typesOf : (EKEY, %) -> List(N)
-
-    addType : (N, %) -> Void
-
-    addTypeOf : (EKEY, N, %) -> Void
-    addFactAbout : (EKEY, N, %) -> Void
-    addDomain : (APP, %) -> Void
-    addDomainAs : (APP, EKEY, %) -> Void
-
-    importDomain : (APP, %) -> Void
-
-    reset! : (%, EKEY) -> %
-
-    mergeEnv: (%, %, %) -> %
-
     coerce : SCOPE -> PF
 
   Implementation ==> add
@@ -211,7 +196,7 @@ SpadEnvironment() : Exports == Implementation where
     discardScope env ==
       rest env
 
-    mergeEnv (env : %, left : %, right : %) : % ==
+    merge (env : %, left : %, right : %) : % ==
       top := [k :: Symbol for k in keys first env | k case Symbol]
       lks := [k :: Symbol for k in keys first left | k case Symbol]
       rks := [k :: Symbol for k in keys first right | k case Symbol]

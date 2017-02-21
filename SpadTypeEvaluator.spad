@@ -3,9 +3,9 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
 )include SpadTypeDefs.inc
 
   Exports ==> CoercibleTo(PF) with
-    getTypeInfo : (Symbol, EC) -> MT
+    fetchFunctorType : (Symbol, EC) -> MT
     getTypeInfo : (APP, EC) -> TI
-    getTypeInfo : (FT, EC) -> MT
+    makeFunctorType : (FT, EC) -> MT
 
   Implementation ==> add
     import Logger('TypeEval)
@@ -22,7 +22,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
     evalTypeGuards : (APP, TI, EC) -> TI
     eraseConstraints : (APP, TI, EC) -> TI
 
-    getTypeInfo(name : Symbol, env : EC) : MT ==
+    fetchFunctorType(name : Symbol, env : EC) : MT ==
       n? := search(name, env)
       n? case EVAL => (n? :: EVAL).info :: MT
 
@@ -39,7 +39,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
       n? case EVAL => (n? :: EVAL).info :: TI
 
       name := app.function :: Symbol
-      ti := apply(app, getTypeInfo(name, env), env)
+      ti := apply(app, fetchFunctorType(name, env), env)
       env(app) := [[], [ti], []]
       ti := evalTypeGuards(app, ti, env)
 
@@ -47,7 +47,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
 
       eraseConstraints(app, ti, env)
       
-    getTypeInfo(ft : FT, env : EC) : MT ==
+    makeFunctorType(ft : FT, env : EC) : MT ==
       mt := makeType ft
       ti := flatten(ft.name, mt.result :: TI, env)
       mt := [mt.args, [ti]]
@@ -293,7 +293,7 @@ SpadTypeEvaluatorTest(EC : SpadEnvCategory) : Exports == Implementation where
                                   'UnivariateTaylorSeries, 'Matrix])
 
       for s in symbols repeat
-        println [bold blue(s :: PF), "is" :: PF, getTypeInfo(s, env) :: PF]
+        println [bold blue(s :: PF), "is" :: PF, fetchFunctorType(s, env) :: PF]
 
       println (env :: PF)
 
@@ -320,7 +320,7 @@ SpadTypeEvaluatorTest(EC : SpadEnvCategory) : Exports == Implementation where
       env := initTest()
 
       -- check if values as accepted as functor arguments (instead of types)
-      println (getTypeInfo('UnivariateTaylorSeries, env) :: PF)
+      println (fetchFunctorType('UnivariateTaylorSeries, env) :: PF)
       t := [['UnivariateTaylorSeries], [integerType(), ['x]$N, [2]$N]]$APP
       println (getTypeInfo(t, env) :: PF)
 
@@ -330,9 +330,9 @@ SpadTypeEvaluatorTest(EC : SpadEnvCategory) : Exports == Implementation where
       env := initTest()
 
       -- TODO: some extremely slow cases to be improved
-      println (getTypeInfo('UnivariateLaurentSeries, env) :: PF)
-      --println (getTypeInfo('UnivariatePuiseuxSeries, env) :: PF)
-      --println (getTypeInfo('ExponentialExpansion, env) :: PF)
+      println (fetchFunctorType('UnivariateLaurentSeries, env) :: PF)
+      --println (fetchFunctorType('UnivariatePuiseuxSeries, env) :: PF)
+      --println (fetchFunctorType('ExponentialExpansion, env) :: PF)
 
       println (env :: PF)
 
