@@ -21,10 +21,10 @@ SpadEnvCategory() : Category == Definition where
     addFactAbout : (EKEY, N, %) -> Void
 
     addDomain : (APP, %) -> Void
-    addDomainAs : (APP, EKEY, %) -> Void
+    addDomainAs : (APP, Symbol, %) -> Void
 
     fetchType : (EKEY, %) -> Union(TI, "failed")
-    importDomain : (APP, %) -> Void
+    importDomain : (EKEY, %) -> Void
 
     createScope : % -> %
     discardScope : % -> %

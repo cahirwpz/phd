@@ -110,13 +110,16 @@ SpadEnvironment() : Exports == Implementation where
       for p in extractPredicates n repeat
         addFactAbout(keyOf p, p, env)
 
-    importDomain (dom : APP, env : %) : Void ==
+    importDomain (dom : EKEY, env : %) : Void ==
       notice ["Importing" :: PF, bold(dom :: PF), "domain" :: PF]
       ti? := search(dom, env)
       ti? case "failed" => error "importDomain $ SpadEnvironment"
       ti := (ti? :: EVAL).info :: TI
+      dom' := 
+        dom case APP => [dom]
+        dom case Symbol => [dom]
       for n in ti.body.list repeat
-        n' := substitute(n, typeVar() :: TV, [dom])
+        n' := substitute(n, typeVar() :: TV, dom')
         guard := null
         if typeGuard? n' then
           tg := n' :: TG
@@ -126,7 +129,7 @@ SpadEnvironment() : Exports == Implementation where
           to := n' :: TO
           n' := to.expr
         td := n' :: TD
-        n' := nodeTypeOrigin(td.type, [dom])
+        n' := nodeTypeOrigin(td.type, dom')
         if not null? guard then
           n' := nodeTypeGuard(n', guard)
         addTypeOf(td.expr :: Symbol, n', env)
@@ -137,12 +140,12 @@ SpadEnvironment() : Exports == Implementation where
       ti := getTypeInfo(dom, env)
       addTypeOf(dom, [ti], env)
 
-    addDomainAs (dom : APP, key : EKEY, env : %) : Void ==
-      key? (dom, env) => env
-      notice(["Adding" :: PF, bold (dom :: PF), "as" :: PF, bold (key :: PF), 
+    addDomainAs (dom : APP, name : Symbol, env : %) : Void ==
+      key? (name, env) => env
+      notice(["Adding" :: PF, bold (dom :: PF), "as" :: PF, bold (name :: PF), 
               "to the environment!" :: PF])
       ti := getTypeInfo(dom, env)
-      addTypeOf(dom, [ti], env)
+      env(name) := [[], [ti], [nodeTypeHas([name], [dom])]]
 
     empty? (env : %) : Boolean ==
       empty?(env)$Rep
@@ -217,9 +220,11 @@ SpadEnvironment() : Exports == Implementation where
       ts := [t :: PF for t in val.types]
       fs := [f :: PF for f in val.facts]
       empty? fs =>
-        pile [cyan("types:" :: PF), :ts]
-      vconcat [pile [cyan("types:" :: PF), :ts],
-               pile [cyan("facts:" :: PF), :fs]]
+        vconcat([pile [cyan("types:" :: PF), :ts],
+                 pile [cyan("info:" :: PF), val.info :: PF]])
+      vconcat([pile [cyan("types:" :: PF), :ts],
+               pile [cyan("facts:" :: PF), :fs],
+               pile [cyan("info:" :: PF), val.info :: PF]])
       
     coerce (scope : SCOPE) : PF ==
       entries : List(PF) := []

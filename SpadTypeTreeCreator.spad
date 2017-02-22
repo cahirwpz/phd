@@ -497,9 +497,8 @@ SpadTypeTreeCreator() : Exports == Implementation where
         name := arg.expr :: Symbol
         argNode := addNode!(ctx, arg.expr, env)
         bindNode!(ctx, argNode, arg.type)
-        addTypeOf(name, argNode.type, env)
-        -- Test5 depends on following line
         addDomainAs(arg.type :: APP, name, env)
+        importDomain(name, env)
         argSub(name) := argNode.type
         argNodeList := [argNode, :argNodeList]
 

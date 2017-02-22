@@ -40,6 +40,7 @@ SpadCompilerTest() : Exports == Implementation where
     run2 e ==
       loggerDefaultLevel "debug"
       loggerLevel('Unify, "info")
+      loggerLevel('Logic, "info")
       loggerLevel('TypeInfo, "warn")
       loggerLevel('TypeDB, "notice")
       loggerLevel('TypeEval, "notice")
