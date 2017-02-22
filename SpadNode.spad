@@ -142,6 +142,21 @@ SpadTypeExprCategory(N : SpadNodeCategory) : Category == SpadNodeBaseCategory wi
     parse ex == [parse ex.2, parse ex.3]
     copy x == [copy x.expr, copy x.type]
 
+)abbrev category SLCAT SpadListCategory
+SpadListCategory(N : SpadNodeCategory) : Category == SpadNodeBaseCategory with
+    parseList : SExpression -> List(N)
+  add
+    import ParserTools
+
+    parseListItem (e : SExpression) : List(N) ==
+      var? e and listof? e.2 =>
+        -- (: (LISTOF x y z ...) Type)
+        [parse (convert [convert '_:, var, e.3]) for var in destruct(cdr e.2)]
+      [(parse e) $ N]
+
+    parseList ex ==
+      concat [parseListItem e for e in destruct ex]
+
 )abbrev domain SMARKER SpadMarker
 SpadMarker(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
@@ -946,7 +961,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
   K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body")
   PF ==> PrintableForm
 
-  Exports ==> SpadNodeBaseCategory with
+  Exports ==> SpadListCategory(N) with
     elt : (%, "kind") -> K
     elt : (%, "list") -> List(N)
     construct : (K, List(N)) -> %
@@ -962,33 +977,6 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
     construct(k, l) == [k, l]$Rep
 
     parse ex ==
-      content : List N := []
-
-      lst :=
-        domain? ex or package? ex =>
-          -- (CATEGORY domain ...)
-          -- (CATEGORY package ...)
-          destruct cdr(cdr(ex))
-        -- (@Tuple ...)
-        -- (SEQ ...)
-        -- (Join ...)
-        -- (PROGN ...)
-        destruct cdr(ex)
-
-      for e in lst repeat
-        var? e =>
-          if listof? e.2
-            then
-              -- (: (LISTOF x y z ...) Type)
-              varlst := destruct(cdr e.2)
-              for var in varlst repeat
-                sexp : N := parse (convert [convert '_:, var, e.3])
-                content := [sexp, :content]
-            else
-              content := [(parse e) $ N, :content]
-
-        content := [(parse e) $ N, :content]
-
       k : K :=
         capsule? ex => "Capsule"
         seq? ex => "Sequence"
@@ -998,7 +986,14 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
         join? ex => "Join"
         progn? ex => "Body"
 
-      [k, reverse content]
+      lst :=
+        domain? ex or package? ex =>
+          -- (CATEGORY domain ...) or (CATEGORY package ...)
+          cdr cdr ex
+        -- (@Tuple ...) or (SEQ ...) or (Join ...) or (PROGN ...)
+        cdr ex
+
+      [k, parseList lst]
 
     copy x == [copy!(x.kind, K), map(copy, x.list)]
 
