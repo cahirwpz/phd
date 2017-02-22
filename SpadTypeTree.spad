@@ -39,9 +39,8 @@ SpadTypeRule() : Exports == Implementation where
             spaces(["if" :: PF, ce.cond :: PF,
                     "then" :: PF, ce.truebr :: PF,
                     "else" :: PF, ce.falsebr :: PF])
-          sequence? f =>
-            seq := f :: SEQ
-            paren sepBy("; " :: PF, [n :: PF for n in seq.list])
+          aggregate? f =>
+            paren sepBy("; " :: PF, [n :: PF for n in (f :: AGG).list])
           f :: PF
         pfs := [pf, :pfs]
 
@@ -168,8 +167,8 @@ SpadTypeNode() : Exports == Implementation where
           bracket spaces [loopBody, :concat(il, gl)]
         lp.kind case "repeat" =>
           spaces ["repeat" :: PF, loopBody]
-      sequence? n =>
-        ns := [i :: PF for i in (n :: SEQ).list]
+      aggregate? n =>
+        ns := [i :: PF for i in (n :: AGG).list]
         #ns > 1 => paren sepBy(", " :: PF, ns)
         first ns
       n :: PF
@@ -191,7 +190,7 @@ SpadTypeNode() : Exports == Implementation where
         rs := sepBy(" | " :: PF, [onelineOf rule.solution for rule in x.m_rules])
         spaces([prefix, bold cyan(rs), "is" :: PF, t])
       n := stripOrigin x.m_node
-      sequence? n =>
+      aggregate? n =>
         pile([spaces [prefix, bold blue(nodeRef(x) :: PF), "is" :: PF], t])
       recordType? n or unionType? n or mappingType? n =>
         spaces [prefix, blue(n :: PF)]

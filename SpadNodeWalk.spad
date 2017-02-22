@@ -20,7 +20,7 @@ SpadNodeWalk(R : Type) : Category == Definition where
       walk : NR -> R
       walk : RT -> R
       walk : SEG -> R
-      walk : SEQ -> R
+      walk : AGG -> R
       walk : ST -> R
       walk : TC -> R
       walk : TD -> R
@@ -62,7 +62,7 @@ SpadNodeWalk(R : Type) : Category == Definition where
         nodeRef? n => walk (n :: NR)
         recordType? n => walk (n :: RT)
         segment? n => walk (n :: SEG)
-        sequence? n => walk (n :: SEQ)
+        aggregate? n => walk (n :: AGG)
         subType? n => walk (n :: ST)
         typeCoerce? n => walk (n :: TC)
         typeDecl? n => walk (n :: TD)

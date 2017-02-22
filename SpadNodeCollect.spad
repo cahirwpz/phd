@@ -10,7 +10,7 @@ SpadNodeCollect(R : BasicType) : Category == Definition where
       walk (mt : MT) == concat [walk x for x in [mt.result, :mt.args]]
       walk (rt : RT) == concat [walk f for f in fields rt]
       walk (ut : UT) == concat [walk v for v in variants ut]
-      walk (s : SEQ) == concat [walk e for e in s.list]
+      walk (s : AGG) == concat [walk e for e in s.list]
       walk (te : TD) == concat (walk te.expr, walk te.type)
       walk (te : TG) == concat (walk te.expr, walk te.type)
       walk (te : TEH) == concat (walk te.expr, walk te.type)

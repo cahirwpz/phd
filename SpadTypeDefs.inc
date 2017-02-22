@@ -25,7 +25,7 @@
   NR ==> SpadNodeRef(N)
   RT ==> SpadRecordType(N)
   SEG ==> SpadSegment(N)
-  SEQ ==> SpadSequence(N)
+  AGG ==> SpadAggregate(N)
   ST ==> SpadSubType(N)
   TC ==> SpadTypeCoerce(N)
   TD ==> SpadTypeDecl(N)

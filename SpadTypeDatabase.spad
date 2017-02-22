@@ -18,8 +18,8 @@ FlattenDatabaseType() : SNR == Implementation where
 
     listOf(n : N) : List(N) ==
       null? n => []
-      sequence? n =>
-        s : SEQ := coerce(n)
+      aggregate? n =>
+        s : AGG := coerce(n)
         s.list
       [n]
 
@@ -30,19 +30,19 @@ FlattenDatabaseType() : SNR == Implementation where
       tl := [addTypeGuard(n, c) for n in listOf(walk cn.truebr)]
       fl := [addTypeGuard(n, nc) for n in listOf(walk cn.falsebr)]
 
-      nodeSeq("Body", concat(tl, fl))
+      nodeList concat(tl, fl)
 
-    walk (seq : SEQ) : N ==
+    walk (s : AGG) : N ==
       l : List(N) := []
-      for n in seq.list repeat
+      for n in s.list repeat
         n := walk n
         null? n => "iterate"
-        sequence? n =>
-          s : SEQ := coerce(n)
+        aggregate? n =>
+          s : AGG := coerce(n)
           l := concat(l, s.list)
         l := concat!(l, n)
-      #l = 1 and seq.kind = "Body" => first l
-      nodeSeq(seq.kind, l)
+      #l = 1 and s.kind = "List" => first l
+      nodeAgg(s.kind, l)
 
 )abbrev domain STDB SpadTypeDatabase
 SpadTypeDatabase() : Exports == Implementation where
@@ -113,12 +113,12 @@ SpadTypeDatabase() : Exports == Implementation where
                for typ in types for i in 1..]
 
       body := (cat? => getCtorCategory t; cmm.type)
-      body := nodeSeq((cat? => "Join"; "Domain"),
-                      (sequence? body => (body :: SEQ).list; [body]))
+      body := nodeAgg((cat? => "Join"; "Domain"),
+                      (aggregate? body => (body :: AGG).list; [body]))
       body := substitute(body, ctx)
       body := walk(body)$FlattenDatabaseType
 
-      [args, nodeTypeInfo(body :: SEQ, [], [], getSuperDomain t)]$MT
+      [args, nodeTypeInfo(body :: AGG, [], [], getSuperDomain t)]$MT
 
     fromFunctor (ft : FT) : Union(MT, "failed") ==
       debug ["fromFunctor:" :: PF, bold(ft :: PF)]
@@ -135,11 +135,11 @@ SpadTypeDatabase() : Exports == Implementation where
 
       body := 
         ft.type = categoryType() => ft.extends
-        nodeSeq("Domain", (ft.type :: SEQ).list)
+        nodeDomain (ft.type :: AGG).list
       body := substitute(body, ctx)
       body := walk(body)$FlattenDatabaseType
 
-      [args, nodeTypeInfo(body :: SEQ, [], [], null)]$MT
+      [args, nodeTypeInfo(body :: AGG, [], [], null)]$MT
 
     fetchType(name : Symbol) : MT ==
       t? := search(name, cache)

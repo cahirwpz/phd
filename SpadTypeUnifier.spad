@@ -110,9 +110,9 @@ SpadTypeUnifier() : Exports == Implementation where
         to2 := n2 :: TO
         unifyType'(n1, to2.expr)
 
-      sequence? n1 and sequence? n2 =>
-        s1 := n1 :: SEQ
-        s2 := n2 :: SEQ
+      aggregate? n1 and aggregate? n2 =>
+        s1 := n1 :: AGG
+        s2 := n2 :: AGG
         s1.kind ~= s1.kind => "failed"
         #s1.list ~= #s2.list => "failed"
         unifyTypeList [[e1, e2]$P for e1 in s1.list for e2 in s2.list]
@@ -309,9 +309,9 @@ SpadTypeUnifier() : Exports == Implementation where
         td1.expr ~= td2.expr => "false"
         isSubType'(td1.type, td2.type)
 
-      sequence? n1 and sequence? n2 =>
-        s1 := n1 :: SEQ
-        s2 := n2 :: SEQ
+      aggregate? n1 and aggregate? n2 =>
+        s1 := n1 :: AGG
+        s2 := n2 :: AGG
         s1.kind ~= s2.kind => "false"
         l1 := s1.list
         l2 := s2.list

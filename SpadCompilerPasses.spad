@@ -19,7 +19,7 @@ SpadTreeCleanUp() : SNR == Implementation where
       rv := walk a.rval
       typeDecl? lv =>
         td : TD := coerce(lv)
-        nodeSeq("Sequence", [lv, nodeAssign(td.expr, rv)])
+        nodeSeq [lv, nodeAssign(td.expr, rv)]
       nodeAssign(lv, rv)
 
     walk (to : TO) ==
@@ -78,10 +78,10 @@ SpadMacroExpander() : Exports == Implementation where
       env := stack [table()]
       lastCtx := table()
 
-    walk (seq : SEQ) : N ==
-      nodes := map(walk, seq.list)
+    walk (s : AGG) : N ==
+      nodes := map(walk, s.list)
 
-      if seq.kind = "Sequence" or seq.kind = "Capsule" then
+      if s.kind = "Sequence" or s.kind = "Capsule" then
         newCtx()
         lastCtx := discardCtx()
 
@@ -89,7 +89,7 @@ SpadMacroExpander() : Exports == Implementation where
         nodes := remove(null?, nodes)
         empty? nodes => return null
 
-      nodeSeq(seq.kind, nodes)
+      nodeAgg(s.kind, nodes)
 
     walk (app : APP) : N ==
       if symbol? app.function then

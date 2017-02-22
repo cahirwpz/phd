@@ -23,8 +23,8 @@ SpadTypeRuleFactory() : Exports == Implementation where
     ruleTypeIs : (TN, TN) -> TR
     ruleTypeIs : (List(TN), TN, TN) -> TR
     ruleSeg : (TN, OTN) -> TR
-    ruleSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
-                     "Tuple", "Body"), TN, List(TN)) -> TR
+    ruleAgg : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
+                     "Tuple", "List"), TN, List(TN)) -> TR
     ruleCapsule : List(TN) -> TR
     ruleTypeCoerce : (TN, TN) -> TR
     ruleTypeSelect : (TN, TN) -> TR
@@ -44,7 +44,7 @@ SpadTypeRuleFactory() : Exports == Implementation where
 
     ruleAssignFresh (D', L', R') ==
       (D, L, R) := (nodeRef(D'), nodeRef(L'), nodeRef(R'))
-      [[D, L, R, nodeAssign(L, R)], nodeSeq("Sequence", [D, nodeAssign(L, R)])]
+      [[D, L, R, nodeAssign(L, R)], nodeSeq [D, nodeAssign(L, R)]]
 
     ruleApply (fun, args) ==
       (funRef, argRefs) := (nodeRef(fun), [nodeRef(arg) for arg in args])
@@ -120,13 +120,13 @@ SpadTypeRuleFactory() : Exports == Implementation where
         endRef := null
       [formulas, nodeSeg(startRef, endRef)]
 
-    ruleSeq (kind, seq, exprs) ==
+    ruleAgg (kind, seq, exprs) ==
       (seqRef, exprRefs) := (nodeRef(seq), [nodeRef(expr) for expr in exprs])
-      [[:exprRefs, nodeTypeIs(last exprRefs, seqRef)], nodeSeq(kind, exprRefs)]
+      [[:exprRefs, nodeTypeIs(last exprRefs, seqRef)], nodeAgg(kind, exprRefs)]
 
     ruleCapsule exprList ==
       exprRefList := [nodeRef(expr) for expr in exprList | not done? expr]
-      [exprRefList, nodeSeq("Capsule", exprRefList)]
+      [exprRefList, nodeCapsule exprRefList]
 
     ruleTypeOrigin (expr, origin) ==
       (exprRef, originRef) := (nodeRef(expr), nodeRef(origin))
@@ -171,9 +171,9 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SNR == Implementation where
   Implementation ==> add
     import Logger('Capsule)
 
-    walk (seq : SEQ) : N ==
-      ns := [walk(coerce(n)@NR) for n in seq.list | nodeRef? n]
-      nodeSeq("Join", [n for n in ns | not null? n])
+    walk (s : AGG) : N ==
+      ns := [walk(coerce(n)@NR) for n in s.list | nodeRef? n]
+      nodeJoin [n for n in ns | not null? n]
 
     walk (ass : ASS) : N == null
     walk (td : TD) : N == null
@@ -197,7 +197,7 @@ SpadTreeExtractCapsuleType(find : NR -> TN) : SNR == Implementation where
         cond := walk(ce.cond)
         truebr := nodeTypeGuard(walk ce.truebr, cond)
         falsebr := nodeTypeGuard(walk ce.falsebr, nodeApp(['not], [cond]))
-        nodeSeq("Join", [truebr, falsebr])
+        nodeJoin [truebr, falsebr]
       walk n
 
 )abbrev package STTCREAT SpadTypeTreeCreator
@@ -517,7 +517,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       ftRes :=
         ft.type = categoryType => categoryType()
         -- FIXME: Functor's return type is not of "Join" node!
-        nodeSeq("Join", (ftRealType :: TI).body.list)
+        nodeJoin (ftRealType :: TI).body.list
       bindNode!(ctx, resNode, ftRes)
 
       extNode := addNode!(ctx, ft.extends, env)
@@ -526,7 +526,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
 
       bodyNode := walk(ft.capsule, ctx, env)
 
-      capsuleType := nodeSeq("Join", [extNode.type, bodyNode.type])
+      capsuleType := nodeJoin [extNode.type, bodyNode.type]
 
       leaveSubTree!(ctx)
 
@@ -617,7 +617,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this.rules := [ruleSeg(startExpr, endExpr')]
       this
 
-    walkSeq (s : SEQ, ctx : CTX, env : ENV) : TN ==
+    walkAgg (s : AGG, ctx : CTX, env : ENV) : TN ==
       import List(TN)
 
       debug ["Found sequence of" :: PF, #(s.list) :: PF, "expressions." :: PF]
@@ -632,7 +632,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         bindNode!(ctx, this, capsuleType)
         this.rules := [rule]
       else
-        this.rules := [ruleSeq(s.kind, this, exprList)]
+        this.rules := [ruleAgg(s.kind, this, exprList)]
       this.env := (last exprList).env
       this
 
@@ -847,7 +847,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       integer? n => walkInt(n :: Integer, ctx, env)
       loop? n => walkLoop(n :: LP, ctx, env)
       segment? n => walkSeg(n :: SEG, ctx, env)
-      sequence? n => walkSeq(n :: SEQ, ctx, env)
+      aggregate? n => walkAgg(n :: AGG, ctx, env)
       string? n => walkStr(n :: String, ctx, env)
       symbol? n => walkSym(n :: Symbol, ctx, env)
       typeCoerce? n => walkTypeCoerce(n :: TC, ctx, env)

@@ -27,7 +27,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   construct : SpadNodeRef(%) -> %
   construct : SpadRecordType(%) -> %
   construct : SpadSegment(%) -> %
-  construct : SpadSequence(%) -> %
+  construct : SpadAggregate(%) -> %
   construct : SpadSubType(%) -> %
   construct : SpadTypeCoerce(%) -> %
   construct : SpadTypeDecl(%) -> %
@@ -52,7 +52,14 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
 
   apply? : % -> Boolean
   assign? : % -> Boolean
+  aggregate? : % -> Boolean
   capsule? : % -> Boolean
+  sequence? : % -> Boolean
+  domainBody? : % -> Boolean
+  packageBody? : % -> Boolean
+  joinBody? : % -> Boolean
+  tuple? : % -> Boolean
+  list? : % -> Boolean
   case? : % -> Boolean
   condExpr? : % -> Boolean
   float? : % -> Boolean
@@ -69,8 +76,6 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   nodeRef? : % -> Boolean
   recordType? : % -> Boolean
   segment? : % -> Boolean
-  sequence? : % -> Boolean
-  signatureList? : % -> Boolean
   string? : % -> Boolean
   subType? : % -> Boolean
   symbol? : % -> Boolean
@@ -111,7 +116,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   coerce : % -> SpadNodeRef(%)
   coerce : % -> SpadRecordType(%)
   coerce : % -> SpadSegment(%)
-  coerce : % -> SpadSequence(%)
+  coerce : % -> SpadAggregate(%)
   coerce : % -> SpadSubType(%)
   coerce : % -> SpadTypeCoerce(%)
   coerce : % -> SpadTypeDecl(%)
@@ -142,8 +147,8 @@ SpadTypeExprCategory(N : SpadNodeCategory) : Category == SpadNodeBaseCategory wi
     parse ex == [parse ex.2, parse ex.3]
     copy x == [copy x.expr, copy x.type]
 
-)abbrev category SLCAT SpadListCategory
-SpadListCategory(N : SpadNodeCategory) : Category == SpadNodeBaseCategory with
+)abbrev category SAGGCAT SpadAggregateCategory
+SpadAggregateCategory(N : SpadNodeCategory) : Category == SpadNodeBaseCategory with
     parseList : SExpression -> List(N)
   add
     import ParserTools
@@ -956,12 +961,12 @@ SpadLoop(N : SpadNodeCategory) : Exports == Implementation where
       n.kind case "repeat" =>
         spaces ["repeat" :: PF, loopBody]
 
-)abbrev package SSEQ SpadSequence
-SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
-  K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body")
+)abbrev package SAGG SpadAggregate
+SpadAggregate(N : SpadNodeCategory) : Exports == Implementation where
+  K ==> Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "List")
   PF ==> PrintableForm
 
-  Exports ==> SpadListCategory(N) with
+  Exports ==> SpadAggregateCategory(N) with
     elt : (%, "kind") -> K
     elt : (%, "list") -> List(N)
     construct : (K, List(N)) -> %
@@ -984,7 +989,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
         domain? ex => "Domain"
         package? ex => "Package"
         join? ex => "Join"
-        progn? ex => "Body"
+        progn? ex => "List"
 
       lst :=
         domain? ex or package? ex =>
@@ -1004,7 +1009,7 @@ SpadSequence(N : SpadNodeCategory) : Exports == Implementation where
           [convert ("CATEGORY" :: Symbol), convert ("domain" :: Symbol), :ls]
         x.kind case "Package" =>
           [convert ("CATEGORY" :: Symbol), convert ("package" :: Symbol), :ls]
-        x.kind case "Body" =>
+        x.kind case "List" =>
           [convert ("PROGN" :: Symbol), :ls]
         x.kind case "Join" =>
           [convert ("Join" :: Symbol), :ls]
@@ -1337,15 +1342,15 @@ SpadFunctor(N : SpadNodeCategory) : Exports == Implementation where
 SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
   PF ==> PrintableForm
   APP ==> SpadApply(N)
-  SEQ ==> SpadSequence(N)
+  AGG ==> SpadAggregate(N)
   TD ==> SpadTypeDecl(N)
 
   Exports ==> SpadNodeBaseCategory with
-    construct : (SEQ, List N, List N, N) -> %
+    construct : (AGG, List N, List N, N) -> %
 
     elt : (%, "hasList") -> List N 
     elt : (%, "constraints") -> List N
-    elt : (%, "body") -> SEQ
+    elt : (%, "body") -> AGG
     elt : (%, "superType") -> N
 
     category? : % -> Boolean
@@ -1353,7 +1358,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     package? : % -> Boolean
 
   Implementation ==> add
-    Rep := Record(ti_body : SEQ,
+    Rep := Record(ti_body : AGG,
                   ti_hasList : List N,
                   ti_constraints : List N,
                   ti_superType : N)
@@ -1417,13 +1422,21 @@ SpadNode() : Exports == Implementation where
     nodeNodeRef : (PI, PI) -> %
     nodeRecordType : List(TD) -> %
     nodeSeg : (%, %) -> %
-    nodeSeq : (Union("Domain", "Package", "Join", "Capsule", "Sequence", "Tuple", "Body"), List(%)) -> %
+    nodeDomain : List(%) -> %
+    nodePackage : List(%) -> %
+    nodeJoin : List(%) -> %
+    nodeCapsule : List(%) -> %
+    nodeSeq : List(%) -> %
+    nodeTuple : List(%) -> %
+    nodeList : List(%) -> %
+    nodeAgg : (Union("Domain", "Package", "Join", "Capsule", "Sequence",
+                     "Tuple", "List"), List(%)) -> %
     nodeSubType : (%, %) -> %
     nodeTypeCoerce : (%, %) -> %
     nodeTypeDecl : (%, %) -> %
     nodeTypeGuard : (%, %) -> %
     nodeTypeHas : (%, %) -> %
-    nodeTypeInfo : (SEQ, List(%), List(%), %) -> %
+    nodeTypeInfo : (AGG, List(%), List(%), %) -> %
     nodeTypeIs : (%, %) -> %
     nodeTypePretend : (%, %) -> %
     nodeTypeOrigin : (%, %) -> %
@@ -1437,7 +1450,7 @@ SpadNode() : Exports == Implementation where
     stripGuard : % -> %
     stripType : % -> %
 
-    collapse : SEQ -> SEQ
+    collapse : AGG -> AGG
 
   Implementation ==> add
     Rep := Union(dfloat : DF,
@@ -1457,7 +1470,7 @@ SpadNode() : Exports == Implementation where
                  record : RT,
                  s_case : SC,
                  segment : SEG,
-                 seq : SEQ,
+                 agg : AGG,
                  s_import : IM,
                  s_macro : SM,
                  subtype : ST,
@@ -1483,20 +1496,23 @@ SpadNode() : Exports == Implementation where
 
     apply? n == n case apply
     assign? n == n case assign
-    capsule? n ==
-      not n case seq => false
-      n.seq.kind = "Capsule"
+    aggregate? n == n case agg
+    capsule? n == (not n case agg => false; n.agg.kind = "Capsule")
+    sequence? n == (not n case agg => false; n.agg.kind = "Sequence")
+    domainBody? n == (not n case agg => false; n.agg.kind = "Domain")
+    packageBody? n == (not n case agg => false; n.agg.kind = "Package")
+    joinBody? n == (not n case agg => false; n.agg.kind = "Join")
+    tuple? n == (not n case agg => false; n.agg.kind = "Tuple")
+    list? n == (not n case agg => false; n.agg.kind = "List")
     case? n == n case s_case
     condExpr? n == n case cond
     float? n == n case dfloat
-    function? n ==
-      (n case func) and (n.func.name case Symbol)
+    function? n == (n case func) and (n.func.name case Symbol)
     functor? n == n case ftor
     import? n == n case s_import
     integer? n == n case int
     iterator? n == n case itor
-    lambda? n == 
-      (n case func) and (n.func.name case "lambda")
+    lambda? n == (n case func) and (n.func.name case "lambda")
     loop? n == n case loop 
     macro? n == n case s_macro 
     mappingType? n == n case mapping 
@@ -1504,10 +1520,6 @@ SpadNode() : Exports == Implementation where
     nodeRef? n == n case noderef
     recordType? n == n case record
     segment? n == n case segment 
-    sequence? n == n case seq
-    signatureList? n ==
-      not n case seq => false
-      n.seq.kind ~= "Join"
     string? n == n case str
     symbol? n == n case sym
     typeCoerce? n == n case t_coerce
@@ -1524,9 +1536,7 @@ SpadNode() : Exports == Implementation where
     unionType? n == n case union
     where? n == n case s_where
     typeVar? n == n case typevar
-    undefinedType? n ==
-      not n case marker => false
-      n :: MR = ["%undef"]
+    undefinedType? n == (not n case marker => false; n :: MR = ["%undef"])
 
     CoerceError(T) ==>
       error concat ["Cannot coerce SpadNode to ", T, "!"]
@@ -1591,9 +1601,9 @@ SpadNode() : Exports == Implementation where
       segment? n => n.segment
       CoerceError("SpadSegment")
 
-    coerce (n : %) : SEQ ==
-      sequence? n => n.seq
-      CoerceError("SpadSequence")
+    coerce (n : %) : AGG ==
+      aggregate? n => n.agg
+      CoerceError("SpadAggregate")
 
     coerce (n : %) : ST ==
       subType? n => n.subtype
@@ -1689,7 +1699,7 @@ SpadNode() : Exports == Implementation where
     construct (n : NR) : % == [n]$Rep
     construct (n : RT) : % == [n]$Rep
     construct (n : SEG) : % == [n]$Rep
-    construct (n : SEQ) : % == [n]$Rep
+    construct (n : AGG) : % == [n]$Rep
     construct (n : ST) : % == [n]$Rep
     construct (n : TC) : % == [n]$Rep
     construct (n : TD) : % == [n]$Rep
@@ -1722,7 +1732,7 @@ SpadNode() : Exports == Implementation where
         -- (SEQ expr1 expr2 ...)
         -- (CAPSULE expr1 expr2 ...)
         -- (@Tuple expr1 expr2 ...)
-        [parse(ex)$SEQ]
+        [parse(ex)$AGG]
 
       import? ex => [parse(ex)$IM]
       where? ex => [parse(ex)$SW]
@@ -1789,7 +1799,7 @@ SpadNode() : Exports == Implementation where
       nodeRef? n => (n :: NR) :: PF
       recordType? n => (n :: RT) :: PF
       segment? n => (n :: SEG) :: PF
-      sequence? n => (n :: SEQ) :: PF
+      aggregate? n => (n :: AGG) :: PF
       string? n => string((n :: String) :: PF)
       symbol? n => (n :: Symbol) :: PF
       subType? n => (n :: ST) :: PF
@@ -1828,7 +1838,7 @@ SpadNode() : Exports == Implementation where
       nodeRef? n => [copy(n :: NR)]
       recordType? n => [copy(n :: RT)]
       segment? n => [copy(n :: SEG)]
-      sequence? n => [copy(n :: SEQ)]
+      aggregate? n => [copy(n :: AGG)]
       string? n => [copy(n :: String)]
       symbol? n => [copy!(n :: Symbol, Symbol)]
       subType? n => [copy(n :: ST)]
@@ -1867,7 +1877,7 @@ SpadNode() : Exports == Implementation where
       nodeRef? n => convert(n :: NR)
       recordType? n => convert(n :: RT)
       segment? n => convert(n :: SEG)
-      sequence? n => convert(n :: SEQ)
+      aggregate? n => convert(n :: AGG)
       string? n => convert(n :: String)
       symbol? n => convert(n :: Symbol)
       -- subType is not recognized by original compiler
@@ -1905,10 +1915,17 @@ SpadNode() : Exports == Implementation where
       rt case "failed" => null
       [rt]
     nodeNodeRef (major, minor) == [[major, minor]$NR]
-    nodeSeq (kind, list) == [[kind, list]$SEQ]
+    nodeDomain list == [["Domain", list]$AGG]
+    nodePackage list == [["Package", list]$AGG]
+    nodeJoin list == [["Join", list]$AGG]
+    nodeCapsule list == [["Capsule", list]$AGG]
+    nodeSeq list == [["Sequence", list]$AGG]
+    nodeTuple list == [["Tuple", list]$AGG]
+    nodeList list == [["List", list]$AGG]
+    nodeAgg (kind, list) == [[kind, list]$AGG]
     nodeSeg (start, end) == [[start, end]$SEG]
-    nodeTypeCoerce (expr : %, type : %) == [[expr, type]$TC]
-    nodeTypeDecl (expr : %, type : %) == [[expr, type]$TD]
+    nodeTypeCoerce (expr, type) == [[expr, type]$TC]
+    nodeTypeDecl (expr, type) == [[expr, type]$TD]
     nodeTypeGuard (expr, type) == [[expr, type]$TG]
     nodeTypeOrigin (expr, type) == [[expr, type]$TO]
     nodeTypeHas (expr, type) == [[expr, type]$TEH]
@@ -1940,8 +1957,8 @@ SpadNode() : Exports == Implementation where
       ns : List(%) := []
       for n in s.list repeat
         ns :=
-          not sequence? n => [n, :ns]
-          s' := n :: SEQ
+          not aggregate? n => [n, :ns]
+          s' := n :: AGG
           s'.kind = s.kind or (s.kind = "Capsule" and s'.kind = "Sequence") =>
             concat(reverse s'.list, ns)
           [[s'], :ns]

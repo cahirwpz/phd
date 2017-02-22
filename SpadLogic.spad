@@ -103,8 +103,8 @@ SpadLogic(EC : SpadEnvCategory) : Exports == Implementation where
         (member?(n1, ti.hasList) => ['true]; ['false])
 
       -- case "A has Join(..)"
-      sequence? n1 =>
-        seq := n1 :: SEQ
+      aggregate? n1 =>
+        seq := n1 :: AGG
         bs := [evalTypeHas([n0, t]$TEH, env) for t in seq.list]
         every?(true?, bs) => ['true]
         any?(false?, bs) => ['false]
@@ -112,7 +112,7 @@ SpadLogic(EC : SpadEnvCategory) : Exports == Implementation where
 
       -- case "A has { fn : (..) -> .. }"
       typeDecl? n1 and not(unbound? n0 or unbound? n1) =>
-        seq := ti.body :: SEQ
+        seq := ti.body :: AGG
         for n in seq.list repeat
           if typeOrigin? n then
             n := (n :: TO).expr

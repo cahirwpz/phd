@@ -16,7 +16,7 @@ SpadNodePredicate() : Category == Definition where
     walk (nr : NR) == false
     walk (rt : RT) == any?(walk, fields rt)
     walk (ut : UT) == any?(walk, variants ut)
-    walk (s : SEQ) == any?(walk, s.list)
+    walk (s : AGG) == any?(walk, s.list)
     walk (te : TC) == walk te.expr or walk te.type
     walk (te : TD) == walk te.expr or walk te.type
     walk (te : TG) == walk te.expr or walk te.type

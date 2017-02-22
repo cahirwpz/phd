@@ -29,7 +29,7 @@ SpadNodeRewrite() : Category == Definition where
       walk (mt : MT) == nodeMappingType(map(walk, mt.args), walk mt.result)
       walk (rt : RT) == nodeRecordType [(walk [f]) :: TD for f in fields rt]
       walk (seg : SEG) == nodeSeg(walk seg.start, walk seg.end)
-      walk (s : SEQ) == [collapse [s.kind, map(walk, s.list)]]
+      walk (s : AGG) == [collapse [s.kind, map(walk, s.list)]]
       walk (te : SC) == nodeCase(walk te.expr, walk te.type)
       walk (te : ST) == nodeSubType(walk te.expr, walk te.type)
       walk (te : TC) == nodeTypeCoerce(walk te.expr, walk te.type)
@@ -40,7 +40,7 @@ SpadNodeRewrite() : Category == Definition where
       walk (te : TEP) == nodeTypePretend(walk te.expr, walk te.type)
 
       walk (ti : TI) ==
-        nodeTypeInfo((walk ti.body) :: SEQ, map(walk, ti.hasList),
+        nodeTypeInfo((walk ti.body) :: AGG, map(walk, ti.hasList),
                      map(walk, ti.constraints), walk ti.superType)
 
       walk (te : TO) == nodeTypeOrigin(walk te.expr, walk te.type)

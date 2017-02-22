@@ -61,8 +61,8 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
       empty? app.args => mt.result :: TI
 
       margs := [(arg :: TD).expr for arg in mt.args]
-      n1 := nodeSeq("Tuple", margs)
-      n2 := nodeSeq("Tuple", app.args)
+      n1 := nodeTuple margs
+      n2 := nodeTuple app.args
       subs := unifyType(n1, setMajor(n2, 1))
 
       subs case "failed" =>
@@ -182,8 +182,8 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
           debug ["Copy" :: PF, bold(n :: PF), "to" :: PF, name :: PF]
           flatBody := [n, :flatBody]
 
-        sequence? n =>
-          origBody := concat((n :: SEQ).list, origBody)
+        aggregate? n =>
+          origBody := concat((n :: AGG).list, origBody)
 
         fail ["Flatten" :: PF, bold(n :: PF)]
         error "Not handled!"
