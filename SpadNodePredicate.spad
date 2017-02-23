@@ -26,6 +26,9 @@ SpadNodePredicate() : Category == Definition where
     walk (te : TS) == walk te.expr or walk te.type
     walk (tv : TVL) == walk tv.type or walk tv.value
     walk (tv : TV) == false
+    walk (ti : TI) ==
+      (walk ti.body or any?(walk, ti.constraints) or
+       any?(walk, ti.hasList) or walk ti.superType)
 
     walk (ft : FT) ==
       any?(walk, ft.args) or walk ft.type or walk ft.extends or walk ft.capsule

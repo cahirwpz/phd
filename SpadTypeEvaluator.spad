@@ -24,23 +24,23 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
 
     fetchFunctorType(name : Symbol, env : EC) : MT ==
       n? := search(name, env)
-      n? case EVAL => (n? :: EVAL).info :: MT
+      n? case EVAL => (n? :: EVAL).type :: MT
 
       info ["getTypeInfo :" :: PF, bold(name :: PF)]
 
       mt := fetchType name
       ti := flatten(name, mt.result :: TI, env)
       mt := [mt.args, [ti]]
-      env(name) := [[], [mt], []]
+      env(name) := [[mt], []]
       mt
 
     getTypeInfo(app : APP, env : EC) : TI ==
       n? := search(app, env)
-      n? case EVAL => (n? :: EVAL).info :: TI
+      n? case EVAL => (n? :: EVAL).type :: TI
 
       name := app.function :: Symbol
       ti := apply(app, fetchFunctorType(name, env), env)
-      env(app) := [[], [ti], []]
+      env(app) := [[ti], []]
       ti := evalTypeGuards(app, ti, env)
 
       hasFreeVars? [app] => ti
@@ -51,7 +51,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
       mt := makeType ft
       ti := flatten(ft.name, mt.result :: TI, env)
       mt := [mt.args, [ti]]
-      env(ft.name) := [[], [mt], []]
+      env(ft.name) := [[mt], []]
       mt
 
     apply(app : APP, mt : MT, env : EC) : TI ==
@@ -183,7 +183,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
           flatBody := [n, :flatBody]
 
         aggregate? n =>
-          origBody := concat((n :: AGG).list, origBody)
+          origBody := concat(n :: List(N), origBody)
 
         fail ["Flatten" :: PF, bold(n :: PF)]
         error "Not handled!"
@@ -209,7 +209,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
 
       ti := [ti.body, ti.hasList, remove(appliesCleanly, ti.constraints),
              ti.superType]
-      env(name) := [[], [ti], []]
+      env(name) := [[ti], []]
 
       empty? ti.constraints => ti
 
@@ -243,7 +243,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
           newHasList := [n', :newHasList]
 
         ti := [ti.body, reverse newHasList, ti.constraints, ti.superType]
-        env(name) := [[], [ti], []]
+        env(name) := [[ti], []]
 
       -- with new HasList evaluate type guards in TypeInfo's body
       eval(n : N) : N ==
@@ -255,7 +255,7 @@ SpadTypeEvaluator(EC : SpadEnvCategory) : Exports == Implementation where
 
       ti := [[ti.body.kind, map(eval, ti.body.list)],
              ti.hasList, ti.constraints, ti.superType]
-      env(name) := [[], [ti], []]
+      env(name) := [[ti], []]
       ti
 
 )abbrev package TEVALT SpadTypeEvaluatorTest

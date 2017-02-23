@@ -7,6 +7,7 @@ SpadEnvironment() : Exports == Implementation where
 
   Exports ==> SpadEnvCategory with
     coerce : SCOPE -> PF
+    coerce : EKEY -> N
 
   Implementation ==> add
     Rep := List SCOPE
@@ -19,7 +20,9 @@ SpadEnvironment() : Exports == Implementation where
     import SpadTypeEvaluator(%)
 
     -- create empty environment
-    new() == [empty()$SCOPE]
+    new() ==
+      imported := ["imported", [null, []]]$MEMBER
+      [[[imported]]$SCOPE]
 
     keyOf (n : N) : EKEY ==
       symbol? n => n :: Symbol
@@ -31,9 +34,14 @@ SpadEnvironment() : Exports == Implementation where
       fail ["not a valid environment key:" :: PF, bold(n :: PF)]
       error "keyOf $ SpadEnvironment"
 
+    coerce (key : EKEY) : N ==
+      key case APP => [key :: APP]
+      key case Symbol => [key :: Symbol]
+      key case "imported" => ["%imported"]
+
     typesOf (key : EKEY, env : %) : List(N) ==
       val := search(key, env)
-      (val case EVAL => val.types; [])
+      (val case EVAL => val.type :: List(N); [])
 
     factsAbout (key : EKEY, env : %) : List(N) ==
       val := search(key, env)
@@ -87,39 +95,44 @@ SpadEnvironment() : Exports == Implementation where
         key case APP => getTypeInfo(key :: APP, env)
         key case Symbol => "failed"
       val case EVAL =>
-        typeInfo? val.info => val.info :: TI
+        typeInfo? val.type => val.type :: TI
         "failed"
 
     addTypeOf (key : EKEY, type : N, env : %) : Void ==
       val := search(key, env)
       val case "failed" =>
-        env(key) := [[type], null, []]
+        env(key) := [nodeList [type], []]
       val case EVAL =>
-        member?(type, val.types) => env
-        val.types := [type, :val.types]
+        list? val.type =>
+          types := val.type :: List(N)
+          not member?(type, types) =>
+            val.type := nodeList [type, :types]
+        fail [bold(key :: PF), "has been already defined!" :: PF]
+        error "addTypeOf $ SpadEnvironment"
 
     addFactAbout (key : EKEY, fact : N, env : %) : Void ==
       val := search(key, env)
       val case "failed" =>
-        env(key) := [[], null, [fact]]
+        env(key) := [nodeList [], [fact]]
       val case EVAL =>
-        member?(fact, val.facts) => env
-        val.facts := [fact, :val.facts]
+        not member?(fact, val.facts) =>
+          val.facts := [fact, :val.facts]
 
     addFacts (n : N, env : %) : Void ==
       for p in extractPredicates n repeat
         addFactAbout(keyOf p, p, env)
 
     importDomain (dom : EKEY, env : %) : Void ==
+      key := dom :: N
+      imported := env("imported").facts
+      member?(key, imported) => void
+
       notice ["Importing" :: PF, bold(dom :: PF), "domain" :: PF]
       ti? := search(dom, env)
       ti? case "failed" => error "importDomain $ SpadEnvironment"
-      ti := (ti? :: EVAL).info :: TI
-      dom' := 
-        dom case APP => [dom]
-        dom case Symbol => [dom]
+      ti := (ti? :: EVAL).type :: TI
       for n in ti.body.list repeat
-        n' := substitute(n, typeVar() :: TV, dom')
+        n' := substitute(n, typeVar() :: TV, key)
         guard := null
         if typeGuard? n' then
           tg := n' :: TG
@@ -129,23 +142,24 @@ SpadEnvironment() : Exports == Implementation where
           to := n' :: TO
           n' := to.expr
         td := n' :: TD
-        n' := nodeTypeOrigin(td.type, dom')
+        n' := nodeTypeOrigin(td.type, key)
         if not null? guard then
           n' := nodeTypeGuard(n', guard)
         addTypeOf(td.expr :: Symbol, n', env)
+      env("imported") := [null, [key, :imported]]
 
     addDomain (dom : APP, env : %) : Void ==
       key? (dom, env) => env
       notice ["Adding type" :: PF, bold (dom :: PF), "to the environment!" :: PF]
       ti := getTypeInfo(dom, env)
-      addTypeOf(dom, [ti], env)
+      env(dom) := [[ti], []]
 
     addDomainAs (dom : APP, name : Symbol, env : %) : Void ==
       key? (name, env) => env
       notice(["Adding" :: PF, bold (dom :: PF), "as" :: PF, bold (name :: PF), 
               "to the environment!" :: PF])
       ti := getTypeInfo(dom, env)
-      env(name) := [[], [ti], [nodeTypeHas([name], [dom])]]
+      env(name) := [[ti], [nodeTypeHas([name], [dom])]]
 
     empty? (env : %) : Boolean ==
       empty?(env)$Rep
@@ -161,10 +175,7 @@ SpadEnvironment() : Exports == Implementation where
         result := search(key, level)
         result case EVAL =>
           value := result :: EVAL
-          types' := [copy n for n in value.types]
-          info'  := copy value.info
-          facts' := [copy n for n in value.facts]
-          value' := [types', info', facts']
+          value' := [copy value.type, [copy n for n in value.facts]]$EVAL
           top(key) := value'
           return value'
       -- 3) not found :(
@@ -180,9 +191,6 @@ SpadEnvironment() : Exports == Implementation where
       top := first env
       top(key) := val
       env
-
-    reset! (env : %, key : EKEY) : % ==
-      env(key) := [[], null, []]
 
     flatten (env : %) : % ==
       empty? env => new()
@@ -203,28 +211,26 @@ SpadEnvironment() : Exports == Implementation where
       top := [k :: Symbol for k in keys first env | k case Symbol]
       lks := [k :: Symbol for k in keys first left | k case Symbol]
       rks := [k :: Symbol for k in keys first right | k case Symbol]
-      for k in setIntersection(lks, rks) repeat
-        if not member?(k, top) then
-          lv := left(k) :: EVAL
-          rv := right(k) :: EVAL
-          ts := removeDuplicates concat(lv.types, rv.types)
-          fs := removeDuplicates concat(lv.facts, rv.facts)
-          env(k) := [ts, null, fs]
+      for k in setIntersection(lks, rks) | not member?(k, top) repeat
+        lv := left(k) :: EVAL
+        rv := right(k) :: EVAL
+        fs := setIntersection(lv.facts, rv.facts)
+        lv.type = rv.type => env(k) := [lv.type, fs]
+        list? lv.type and list? rv.type =>
+          ts := setUnion(lv.type :: List(N), rv.type :: List(N))
+          env(k) := [nodeList ts, fs]
+        not list? lv.type and not list? rv.type =>
+          env(k) := [nodeUnionType [lv.type, rv.type], fs]
       env
 
-    coerce (key : EKEY) : PF ==
-      key case APP => key :: APP :: PF
-      key :: Symbol :: PF
+    coerce (key : EKEY) : PF == key :: N :: PF
 
     coerce (val : EVAL) : PF ==
-      ts := [t :: PF for t in val.types]
       fs := [f :: PF for f in val.facts]
       empty? fs =>
-        vconcat([pile [cyan("types:" :: PF), :ts],
-                 pile [cyan("info:" :: PF), val.info :: PF]])
-      vconcat([pile [cyan("types:" :: PF), :ts],
-               pile [cyan("facts:" :: PF), :fs],
-               pile [cyan("info:" :: PF), val.info :: PF]])
+        pile [cyan("type:" :: PF), val.type :: PF]
+      vconcat([pile [cyan("type:" :: PF), val.type :: PF],
+               pile [cyan("facts:" :: PF), :fs]])
       
     coerce (scope : SCOPE) : PF ==
       entries : List(PF) := []

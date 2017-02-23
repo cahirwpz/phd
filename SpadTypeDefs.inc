@@ -50,8 +50,8 @@
   URES ==> Union(SUBS, "failed")
 
   ENV ==> SpadEnvironment
-  EKEY ==> Union(Symbol, APP)
-  EVAL ==> Record(types : List(N), info : N, facts : List(N))
+  EKEY ==> Union("imported", Symbol, APP)
+  EVAL ==> Record(type : N, facts : List(N))
 
   TN ==> SpadTypeNode
   TNA ==> SpadTypeNodeArray(CTX)

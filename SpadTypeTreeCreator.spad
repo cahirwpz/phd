@@ -502,15 +502,16 @@ SpadTypeTreeCreator() : Exports == Implementation where
         argSub(name) := argNode.type
         argNodeList := [argNode, :argNodeList]
 
+      makeFunctorType(ft, env)
+
       argNodeList := reverse argNodeList
       argList := [argNode.node for argNode in argNodeList]
       ftType := nodeApp([ft.name], argList)
+      addDomain(ftType :: APP, env)
       addTypeOf("$" :: Symbol, ftType, env)
       bindNode!(ctx, this, nodeMappingType(argList, resType))
 
       -- add functor's type info to the environment
-      makeFunctorType(ft, env)
-      addDomain(ftType :: APP, env)
       importDomain(ftType :: APP, env)
       ftRealType := 
         substitute(first typesOf(ftType :: APP, env), typeVar() :: TV, ftType)
@@ -637,7 +638,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
       this
 
     walkSym (s : Symbol, ctx : CTX, env : ENV) : TN ==
-      debug ["Symbol lookup for" :: PF, string(s :: PF)]
+      debug ["Symbol lookup for" :: PF, string bold(s :: PF)]
 
       this := addNode!(ctx, [s], env)
 
@@ -690,7 +691,6 @@ SpadTypeTreeCreator() : Exports == Implementation where
         ftorResType := nodeTypeValue(baseType, nodeApp([s], ftorArgList))
         ftorType := nodeMappingType(reverse ftorArgList, ftorResType)
         -- BUG? ftorType should be nodeTypeValue(baseType, ftorType)
-        addTypeOf(s, ftorType, env)
         types := [ftorType, :types]
 
         if not empty? ftorArgNodeList then
@@ -776,7 +776,7 @@ SpadTypeTreeCreator() : Exports == Implementation where
         fail ("Type origin selector works only for symbols!" :: PF)
         error ""
 
-      debug(["Symbol" :: PF, string(to.expr :: PF),
+      debug(["Symbol" :: PF, string bold(to.expr :: PF),
              "must originate from" :: PF, bold(to.type :: PF),
              "type!" :: PF])
 

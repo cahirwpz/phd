@@ -57,7 +57,7 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   sequence? : % -> Boolean
   domainBody? : % -> Boolean
   packageBody? : % -> Boolean
-  joinBody? : % -> Boolean
+  categoryBody? : % -> Boolean
   tuple? : % -> Boolean
   list? : % -> Boolean
   case? : % -> Boolean
@@ -131,6 +131,8 @@ SpadNodeCategory() : Category == SpadNodeBaseCategory with
   coerce : % -> SpadTypeVar(%)
   coerce : % -> SpadUnionType(%)
   coerce : % -> SpadWhere(%)
+
+  coerce : % -> List(%)
 
   convert : % -> SExpression
 
@@ -1023,7 +1025,7 @@ SpadAggregate(N : SpadNodeCategory) : Exports == Implementation where
           [convert ("@Tuple" :: Symbol), :ls]
       convert ex
 
-    coerce n ==
+    coerce (n : %) : PF ==
       ls := [e :: PF for e in n.list | not null? e]
       empty? ls => "()" :: PF
       n.kind case "Join" =>
@@ -1033,6 +1035,9 @@ SpadAggregate(N : SpadNodeCategory) : Exports == Implementation where
         empty? l1 => vconcat l2
         pile [hconcat ["Join" :: PF, paren l1], :l2]
       n.kind case "Tuple" => paren ls
+      n.kind case "Domain" => pile [bold("domain" :: PF), :ls]
+      n.kind case "Package" => pile [bold("package" :: PF), :ls]
+      n.kind case "Join" => pile [bold("category" :: PF), :ls]
       vconcat ls
 
     n = m ==
@@ -1353,10 +1358,6 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     elt : (%, "body") -> AGG
     elt : (%, "superType") -> N
 
-    category? : % -> Boolean
-    domain? : % -> Boolean
-    package? : % -> Boolean
-
   Implementation ==> add
     Rep := Record(ti_body : AGG,
                   ti_hasList : List N,
@@ -1370,16 +1371,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
     elt(x, "body") == x.ti_body
     elt(x, "superType") == x.ti_superType
 
-    category? x == x.body.kind case "Join"
-    domain? x == x.body.kind case "Domain"
-    package? x == x.body.kind case "Package"
-
     coerce x ==
-      k : String :=
-        category? x => "Category"
-        domain? x => "Domain"
-        package? x => "Package"
-        error x.body.kind
       st : List(PF) :=
         null? x.superType => []
         [bold("subtype of" :: PF), x.superType :: PF]
@@ -1389,10 +1381,7 @@ SpadTypeInfo(N : SpadNodeCategory) : Exports == Implementation where
       hl : List(PF) :=
         empty? x.hasList => []
         [pile [bold("has relation:" :: PF), :[n :: PF for n in x.hasList]]]
-      b : List(PF) :=
-        empty? x.body.list => []
-        [pile [bold("defined as:" :: PF), x.body :: PF]]
-      pile [bold(k :: PF), brace pile ["" :: PF, :b, :st, :hl, :ct]]
+      brace pile ["" :: PF, x.body :: PF, :st, :hl, :ct]
 
     copy x ==
       [copy x.body, map(copy, x.hasList),
@@ -1501,7 +1490,7 @@ SpadNode() : Exports == Implementation where
     sequence? n == (not n case agg => false; n.agg.kind = "Sequence")
     domainBody? n == (not n case agg => false; n.agg.kind = "Domain")
     packageBody? n == (not n case agg => false; n.agg.kind = "Package")
-    joinBody? n == (not n case agg => false; n.agg.kind = "Join")
+    categoryBody? n == (not n case agg => false; n.agg.kind = "Join")
     tuple? n == (not n case agg => false; n.agg.kind = "Tuple")
     list? n == (not n case agg => false; n.agg.kind = "List")
     case? n == n case s_case
@@ -1676,6 +1665,8 @@ SpadNode() : Exports == Implementation where
     coerce (n : %) : String == 
       string? n => n.str
       CoerceError("String")
+
+    coerce (n : %) : List(%) == (aggregate? n => (n :: AGG).list; [n])
 
     null == ["$EmptyNode"]$Rep
     null? n == n case empty

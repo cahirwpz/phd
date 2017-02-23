@@ -40,7 +40,7 @@ SpadTypeRule() : Exports == Implementation where
                     "then" :: PF, ce.truebr :: PF,
                     "else" :: PF, ce.falsebr :: PF])
           aggregate? f =>
-            paren sepBy("; " :: PF, [n :: PF for n in (f :: AGG).list])
+            paren sepBy("; " :: PF, [n :: PF for n in f :: List(N)])
           f :: PF
         pfs := [pf, :pfs]
 
@@ -168,7 +168,7 @@ SpadTypeNode() : Exports == Implementation where
         lp.kind case "repeat" =>
           spaces ["repeat" :: PF, loopBody]
       aggregate? n =>
-        ns := [i :: PF for i in (n :: AGG).list]
+        ns := [i :: PF for i in n :: List(N)]
         #ns > 1 => paren sepBy(", " :: PF, ns)
         first ns
       n :: PF

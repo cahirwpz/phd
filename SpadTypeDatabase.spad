@@ -113,8 +113,7 @@ SpadTypeDatabase() : Exports == Implementation where
                for typ in types for i in 1..]
 
       body := (cat? => getCtorCategory t; cmm.type)
-      body := nodeAgg((cat? => "Join"; "Domain"),
-                      (aggregate? body => (body :: AGG).list; [body]))
+      body := nodeAgg((cat? => "Join"; "Domain"), body :: List(N))
       body := substitute(body, ctx)
       body := walk(body)$FlattenDatabaseType
 
@@ -133,9 +132,7 @@ SpadTypeDatabase() : Exports == Implementation where
       types := [substitute(arg.type, ctx) for arg in ft.args] 
       args := [nodeTypeDecl(typeVar(i :: PI), t) for t in types for i in 1..]
 
-      body := 
-        ft.type = categoryType() => ft.extends
-        nodeDomain (ft.type :: AGG).list
+      body := (ft.type = categoryType() => ft.extends; ft.type)
       body := substitute(body, ctx)
       body := walk(body)$FlattenDatabaseType
 
