@@ -1,5 +1,5 @@
 )abbrev domain TEST2 Test2
-Test2(A : Type) : Exports == Implementation where
+Test2(A : BasicType, B : ListAggregate(A)) : Exports == Implementation where
   I ==> Integer
   PI ==> PositiveInteger
   NNI ==> NonNegativeInteger
@@ -7,7 +7,7 @@ Test2(A : Type) : Exports == Implementation where
 
   Exports ==> with
     gcd : (NNI, NNI) -> NNI
-    index : (A -> Boolean, List(A)) -> NonNegativeInteger
+    index : (A -> Boolean, B) -> NonNegativeInteger
     sumPositive : List(I) -> I
     sumRange : (List(I), Integer, Integer) -> Integer
     countPositive : List(I) -> I
